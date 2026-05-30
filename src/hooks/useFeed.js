@@ -33,14 +33,20 @@ export function useFeed(feedType = "foryou") {
     },
   });
 
+  const giftMutation = useMutation({
+    mutationFn: ({ postId, amount }) => dataProvider.sendGift(postId, amount),
+  });
+
   return {
     ...feedQuery,
     toggleLike: likeMutation.mutateAsync,
     toggleBookmark: bookmarkMutation.mutateAsync,
     addComment: commentMutation.mutateAsync,
     deletePost: deleteMutation.mutateAsync,
+    sendGift: giftMutation.mutateAsync,
     isMutating: likeMutation.isPending || bookmarkMutation.isPending || deleteMutation.isPending,
     isCommenting: commentMutation.isPending,
+    isGifting: giftMutation.isPending,
   };
 }
 

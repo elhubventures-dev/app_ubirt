@@ -8,6 +8,7 @@ const demoUser = {
   id: "user-demo-1",
   name: "Alex Demo",
   username: "alexdemo",
+  coins: 1000,
   avatar:
     "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&h=120&fit=crop",
 };
@@ -18,6 +19,7 @@ function mapProfile(user, profile) {
     email: user.email,
     name: profile?.display_name ?? user.email?.split("@")[0] ?? "User",
     username: profile?.username ?? "user",
+    coins: profile?.coins ?? 1000,
     avatar:
       profile?.avatar_url ??
       "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&h=120&fit=crop",

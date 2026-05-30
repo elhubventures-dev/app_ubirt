@@ -135,6 +135,21 @@ export const supabaseApi = {
     return true;
   },
 
+  async sendGift(postId, amount) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    // In a real app we'd use an RPC to safely deduct and transfer coins.
+    // Here we'll just simulate success or throw if the user has insufficient coins.
+    const { data: profile } = await supabase.from("profiles").select("coins").eq("id", userId).single();
+    if ((profile?.coins ?? 1000) < amount) {
+      throw new Error("Insufficient coins.");
+    }
+    // Update local user's coin balance by deducting
+    const { error } = await supabase.from("profiles").update({ coins: (profile?.coins ?? 1000) - amount }).eq("id", userId);
+    if (error) throw error;
+    return { success: true, amount };
+  },
+
   async getComments(postId) {
     const supabase = getSupabase();
     const { data, error } = await supabase

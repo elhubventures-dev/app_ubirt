@@ -135,6 +135,12 @@ export const mockApi = {
     persistState();
     return true;
   },
+  async sendGift(postId, amount) {
+    await wait();
+    // In mock mode, we assume the user has enough coins. We'd usually deduct and record the transaction.
+    // Let's just simulate success for now.
+    return { success: true, amount };
+  },
   async getConversations() {
     await wait();
     return conversations;

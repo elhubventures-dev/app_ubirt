@@ -1,135 +1,141 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/AuthContext";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
+import { useToast } from "@/components/ui/use-toast";
 
 const COIN_PACKAGES = [
-  { id: 1, coins: 100, price: "$1.29", bonus: null, color: "from-amber-400 to-yellow-600" },
-  { id: 2, coins: 500, price: "$5.99", bonus: "+50 coins", color: "from-blue-400 to-indigo-600", popular: true },
-  { id: 3, coins: 1000, price: "$10.99", bonus: "+150 coins", color: "from-purple-500 to-pink-600" },
-  { id: 4, coins: 5000, price: "$49.99", bonus: "+1000 coins", color: "from-emerald-400 to-teal-600" },
+  { id: "pack1", coins: 100, price: "$0.99" },
+  { id: "pack2", coins: 500, price: "$4.99", popular: true },
+  { id: "pack3", coins: 1200, price: "$9.99" },
+  { id: "pack4", coins: 6500, price: "$49.99" },
 ];
 
 export default function Wallet() {
-  const [activeTab, setActiveTab] = useState("coins");
-  const coinBalance = 450;
-  const totalEarnings = 1245.50;
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [isPurchasing, setIsPurchasing] = useState(false);
+
+  const handlePurchase = (pack) => {
+    setIsPurchasing(true);
+    // Simulate purchase network request
+    setTimeout(() => {
+      setIsPurchasing(false);
+      toast({
+        title: "Purchase Successful!",
+        description: `You bought ${pack.coins} coins for ${pack.price}. (Mocked)`,
+      });
+      // We would update the user's coin balance here in a real app
+    }, 1500);
+  };
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
-      {/* Dynamic Backgrounds based on tab */}
-      <AnimatePresence>
-        {activeTab === "coins" ? (
-          <motion.div key="bg-coins" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute top-[-10%] left-[-10%] w-[60%] h-[40%] bg-yellow-500/10 blur-[120px] rounded-full pointer-events-none z-0" />
-        ) : (
-          <motion.div key="bg-earnings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] bg-emerald-500/10 blur-[120px] rounded-full pointer-events-none z-0" />
-        )}
-      </AnimatePresence>
+    <div className="min-h-screen bg-[#101822] text-white flex flex-col relative overflow-hidden">
+      {/* Aesthetics */}
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-[#0a111a] via-[#101822] to-[#152336] z-0" />
+      <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#f59e0b]/20 blur-[120px] rounded-full z-0 pointer-events-none" />
 
       {/* Header */}
-      <header className="shrink-0 px-4 py-4 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between z-10 shadow-sm relative">
-        <Link to="/profile" className="text-[#3b82f6] flex items-center gap-1 hover:bg-white/5 rounded-full p-1.5 -ml-1.5 transition-colors">
-          <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
-        </Link>
-        <h1 className="text-base font-bold tracking-wide absolute left-1/2 -translate-x-1/2">Wallet</h1>
-        <button className="text-slate-400 p-2 hover:text-white transition-colors">
-          <span className="material-symbols-outlined">receipt_long</span>
+      <header className="relative z-10 px-4 py-4 flex items-center border-b border-white/5 bg-[#101822]/50 backdrop-blur-md">
+        <button onClick={() => navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors mr-4">
+          <span className="material-symbols-outlined">arrow_back</span>
         </button>
+        <h1 className="text-xl font-bold flex-1 text-center pr-10">Wallet</h1>
       </header>
 
-      {/* Tabs */}
-      <div className="flex bg-[#101822] p-1.5 shrink-0 z-10 relative shadow-md">
-         <button onClick={() => setActiveTab("coins")} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all relative ${activeTab === "coins" ? "text-white" : "text-slate-500 hover:text-slate-300"}`}>
-            My Coins
-            {activeTab === "coins" && <motion.div layoutId="walletTab" className="absolute inset-0 bg-white/5 rounded-xl border border-white/10" />}
-         </button>
-         <button onClick={() => setActiveTab("earnings")} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all relative ${activeTab === "earnings" ? "text-white" : "text-slate-500 hover:text-slate-300"}`}>
-            Earnings
-            {activeTab === "earnings" && <motion.div layoutId="walletTab" className="absolute inset-0 bg-white/5 rounded-xl border border-white/10" />}
-         </button>
-      </div>
+      <main className="flex-1 relative z-10 p-6 max-w-md mx-auto w-full flex flex-col gap-8">
+        
+        {/* Balance Card */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-3xl p-6 shadow-[0_10px_30px_rgba(245,158,11,0.3)] text-center relative overflow-hidden"
+        >
+          <div className="absolute top-[-20%] right-[-10%] text-white/20">
+            <span className="material-symbols-outlined text-[120px]">monetization_on</span>
+          </div>
+          <p className="text-white/80 font-semibold mb-1 relative z-10">Total Balance</p>
+          <div className="flex items-center justify-center gap-2 relative z-10">
+            <span className="material-symbols-outlined text-4xl text-amber-100">monetization_on</span>
+            <span className="text-5xl font-black text-white tracking-tight">{user?.coins?.toLocaleString() || "0"}</span>
+          </div>
+        </motion.div>
 
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto hide-scrollbar relative z-10 p-4">
-        <AnimatePresence mode="wait">
-          {activeTab === "coins" ? (
-            <motion.div key="coins" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="max-w-md mx-auto space-y-6 pb-10">
-               {/* Balance Card */}
-               <div className="bg-gradient-to-br from-amber-500/20 to-yellow-600/5 border border-amber-500/20 rounded-3xl p-6 text-center relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/20 blur-2xl rounded-full pointer-events-none" />
-                  <span className="material-symbols-outlined text-yellow-500 text-[48px] drop-shadow-[0_0_15px_rgba(234,179,8,0.5)] mb-2">toll</span>
-                  <p className="text-slate-300 text-sm font-medium">Coin Balance</p>
-                  <p className="text-4xl font-black text-white mt-1">{coinBalance}</p>
-               </div>
+        {/* Buy Coins Section */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="flex flex-col gap-4"
+        >
+          <h2 className="text-lg font-bold">Buy Coins</h2>
+          <div className="grid grid-cols-1 gap-3">
+            {COIN_PACKAGES.map((pack) => (
+              <div key={pack.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors relative overflow-hidden">
+                {pack.popular && (
+                  <div className="absolute top-0 right-0 bg-red-500 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg tracking-wider">
+                    POPULAR
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500">
+                    <span className="material-symbols-outlined text-2xl">monetization_on</span>
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg">{pack.coins} <span className="text-sm font-normal text-slate-400">Coins</span></p>
+                  </div>
+                </div>
+                <PrimaryButton 
+                  onClick={() => handlePurchase(pack)}
+                  disabled={isPurchasing}
+                  className="rounded-full py-2 px-6"
+                >
+                  {pack.price}
+                </PrimaryButton>
+              </div>
+            ))}
+          </div>
+        </motion.div>
 
-               <div>
-                 <h2 className="text-sm font-bold text-slate-300 mb-4 px-1">Buy Coins</h2>
-                 <div className="grid grid-cols-2 gap-3">
-                    {COIN_PACKAGES.map((pkg, i) => (
-                      <motion.button 
-                        key={pkg.id} 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className={`bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center relative overflow-hidden group ${pkg.popular ? 'ring-1 ring-[#3b82f6]/50' : ''}`}
-                      >
-                         {pkg.popular && (
-                           <div className="absolute top-0 inset-x-0 bg-[#3b82f6] text-[10px] font-bold py-0.5 uppercase tracking-wider">Most Popular</div>
-                         )}
-                         <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${pkg.color} flex items-center justify-center shadow-lg mb-3 ${pkg.popular ? 'mt-3' : ''}`}>
-                            <span className="material-symbols-outlined text-white">toll</span>
-                         </div>
-                         <p className="font-bold text-lg">{pkg.coins}</p>
-                         {pkg.bonus ? (
-                           <p className="text-[10px] text-emerald-400 font-bold mb-2">{pkg.bonus}</p>
-                         ) : (
-                           <p className="text-[10px] text-transparent mb-2">none</p>
-                         )}
-                         <div className="w-full py-2 bg-white/10 rounded-lg text-sm font-semibold group-hover:bg-white/20 transition-colors">
-                           {pkg.price}
-                         </div>
-                      </motion.button>
-                    ))}
-                 </div>
-               </div>
-            </motion.div>
-          ) : (
-            <motion.div key="earnings" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-md mx-auto space-y-6 pb-10">
-               {/* Earnings Card */}
-               <div className="bg-gradient-to-br from-emerald-500/20 to-teal-600/5 border border-emerald-500/20 rounded-3xl p-6 text-center relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-2xl rounded-full pointer-events-none" />
-                  <span className="material-symbols-outlined text-emerald-400 text-[48px] drop-shadow-[0_0_15px_rgba(52,211,153,0.5)] mb-2">account_balance_wallet</span>
-                  <p className="text-slate-300 text-sm font-medium">Estimated Earnings</p>
-                  <p className="text-4xl font-black text-white mt-1">${totalEarnings.toFixed(2)}</p>
-                  <div className="mt-6 flex gap-3">
-                     <PrimaryButton className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-black border-none" size="sm">Withdraw</PrimaryButton>
-                     <PrimaryButton variant="secondary" className="flex-1" size="sm">History</PrimaryButton>
-                  </div>
-               </div>
+        {/* Transaction History Mock */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="mt-4 pb-10"
+        >
+          <h2 className="text-lg font-bold mb-4">Recent Transactions</h2>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[16px]">card_giftcard</span>
+                </div>
+                <div>
+                  <p className="font-semibold">Gift to @creator</p>
+                  <p className="text-xs text-slate-400">Today, 2:30 PM</p>
+                </div>
+              </div>
+              <span className="font-bold text-red-400">-50</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                </div>
+                <div>
+                  <p className="font-semibold">Signup Bonus</p>
+                  <p className="text-xs text-slate-400">Yesterday</p>
+                </div>
+              </div>
+              <span className="font-bold text-green-400">+1000</span>
+            </div>
+          </div>
+        </motion.div>
 
-               {/* Chart Mockup */}
-               <div className="bg-white/5 border border-white/10 rounded-3xl p-5">
-                  <div className="flex justify-between items-center mb-6">
-                     <h3 className="font-bold text-sm">Revenue (Last 7 Days)</h3>
-                     <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full font-bold">+24%</span>
-                  </div>
-                  <div className="h-40 flex items-end justify-between gap-2 px-1">
-                     {[20, 35, 25, 60, 45, 80, 50].map((h, i) => (
-                       <div key={i} className="w-full group relative flex justify-center h-full items-end">
-                         <motion.div initial={{ height: 0 }} animate={{ height: `${h}%` }} transition={{ duration: 1, delay: i * 0.1 }} className="w-full bg-emerald-500 rounded-t-md opacity-80 group-hover:opacity-100 transition-opacity" />
-                       </div>
-                     ))}
-                  </div>
-                  <div className="flex justify-between mt-3 text-[10px] text-slate-500 font-bold uppercase px-2">
-                     <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-                  </div>
-               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      </main>
     </div>
   );
 }

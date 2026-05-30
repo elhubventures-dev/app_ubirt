@@ -160,6 +160,14 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
           <span className="text-white text-xs font-semibold drop-shadow-md">{post.bookmarked ? "Saved" : "Save"}</span>
         </button>
 
+        {/* Gift */}
+        <button onClick={() => setGiftPostId(post.id)} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
+          <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-amber-500 group-hover:bg-white/20">
+            <span className="material-symbols-outlined fill-1">featured_seasonal_and_gifts</span>
+          </div>
+          <span className="text-white text-xs font-semibold drop-shadow-md">Gift</span>
+        </button>
+
         {/* More Options */}
         <button onClick={() => setOptionsPostId(post.id)} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
           <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white/20">
@@ -172,14 +180,15 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
 }
 
 export default function VideoFeed() {
-  const { user } = useAuth();
+  const { user, updateUserSession } = useAuth();
   const [expandedPostId, setExpandedPostId] = useState("");
   const [optionsPostId, setOptionsPostId] = useState("");
+  const [giftPostId, setGiftPostId] = useState("");
   const [commentDraft, setCommentDraft] = useState("");
   const [activePostIndex, setActivePostIndex] = useState(0);
   const [feedType, setFeedType] = useState("foryou"); // "foryou" | "following"
   
-  const { data: posts = [], isLoading, toggleLike, toggleBookmark, addComment, deletePost, isMutating, isCommenting } = useFeed(feedType);
+  const { data: posts = [], isLoading, toggleLike, toggleBookmark, addComment, deletePost, sendGift, isMutating, isCommenting, isGifting } = useFeed(feedType);
   const { data: comments = [] } = useFeedComments(expandedPostId);
   const { toast } = useToast();
   const containerRef = useRef(null);
@@ -387,14 +396,84 @@ export default function VideoFeed() {
                   );
                 })()}
 
-                <button onClick={() => setOptionsPostId("")} className="mt-auto bg-white/10 text-white p-4 rounded-2xl font-bold hover:bg-white/20 transition-colors">
-                  Cancel
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
+                  <button onClick={() => setOptionsPostId("")} className="mt-auto bg-white/10 text-white p-4 rounded-2xl font-bold hover:bg-white/20 transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+  
+        {/* Gift Sheet */}
+        <AnimatePresence>
+          {giftPostId && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-black/60 z-40"
+                onClick={() => setGiftPostId("")}
+              />
+              <motion.div
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="absolute bottom-0 left-0 right-0 h-[50dvh] bg-[#101822] rounded-t-3xl z-50 flex flex-col pointer-events-auto"
+              >
+                <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto my-3 shrink-0" />
+                <div className="p-6 pt-2 flex flex-col gap-4 h-full">
+                  <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                    <h3 className="text-white font-bold text-lg">Send a Gift</h3>
+                    <div className="flex items-center gap-1 text-amber-400 font-bold bg-amber-400/10 px-3 py-1 rounded-full">
+                       <span className="material-symbols-outlined text-sm">monetization_on</span>
+                       {user?.coins?.toLocaleString() || "0"}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-3 overflow-y-auto">
+                    {[
+                      { id: "rose", name: "Rose", cost: 10, icon: "🌹" },
+                      { id: "coffee", name: "Coffee", cost: 50, icon: "☕" },
+                      { id: "heart", name: "Heart", cost: 100, icon: "💖" },
+                      { id: "crown", name: "Crown", cost: 500, icon: "👑" },
+                      { id: "rocket", name: "Rocket", cost: 1000, icon: "🚀" },
+                      { id: "universe", name: "Universe", cost: 5000, icon: "🌌" },
+                    ].map(gift => (
+                      <button 
+                        key={gift.id}
+                        disabled={isGifting}
+                        onClick={async () => {
+                          try {
+                            await sendGift({ postId: giftPostId, amount: gift.cost });
+                            if (updateUserSession) {
+                              updateUserSession({ coins: (user?.coins || 1000) - gift.cost });
+                            }
+                            toast({ title: "Gift Sent!", description: `You sent a ${gift.name}!` });
+                            setGiftPostId("");
+                          } catch (err) {
+                            toast({ title: "Failed", description: err.message, variant: "destructive" });
+                          }
+                        }}
+                        className="flex flex-col items-center justify-center p-4 bg-white/5 rounded-2xl hover:bg-white/10 border border-transparent hover:border-amber-500/50 transition-all active:scale-95 disabled:opacity-50"
+                      >
+                         <span className="text-4xl mb-2">{gift.icon}</span>
+                         <span className="text-xs font-bold text-white">{gift.name}</span>
+                         <div className="flex items-center text-amber-500 text-[10px] font-bold mt-1">
+                           <span className="material-symbols-outlined text-[12px] mr-0.5">monetization_on</span>
+                           {gift.cost}
+                         </div>
+                      </button>
+                    ))}
+                  </div>
+  
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
