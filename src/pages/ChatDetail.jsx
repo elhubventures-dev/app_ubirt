@@ -6,28 +6,37 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function ChatDetail() {
   const { id } = useParams();
-  const draftKey = `ubirt.chat.draft.${id}`;
-  const [text, setText] = useState(() => localStorage.getItem(draftKey) ?? "");
+  const draftKey = `ubirt.draft.${id}`;
+  const [text, setText] = useState(() => localStorage.getItem(draftKey) || "");
+  const [attachment, setAttachment] = useState(null);
   const { data: messages = [], isLoading, sendMessage, isSending, isTyping } = useChatMessages(id);
   const { toast } = useToast();
   const scrollRef = useRef(null);
 
   // Auto-scroll to bottom
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
   }, [messages, isTyping]);
 
-  const onSubmit = async (event) => {
-    event.preventDefault();
-    if (!text.trim()) return;
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    const val = text.trim();
+    if (!val && !attachment) return;
     try {
-      await sendMessage(text.trim());
       setText("");
+      setAttachment(null);
       localStorage.removeItem(draftKey);
-    } catch (error) {
-      toast({ title: "Message failed", description: error.message, variant: "destructive" });
+      await sendMessage({ chatId: id, text: val, attachment });
+      requestAnimationFrame(() => scrollToBottom());
+    } catch (err) {
+      toast({ title: "Failed to send", description: err.message, variant: "destructive" });
+      setText(val);
     }
   };
 
@@ -87,6 +96,15 @@ export default function ChatDetail() {
                         : `${isFirstInGroup ? 'rounded-tr-2xl' : 'rounded-tr-lg'} ${isFirstInGroup ? 'rounded-tl-2xl' : 'rounded-tl-lg'} ${isLastInGroup ? 'rounded-bl-sm' : 'rounded-bl-lg'} ${isLastInGroup ? 'rounded-br-2xl' : 'rounded-br-lg'}`
                     }`}
                   >
+                    {message.mediaUrl && (
+                      <div className="mb-2 max-w-[200px] rounded-lg overflow-hidden border border-white/10">
+                         {message.mediaType === "video" ? (
+                           <video src={message.mediaUrl} controls className="w-full h-auto" />
+                         ) : (
+                           <img src={message.mediaUrl} alt="attachment" className="w-full h-auto object-cover" />
+                         )}
+                      </div>
+                    )}
                     {message.text}
                   </div>
                   {isMe && isLastInGroup && message.status && (
@@ -116,11 +134,24 @@ export default function ChatDetail() {
       </div>
 
       {/* Input Area */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0a0f16] via-[#0a0f16]/90 to-transparent pt-10 pb-4 px-4 z-20">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0a0f16] via-[#0a0f16]/90 to-transparent pt-10 pb-4 px-4 z-20 flex flex-col gap-2">
+        {attachment && (
+           <div className="bg-[#1a2332] p-2 rounded-xl self-start relative border border-white/10 shadow-lg">
+             <button onClick={() => setAttachment(null)} className="absolute -top-2 -right-2 bg-red-500 rounded-full w-6 h-6 flex items-center justify-center text-white shadow-md z-10">
+                <span className="material-symbols-outlined text-[14px]">close</span>
+             </button>
+             {attachment.type.startsWith("video") ? (
+               <video src={URL.createObjectURL(attachment)} className="h-20 rounded-lg object-cover" />
+             ) : (
+               <img src={URL.createObjectURL(attachment)} className="h-20 rounded-lg object-cover" alt="preview" />
+             )}
+           </div>
+        )}
         <form onSubmit={onSubmit} className="flex items-end gap-2 bg-[#1a2332] border border-white/10 rounded-3xl p-1.5 shadow-xl">
-           <button type="button" className="p-2.5 text-slate-400 hover:text-white transition-colors bg-[#253043] rounded-full shrink-0">
-              <span className="material-symbols-outlined text-[20px]">add</span>
-           </button>
+           <label className="p-2.5 text-slate-400 hover:text-white transition-colors bg-[#253043] rounded-full shrink-0 cursor-pointer flex items-center justify-center">
+              <span className="material-symbols-outlined text-[20px]">attach_file</span>
+              <input type="file" className="hidden" accept="image/*,video/*" onChange={(e) => setAttachment(e.target.files[0])} />
+           </label>
            <textarea
              value={text}
              onChange={(e) => {

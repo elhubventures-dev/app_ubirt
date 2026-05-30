@@ -24,13 +24,15 @@ function Toggle({ checked, onChange, label }) {
 }
 
 export default function Settings() {
-  const { user, signOut, isLiveAuth } = useAuth();
+  const { user, signOut, isLiveAuth, updateUserSession } = useAuth();
   const [autoplay, setAutoplay] = useState(() => localStorage.getItem("ubirt.pref.autoplay") !== "false");
   const [aiAssist, setAiAssist] = useState(() => localStorage.getItem("ubirt.pref.aiAssist") !== "false");
   const [notifications, setNotifications] = useState(true);
   
   const [name, setName] = useState(user?.name || "");
+  const [username, setUsername] = useState(user?.username || "");
   const [bio, setBio] = useState(user?.bio || "");
+  const [avatarFile, setAvatarFile] = useState(null);
   
   const { toast } = useToast();
 
@@ -52,10 +54,9 @@ export default function Settings() {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await dataProvider.updateProfile(name, bio);
+      const updated = await dataProvider.updateProfile(name, bio, username, avatarFile);
+      updateUserSession(updated);
       toast({ title: "Profile updated", description: "Your changes have been saved." });
-      // Reload to reflect changes globally if needed
-      window.location.reload();
     } catch (error) {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
     } finally {
@@ -86,15 +87,23 @@ export default function Settings() {
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Profile Customization</h2>
             <form onSubmit={handleSaveProfile} className="bg-white/5 border border-white/10 p-5 rounded-3xl backdrop-blur-sm space-y-4">
                <div className="flex items-center gap-4 mb-2">
-                 <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-white/10 overflow-hidden relative group cursor-pointer">
-                    <img src={user?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${user?.username || "default"}`} alt="Avatar" className="w-full h-full object-cover" />
+                 <label className="w-16 h-16 rounded-full bg-slate-800 border-2 border-white/10 overflow-hidden relative group cursor-pointer block">
+                    <img src={avatarFile ? URL.createObjectURL(avatarFile) : (user?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${user?.username || "default"}`)} alt="Avatar" className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                        <span className="material-symbols-outlined text-[20px] text-white">edit</span>
                     </div>
-                 </div>
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => setAvatarFile(e.target.files[0])} />
+                 </label>
                  <div>
-                    <PrimaryButton type="button" variant="secondary" size="sm">Change Avatar</PrimaryButton>
+                    <label className="cursor-pointer block">
+                      <PrimaryButton type="button" variant="secondary" size="sm" onClick={() => document.querySelector('input[type="file"]').click()}>Change Avatar</PrimaryButton>
+                    </label>
                  </div>
+               </div>
+               
+               <div>
+                  <label className="text-xs font-semibold text-slate-400 block mb-1.5 pl-1">Username</label>
+                  <InputField value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-[#0a0f16]/50 border-white/5" placeholder="username" />
                </div>
                
                <div>
@@ -111,7 +120,9 @@ export default function Settings() {
                   />
                </div>
                <div className="pt-2">
-                 <PrimaryButton type="submit" className="w-full">Save Changes</PrimaryButton>
+                 <PrimaryButton type="submit" className="w-full" disabled={isSaving}>
+                   {isSaving ? "Saving..." : "Save Changes"}
+                 </PrimaryButton>
                </div>
             </form>
           </section>

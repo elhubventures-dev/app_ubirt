@@ -1,33 +1,60 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useFeed, useFeedComments } from "@/hooks/useFeed";
+import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
 import { motion, AnimatePresence } from "framer-motion";
 
-function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPostId, isMutating }) {
+function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId }) {
   const videoRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [showPlayOverlay, setShowPlayOverlay] = useState(false);
 
   useEffect(() => {
     if (!videoRef.current) return;
     if (isVisible) {
       videoRef.current.play().catch(() => {});
+      setIsPlaying(true);
     } else {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
+      setIsPlaying(false);
     }
   }, [isVisible]);
 
-  // Handle double tap to like
+  // Handle double tap to like & single tap to play/pause
   const [showHeart, setShowHeart] = useState(false);
-  const handleDoubleTap = (e) => {
+  const clickTimeout = useRef(null);
+  const handleTap = (e) => {
     e.preventDefault();
-    if (!post.liked) {
-      toggleLike(post.id);
+    if (clickTimeout.current) {
+      clearTimeout(clickTimeout.current);
+      clickTimeout.current = null;
+      // Double tap
+      if (!post.liked) {
+        toggleLike(post.id);
+      }
+      setShowHeart(true);
+      setTimeout(() => setShowHeart(false), 800);
+    } else {
+      // Single tap timeout
+      clickTimeout.current = setTimeout(() => {
+        clickTimeout.current = null;
+        if (videoRef.current) {
+          if (isPlaying) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+          } else {
+            videoRef.current.play();
+            setIsPlaying(true);
+          }
+          setShowPlayOverlay(true);
+          setTimeout(() => setShowPlayOverlay(false), 600);
+        }
+      }, 250); // wait 250ms for a second tap
     }
-    setShowHeart(true);
-    setTimeout(() => setShowHeart(false), 800);
   };
 
   const hasMedia = !!post.media_url;
@@ -37,20 +64,21 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
       {/* Media Background */}
       {hasMedia ? (
         post.media_type === "image" ? (
-          <img src={post.media_url} alt="Post media" className="w-full h-full object-cover" onDoubleClick={handleDoubleTap} />
+          <img src={post.media_url} alt="Post media" className="w-full h-full object-cover" onClick={handleTap} />
         ) : (
           <video
             ref={videoRef}
             src={post.media_url}
             className="w-full h-full object-cover"
-            loop
+            loop={false}
             muted
             playsInline
-            onDoubleClick={handleDoubleTap}
+            onClick={handleTap}
+            onEnded={() => onAutoScroll && onAutoScroll()}
           />
         )
       ) : (
-        <div className="w-full h-full bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center" onDoubleClick={handleDoubleTap}>
+        <div className="w-full h-full bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center" onClick={handleTap}>
           <p className="text-slate-500 font-medium tracking-widest uppercase">No Media</p>
         </div>
       )}
@@ -66,6 +94,21 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
             className="absolute z-10 pointer-events-none text-red-500 flex items-center justify-center"
           >
             <span className="material-symbols-outlined fill-1" style={{ fontSize: "120px" }}>favorite</span>
+          </motion.div>
+        )}
+        
+        {/* Play/Pause Overlay */}
+        {showPlayOverlay && (
+          <motion.div
+            initial={{ scale: 1.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 0.8 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="absolute z-10 pointer-events-none text-white flex items-center justify-center bg-black/30 rounded-full p-4"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: "64px" }}>
+              {isPlaying ? "play_arrow" : "pause"}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -117,12 +160,11 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
           <span className="text-white text-xs font-semibold drop-shadow-md">{post.bookmarked ? "Saved" : "Save"}</span>
         </button>
 
-        {/* Share */}
-        <button className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
+        {/* More Options */}
+        <button onClick={() => setOptionsPostId(post.id)} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
           <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white/20">
-            <span className="material-symbols-outlined fill-1">share</span>
+            <span className="material-symbols-outlined fill-1">more_vert</span>
           </div>
-          <span className="text-white text-xs font-semibold drop-shadow-md">Share</span>
         </button>
       </div>
     </div>
@@ -130,14 +172,23 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
 }
 
 export default function VideoFeed() {
+  const { user } = useAuth();
   const [expandedPostId, setExpandedPostId] = useState("");
+  const [optionsPostId, setOptionsPostId] = useState("");
   const [commentDraft, setCommentDraft] = useState("");
   const [activePostIndex, setActivePostIndex] = useState(0);
   const [feedType, setFeedType] = useState("foryou"); // "foryou" | "following"
   
-  const { data: posts = [], isLoading, toggleLike, toggleBookmark, addComment, isMutating, isCommenting } = useFeed(feedType);
+  const { data: posts = [], isLoading, toggleLike, toggleBookmark, addComment, deletePost, isMutating, isCommenting } = useFeed(feedType);
   const { data: comments = [] } = useFeedComments(expandedPostId);
   const { toast } = useToast();
+  const containerRef = useRef(null);
+
+  const handleAutoScroll = () => {
+    if (!containerRef.current) return;
+    const height = window.innerHeight;
+    containerRef.current.scrollBy({ top: height, behavior: 'smooth' });
+  };
 
   const containerRef = useRef(null);
 
@@ -198,6 +249,8 @@ export default function VideoFeed() {
             toggleBookmark={toggleBookmark}
             setExpandedPostId={setExpandedPostId}
             isMutating={isMutating}
+            onAutoScroll={handleAutoScroll}
+            setOptionsPostId={setOptionsPostId}
           />
         ))}
       </div>
@@ -271,6 +324,73 @@ export default function VideoFeed() {
                     Post
                   </PrimaryButton>
                 </form>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Options Sheet */}
+      <AnimatePresence>
+        {optionsPostId && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 z-40"
+              onClick={() => setOptionsPostId("")}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="absolute bottom-0 left-0 right-0 h-[40dvh] bg-[#101822] rounded-t-3xl z-50 flex flex-col pointer-events-auto"
+            >
+              <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto my-3 shrink-0" />
+              <div className="p-6 pt-2 flex flex-col gap-4">
+                <h3 className="text-white font-bold text-lg border-b border-white/10 pb-3">Post Options</h3>
+                
+                {(() => {
+                  const targetPost = posts.find(p => p.id === optionsPostId);
+                  const isAuthor = targetPost?.author === user?.username || targetPost?.author === user?.name;
+                  
+                  if (isAuthor) {
+                    return (
+                      <button 
+                        onClick={async () => {
+                          try {
+                             await deletePost(optionsPostId);
+                             toast({ title: "Post Deleted", description: "Your post has been removed." });
+                             setOptionsPostId("");
+                          } catch (err) {
+                             toast({ title: "Delete Failed", description: err.message, variant: "destructive" });
+                          }
+                        }}
+                        className="flex items-center gap-3 text-red-500 hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
+                      >
+                         <span className="material-symbols-outlined">delete</span> Delete Post
+                      </button>
+                    );
+                  }
+                  
+                  return (
+                    <button 
+                      onClick={() => {
+                        toast({ title: "Post Reported", description: "Thanks for keeping the community safe." });
+                        setOptionsPostId("");
+                      }}
+                      className="flex items-center gap-3 text-red-500 hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
+                    >
+                       <span className="material-symbols-outlined">flag</span> Report Post
+                    </button>
+                  );
+                })()}
+
+                <button onClick={() => setOptionsPostId("")} className="mt-auto bg-white/10 text-white p-4 rounded-2xl font-bold hover:bg-white/20 transition-colors">
+                  Cancel
+                </button>
               </div>
             </motion.div>
           </>

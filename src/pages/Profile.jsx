@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
-import { Card } from "@/components/ui/Card";
+import { Card } from "@/components/ui/card";
 import { getButtonClasses } from "@/components/ui/PrimaryButton";
 import { motion, AnimatePresence } from "framer-motion";
 

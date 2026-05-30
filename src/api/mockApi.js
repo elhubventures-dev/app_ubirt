@@ -129,6 +129,12 @@ export const mockApi = {
     persistState();
     return comment;
   },
+  async deletePost(postId) {
+    await wait();
+    feedPosts = feedPosts.filter(p => p.id !== postId);
+    persistState();
+    return true;
+  },
   async getConversations() {
     await wait();
     return conversations;
@@ -141,16 +147,22 @@ export const mockApi = {
     await wait(60);
     return Boolean(typingByChat[chatId]);
   },
-  async sendMessage(chatId, text) {
+  async sendMessage(chatId, text, attachment) {
     await wait();
-    const message = { id: `m-${Date.now()}`, role: "me", text, status: "sent" };
+    let mediaUrl;
+    let mediaType;
+    if (attachment) {
+      mediaUrl = URL.createObjectURL(attachment);
+      mediaType = attachment.type.startsWith("video") ? "video" : "image";
+    }
+    const message = { id: `m-${Date.now()}`, role: "me", text, status: "sent", mediaUrl, mediaType };
     messagesByChat = {
       ...messagesByChat,
       [chatId]: [...(messagesByChat[chatId] ?? []), message],
     };
     typingByChat = { ...typingByChat, [chatId]: true };
     conversations = conversations.map((c) =>
-      c.id === chatId ? { ...c, lastMessage: text, updatedAt: "now", unread: 0 } : c
+      c.id === chatId ? { ...c, lastMessage: attachment ? "Sent an attachment" : text, updatedAt: "now", unread: 0 } : c
     );
     persistState();
     window.setTimeout(() => {
@@ -265,8 +277,12 @@ export const mockApi = {
     await wait();
     return mockNotifications;
   },
-  async updateProfile(name, bio) {
+  async updateProfile(name, bio, username, avatarFile) {
     await wait();
-    return { name, bio };
+    let avatarUrl = undefined;
+    if (avatarFile) {
+       avatarUrl = URL.createObjectURL(avatarFile);
+    }
+    return { name, bio, username, avatar: avatarUrl };
   },
 };

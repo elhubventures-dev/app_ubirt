@@ -1,9 +1,48 @@
+import { useEffect } from "react";
 import { dataProvider } from "@/api/dataProvider";
-import { useQuery } from "@tanstack/react-query";
+import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/lib/AuthContext";
+import { useToast } from "@/components/ui/use-toast";
 
 export function useNotifications() {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  const query = useQuery({
     queryKey: ["notifications"],
     queryFn: dataProvider.getNotifications,
   });
+
+  useEffect(() => {
+    if (!user || !isLiveMode() || !isSupabaseConfigured()) return undefined;
+
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel(`user-notifications:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          toast({
+            title: "New Notification",
+            description: payload.new.text || "Someone interacted with you.",
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, queryClient, toast]);
+
+  return query;
 }

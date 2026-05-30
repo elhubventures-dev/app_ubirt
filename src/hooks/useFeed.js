@@ -26,12 +26,20 @@ export function useFeed(feedType = "foryou") {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: dataProvider.deletePost,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+    },
+  });
+
   return {
     ...feedQuery,
     toggleLike: likeMutation.mutateAsync,
     toggleBookmark: bookmarkMutation.mutateAsync,
     addComment: commentMutation.mutateAsync,
-    isMutating: likeMutation.isPending || bookmarkMutation.isPending,
+    deletePost: deleteMutation.mutateAsync,
+    isMutating: likeMutation.isPending || bookmarkMutation.isPending || deleteMutation.isPending,
     isCommenting: commentMutation.isPending,
   };
 }

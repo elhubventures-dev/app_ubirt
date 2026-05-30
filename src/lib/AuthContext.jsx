@@ -113,6 +113,10 @@ export function AuthProvider({ children }) {
     navigate("/login");
   }, [useLiveAuth, navigate]);
 
+  const updateUserSession = useCallback((updates) => {
+    setUser((prev) => (prev ? { ...prev, ...updates } : null));
+  }, []);
+
   const navigateToLogin = useCallback(() => {
     navigate("/login");
   }, [navigate]);
@@ -127,9 +131,10 @@ export function AuthProvider({ children }) {
       signIn,
       signUp,
       signOut,
+      updateUserSession,
       isLiveAuth: useLiveAuth,
     }),
-    [user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, signIn, signUp, signOut, useLiveAuth]
+    [user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, signIn, signUp, signOut, updateUserSession, useLiveAuth]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -126,6 +126,14 @@ export const supabaseApi = {
     const feed = await this.getFeed();
     return feed.find((p) => p.id === postId);
   },
+  async deletePost(postId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    // Only author can delete. Supabase RLS will enforce this if configured.
+    const { error } = await supabase.from("posts").delete().eq("id", postId).eq("user_id", userId);
+    if (error) throw error;
+    return true;
+  },
 
   async getComments(postId) {
     const supabase = getSupabase();
@@ -235,6 +243,8 @@ export const supabaseApi = {
       role: m.sender_id === userId ? "me" : "other",
       text: m.content,
       status: m.status,
+      mediaUrl: m.media_url,
+      mediaType: m.media_type,
     }));
   },
 
@@ -242,9 +252,18 @@ export const supabaseApi = {
     return false;
   },
 
-  async sendMessage(chatId, text) {
+  async sendMessage(chatId, text, attachment) {
     const userId = await getUserId();
     const supabase = getSupabase();
+    
+    let mediaUrl;
+    let mediaType;
+    if (attachment) {
+      const res = await uploadMediaFile(attachment, "chat_media");
+      mediaUrl = res.url;
+      mediaType = attachment.type.startsWith("video") ? "video" : "image";
+    }
+
     const { data, error } = await supabase
       .from("messages")
       .insert({
@@ -252,6 +271,8 @@ export const supabaseApi = {
         sender_id: userId,
         content: text,
         status: "sent",
+        media_url: mediaUrl,
+        media_type: mediaType,
       })
       .select()
       .single();
@@ -262,6 +283,8 @@ export const supabaseApi = {
       role: "me",
       text: data.content,
       status: data.status,
+      mediaUrl: data.media_url,
+      mediaType: data.media_type,
     };
   },
 
@@ -485,12 +508,23 @@ export const supabaseApi = {
     return data;
   },
 
-  async updateProfile(name, bio) {
+  async updateProfile(name, bio, username, avatarFile) {
     const userId = await getUserId();
     const supabase = getSupabase();
+    
+    let avatarUrl = undefined;
+    if (avatarFile) {
+       // upload the file
+       const res = await uploadMediaFile(avatarFile, "avatars");
+       avatarUrl = res.url;
+    }
+    
+    const updates = { display_name: name, bio: bio, username: username };
+    if (avatarUrl) updates.avatar_url = avatarUrl;
+    
     const { data, error } = await supabase
       .from("profiles")
-      .update({ display_name: name, bio: bio })
+      .update(updates)
       .eq("id", userId)
       .select()
       .single();

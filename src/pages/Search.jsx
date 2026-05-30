@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useFeed } from "@/hooks/useFeed";
 import { useConversations } from "@/hooks/useMessages";
 import { useNotifications } from "@/hooks/useNotifications";
-import { Card } from "@/components/ui/Card";
+import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/InputField";
 import { motion, AnimatePresence } from "framer-motion";
 

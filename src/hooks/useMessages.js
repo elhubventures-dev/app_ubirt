@@ -52,7 +52,7 @@ export function useChatMessages(chatId) {
   }, [chatId, queryClient]);
 
   const sendMutation = useMutation({
-    mutationFn: (text) => dataProvider.sendMessage(chatId, text),
+    mutationFn: ({ text, attachment }) => dataProvider.sendMessage(chatId, text, attachment),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
