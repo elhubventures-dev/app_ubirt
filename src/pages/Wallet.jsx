@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { useToast } from "@/components/ui/use-toast";
+import { usePaystackPayment } from "react-paystack";
 
 const COIN_PACKAGES = [
   { id: "pack1", coins: 100, price: "$0.99" },
@@ -18,17 +19,51 @@ export default function Wallet() {
   const { toast } = useToast();
   const [isPurchasing, setIsPurchasing] = useState(false);
 
+  // Paystack configuration base
+  const paystackConfig = {
+    publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_placeholder",
+    email: user?.email || "user@example.com",
+    currency: "NGN", // Change to GHS, ZAR, etc as needed
+  };
+
+  const initializePayment = usePaystackPayment(paystackConfig);
+
+  const onSuccess = (reference) => {
+    setIsPurchasing(false);
+    toast({
+      title: "Payment Successful!",
+      description: `Reference: ${reference.reference}. Your coins will be updated shortly!`,
+    });
+    // The backend webhook will securely add the coins to the database.
+  };
+
+  const onClose = () => {
+    setIsPurchasing(false);
+    toast({
+      title: "Payment Cancelled",
+      description: "You closed the payment window.",
+      variant: "destructive"
+    });
+  };
+
   const handlePurchase = (pack) => {
     setIsPurchasing(true);
-    // Simulate purchase network request
-    setTimeout(() => {
-      setIsPurchasing(false);
-      toast({
-        title: "Purchase Successful!",
-        description: `You bought ${pack.coins} coins for ${pack.price}. (Mocked)`,
-      });
-      // We would update the user's coin balance here in a real app
-    }, 1500);
+    
+    // Parse price to integer amount (e.g. "$4.99" -> 499 kobo/cents)
+    // Note: In a real production app, you should define prices in your local currency.
+    const numericPrice = parseFloat(pack.price.replace(/[^0-9.]/g, ''));
+    const amountInKobo = Math.round(numericPrice * 100 * 1500); // Rough USD to NGN conversion for demo
+
+    const config = {
+      ...paystackConfig,
+      amount: amountInKobo,
+      metadata: {
+        userId: user?.id,
+        coins: pack.coins,
+      },
+    };
+
+    initializePayment(onSuccess, onClose, config);
   };
 
   return (
