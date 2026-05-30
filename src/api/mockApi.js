@@ -141,6 +141,16 @@ export const mockApi = {
     // Let's just simulate success for now.
     return { success: true, amount };
   },
+  async getCreatorAnalytics() {
+    await wait(500);
+    return {
+      followers: 12400,
+      views: 842000,
+      completionRate: 78,
+      earnings: 5400,
+      chartData: [30, 45, 25, 60, 40, 75, 90]
+    };
+  },
   async getConversations() {
     await wait();
     return conversations;

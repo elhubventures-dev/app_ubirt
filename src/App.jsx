@@ -26,6 +26,7 @@ import Achievements from "./pages/Achievements";
 import Wallet from "./pages/Wallet";
 import UserProfile from "./pages/UserProfile";
 import HashtagFeed from "./pages/HashtagFeed";
+import Analytics from "./pages/Analytics";
 
 const LOGO_URL =
   "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=160&h=160&fit=crop";
@@ -86,6 +87,7 @@ const AuthenticatedApp = () => {
       <Route path="/creator-studio" element={<CreatorStudio />} />
       <Route path="/achievements" element={<Achievements />} />
       <Route path="/wallet" element={<Wallet />} />
+      <Route path="/analytics" element={<Analytics />} />
       <Route path="/user/:username" element={<UserProfile />} />
       <Route path="/tag/:tag" element={<HashtagFeed />} />
 

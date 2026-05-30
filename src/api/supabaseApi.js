@@ -150,6 +150,17 @@ export const supabaseApi = {
     return { success: true, amount };
   },
 
+  async getCreatorAnalytics() {
+    // In a real app, this would aggregate views/likes from posts tables
+    return {
+      followers: Math.floor(Math.random() * 20000),
+      views: Math.floor(Math.random() * 1000000),
+      completionRate: 78,
+      earnings: Math.floor(Math.random() * 10000),
+      chartData: [30, 45, 25, 60, 40, 75, 90]
+    };
+  },
+
   async getComments(postId) {
     const supabase = getSupabase();
     const { data, error } = await supabase

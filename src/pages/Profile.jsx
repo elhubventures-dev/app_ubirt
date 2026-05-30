@@ -187,6 +187,12 @@ export default function Profile() {
                    <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
                  </div>
               </Card>
+
+              <div className="pt-4 flex justify-center">
+                 <Link to="/analytics" className={getButtonClasses("primary", "md", "rounded-full px-8")}>
+                    View Detailed Analytics
+                 </Link>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
