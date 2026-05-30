@@ -136,10 +136,6 @@ export default function ChatDetail() {
         <AnimatePresence>
           {isTyping && (
             <motion.div 
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="self-start bg-[#202938] border border-white/5 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 shadow-sm mt-2"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}

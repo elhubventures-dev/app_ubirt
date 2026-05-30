@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { dataProvider } from "@/api/dataProvider";
-import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { isLiveMode } from "@/lib/supabaseClient";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useConversations() {
@@ -31,34 +31,45 @@ export function useChatMessages(chatId) {
   useEffect(() => {
     if (!chatId) return;
     
-    // Subscribe to messages
-    const unsubscribeMessages = dataProvider.subscribeToMessages(chatId, (newMsg) => {
-      queryClient.setQueryData(["messages", chatId], (old) => {
-        if (!old) return [newMsg];
-        // prevent duplicate
-        if (old.some(m => m.id === newMsg.id)) return old;
-        return [...old, newMsg];
-      });
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    });
+    let unsubscribeMessages = () => {};
+    let unsubscribePresence = () => {};
 
-    // Subscribe to presence
-    const unsubscribePresence = dataProvider.subscribeToPresence(chatId, (state) => {
-      const users = [];
-      let someoneTyping = false;
-      for (const key in state) {
-        state[key].forEach(presence => {
-          if (presence.profile) {
-            users.push(presence.profile);
-          }
-          if (presence.typing) {
-            someoneTyping = true;
-          }
+    try {
+      // Subscribe to messages
+      unsubscribeMessages = dataProvider.subscribeToMessages(chatId, (newMsg) => {
+        queryClient.setQueryData(["messages", chatId], (old) => {
+          if (!old) return [newMsg];
+          // prevent duplicate
+          if (old.some(m => m.id === newMsg.id)) return old;
+          return [...old, newMsg];
         });
-      }
-      setOnlineUsers(users);
-      setRealtimeTyping(someoneTyping);
-    });
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      }) || (() => {});
+    } catch (e) {
+      console.warn("Failed to subscribe to messages:", e);
+    }
+
+    try {
+      // Subscribe to presence
+      unsubscribePresence = dataProvider.subscribeToPresence(chatId, (state) => {
+        const users = [];
+        let someoneTyping = false;
+        for (const key in state) {
+          state[key].forEach(presence => {
+            if (presence.profile) {
+              users.push(presence.profile);
+            }
+            if (presence.typing) {
+              someoneTyping = true;
+            }
+          });
+        }
+        setOnlineUsers(users);
+        setRealtimeTyping(someoneTyping);
+      }) || (() => {});
+    } catch (e) {
+      console.warn("Failed to subscribe to presence:", e);
+    }
 
     return () => {
       unsubscribeMessages();

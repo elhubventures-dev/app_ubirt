@@ -51,20 +51,26 @@ export function AuthProvider({ children }) {
 
     const supabase = getSupabase();
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        loadProfile(session.user).finally(() => setIsLoadingAuth(false));
-      } else {
+    const sessionTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Session check timed out")), 8000)
+    );
+
+    Promise.race([supabase.auth.getSession(), sessionTimeout])
+      .then(({ data: { session } }) => {
+        if (session?.user) {
+          loadProfile(session.user).finally(() => setIsLoadingAuth(false));
+        } else {
+          setUser(null);
+          setAuthError({ type: "auth_required" });
+          setIsLoadingAuth(false);
+        }
+      })
+      .catch((error) => {
+        console.error("Auth session error:", error);
         setUser(null);
         setAuthError({ type: "auth_required" });
         setIsLoadingAuth(false);
-      }
-    }).catch((error) => {
-      console.error("Auth session error:", error);
-      setUser(null);
-      setAuthError({ type: "auth_error", message: error.message });
-      setIsLoadingAuth(false);
-    });
+      });
 
     const {
       data: { subscription },
