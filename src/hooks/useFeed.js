@@ -19,7 +19,13 @@ export function useFeed(feedType = "foryou") {
   });
 
   const commentMutation = useMutation({
-    mutationFn: ({ postId, text }) => dataProvider.addComment(postId, text),
+    mutationFn: async ({ postId, text }) => {
+      const isToxic = await dataProvider.analyzeCommentToxicity(text);
+      if (isToxic) {
+        throw new Error("This comment was flagged for toxicity and has been held for review.");
+      }
+      return dataProvider.addComment(postId, text);
+    },
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["feed"] });
       queryClient.invalidateQueries({ queryKey: ["feed-comments", vars.postId] });

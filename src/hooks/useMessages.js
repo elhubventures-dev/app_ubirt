@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { dataProvider } from "@/api/dataProvider";
 import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -25,29 +25,44 @@ export function useChatMessages(chatId) {
     refetchInterval: isLiveMode() ? false : 1200,
   });
 
-  useEffect(() => {
-    if (!chatId || !isLiveMode() || !isSupabaseConfigured()) return undefined;
+  const [onlineUsers, setOnlineUsers] = React.useState([]);
+  const [realtimeTyping, setRealtimeTyping] = React.useState(false);
 
-    const supabase = getSupabase();
-    const channel = supabase
-      .channel(`messages:${chatId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${chatId}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-          queryClient.invalidateQueries({ queryKey: ["conversations"] });
-        }
-      )
-      .subscribe();
+  useEffect(() => {
+    if (!chatId) return;
+    
+    // Subscribe to messages
+    const unsubscribeMessages = dataProvider.subscribeToMessages(chatId, (newMsg) => {
+      queryClient.setQueryData(["messages", chatId], (old) => {
+        if (!old) return [newMsg];
+        // prevent duplicate
+        if (old.some(m => m.id === newMsg.id)) return old;
+        return [...old, newMsg];
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    });
+
+    // Subscribe to presence
+    const unsubscribePresence = dataProvider.subscribeToPresence(chatId, (state) => {
+      const users = [];
+      let someoneTyping = false;
+      for (const key in state) {
+        state[key].forEach(presence => {
+          if (presence.profile) {
+            users.push(presence.profile);
+          }
+          if (presence.typing) {
+            someoneTyping = true;
+          }
+        });
+      }
+      setOnlineUsers(users);
+      setRealtimeTyping(someoneTyping);
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubscribeMessages();
+      unsubscribePresence();
     };
   }, [chatId, queryClient]);
 
@@ -61,8 +76,10 @@ export function useChatMessages(chatId) {
 
   return {
     ...messagesQuery,
-    isTyping: typingQuery.data ?? false,
+    isTyping: isLiveMode() ? realtimeTyping : (typingQuery.data ?? false),
+    onlineUsers,
     sendMessage: sendMutation.mutateAsync,
     isSending: sendMutation.isPending,
+    updateTyping: (isTyping) => dataProvider.updateTypingStatus(chatId, isTyping),
   };
 }

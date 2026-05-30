@@ -274,8 +274,69 @@ export const supabaseApi = {
     }));
   },
 
-  async getChatTyping() {
+  async getChatTyping(chatId) {
     return false;
+  },
+
+  subscribeToMessages(chatId, onMessage) {
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel(`messages:${chatId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${chatId}`,
+        },
+        async (payload) => {
+          const userId = await getUserId();
+          const m = payload.new;
+          onMessage({
+            id: m.id,
+            role: m.sender_id === userId ? "me" : "other",
+            text: m.content,
+            status: m.status,
+            mediaUrl: m.media_url,
+            mediaType: m.media_type,
+          });
+        }
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  },
+
+  subscribeToPresence(chatId, onPresenceChange) {
+    const supabase = getSupabase();
+    const channel = supabase.channel(`presence:${chatId}`, {
+      config: { presence: { key: 'user' } },
+    });
+    
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        onPresenceChange(state);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          const userId = await getUserId();
+          const { data: profile } = await supabase.from('profiles').select('username, display_name').eq('id', userId).single();
+          await channel.track({ online_at: new Date().toISOString(), user_id: userId, profile });
+        }
+      });
+    return () => supabase.removeChannel(channel);
+  },
+
+  async updateTypingStatus(chatId, isTyping) {
+    const supabase = getSupabase();
+    const channel = supabase.channel(`presence:${chatId}`);
+    const userId = await getUserId();
+    if (isTyping) {
+      await channel.track({ typing: true, user_id: userId });
+    } else {
+      await channel.track({ typing: false, user_id: userId });
+    }
   },
 
   async sendMessage(chatId, text, attachment) {
@@ -345,6 +406,19 @@ export const supabaseApi = {
       .single();
     if (error) throw error;
     return { title: data.title };
+  },
+
+  async deleteComment(postId, commentId) {
+    const supabase = getSupabase();
+    const { error } = await supabase.from("comments").delete().eq("id", commentId);
+    if (error) throw error;
+  },
+
+  async analyzeCommentToxicity(text) {
+    // Mocked AI analysis until API key is provided
+    const toxicWords = ["hate", "stupid", "idiot", "ugly"];
+    const isToxic = toxicWords.some(word => text.toLowerCase().includes(word));
+    return isToxic;
   },
 
   async deleteAiMessage(messageId) {

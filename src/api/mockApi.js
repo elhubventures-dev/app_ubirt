@@ -116,6 +116,11 @@ export const mockApi = {
     await wait();
     return commentsByPost[postId] ?? [];
   },
+  async analyzeCommentToxicity(text) {
+    await wait(200);
+    const toxicWords = ["hate", "stupid", "idiot", "ugly"];
+    return toxicWords.some(word => text.toLowerCase().includes(word));
+  },
   async addComment(postId, text) {
     await wait();
     const comment = { id: `c-${Date.now()}`, author: "You", text };
@@ -162,6 +167,15 @@ export const mockApi = {
   async getChatTyping(chatId) {
     await wait(60);
     return Boolean(typingByChat[chatId]);
+  },
+  subscribeToMessages(chatId, onMessage) {
+    return () => {};
+  },
+  subscribeToPresence(chatId, onPresenceChange) {
+    return () => {};
+  },
+  async updateTypingStatus(chatId, isTyping) {
+    return true;
   },
   async sendMessage(chatId, text, attachment) {
     await wait();

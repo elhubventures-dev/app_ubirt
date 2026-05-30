@@ -9,6 +9,7 @@ import { isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoFilters, getFilterClass } from "@/components/studio/VideoFilters";
 import { AudioLibrary } from "@/components/studio/AudioLibrary";
+import CaptionGenerator from "@/components/studio/CaptionGenerator";
 
 const selectClass = "w-full rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white focus:bg-white/10 transition-colors outline-none";
 
@@ -22,6 +23,7 @@ export default function Upload() {
   const [filePreview, setFilePreview] = useState(null);
   const [filter, setFilter] = useState("none");
   const [audio, setAudio] = useState("original");
+  const [captions, setCaptions] = useState([]);
   const fileInputRef = useRef(null);
 
   const { saveUpload, isSavingUpload, publishUpload, isPublishingUpload } = useCreatorStudio();
@@ -42,7 +44,7 @@ export default function Upload() {
   const onSubmit = async () => {
     try {
       const result = await saveUpload({
-        payload: { title, description, category, visibility, filter, audio },
+        payload: { title, description, category, visibility, filter, audio, captions },
         file: canUploadFiles ? file : null,
       });
       toast({ title: "Draft saved", description: `Upload ${result.id} has been stored successfully.` });
@@ -170,6 +172,15 @@ export default function Upload() {
               <div className="space-y-6 flex-1 overflow-y-auto hide-scrollbar pb-10">
                 <VideoFilters currentFilter={filter} onSelectFilter={setFilter} />
                 <AudioLibrary selectedAudio={audio} onSelectAudio={setAudio} />
+                {(file?.type?.startsWith("video") || filePreview) && (
+                   <CaptionGenerator videoFile={file} onCaptionsGenerated={setCaptions} />
+                )}
+                {captions.length > 0 && (
+                  <div className="mt-2 text-xs text-green-400 font-medium flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                    {captions.length} captions generated
+                  </div>
+                )}
               </div>
 
               <div className="mt-auto pt-6 bg-[#0a0f16]">

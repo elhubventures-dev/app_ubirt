@@ -9,9 +9,23 @@ export default function CommunityChat() {
   const draftKey = `ubirt.community.draft.${id}`;
   const [text, setText] = useState(() => localStorage.getItem(draftKey) || "");
   const [attachment, setAttachment] = useState(null);
-  const { data: messages = [], isLoading, sendMessage, isSending, isTyping } = useChatMessages(id);
+  const { data: messages = [], isLoading, sendMessage, isSending, isTyping, onlineUsers, updateTyping } = useChatMessages(id);
   const { toast } = useToast();
   const scrollRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+
+  const handleTyping = (val) => {
+    setText(val);
+    localStorage.setItem(draftKey, val);
+    
+    if (updateTyping) {
+      updateTyping(true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        updateTyping(false);
+      }, 1500);
+    }
+  };
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -55,7 +69,9 @@ export default function CommunityChat() {
           <h1 className="text-xs font-semibold tracking-wide flex items-center gap-1">
              Community {id} <span className="material-symbols-outlined text-[12px] text-amber-400">verified</span>
           </h1>
-          <span className="text-[9px] text-slate-400 font-medium">124 Members</span>
+          <span className="text-[9px] text-slate-400 font-medium">
+            {onlineUsers ? Math.max(1, onlineUsers.length) : 1} Online
+          </span>
         </div>
 
         <button className="text-slate-400 p-2 hover:bg-white/5 rounded-full transition-colors">
@@ -132,8 +148,25 @@ export default function CommunityChat() {
         )}
       </div>
 
-      {/* Input Area */}
+      {/* Typing Indicator & Input Area */}
       <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-[#0a0f16] via-[#0a0f16] to-transparent pt-10 z-20">
+        <AnimatePresence>
+          {isTyping && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="px-4 pb-2 text-[10px] text-slate-400 font-medium flex items-center gap-1"
+            >
+              <div className="flex gap-0.5">
+                <span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+              Someone is typing...
+            </motion.div>
+          )}
+        </AnimatePresence>
         <form onSubmit={onSubmit} className="flex items-end gap-2 bg-[#1a2332] p-2 rounded-[2rem] border border-white/10 shadow-lg relative">
           
           <button type="button" className="p-3 text-slate-400 hover:text-white rounded-full hover:bg-white/5 transition-colors shrink-0">
@@ -143,10 +176,7 @@ export default function CommunityChat() {
           <div className="flex-1 relative">
             <textarea
               value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                localStorage.setItem(draftKey, e.target.value);
-              }}
+              onChange={(e) => handleTyping(e.target.value)}
               placeholder="Message the community..."
               className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-white placeholder-slate-500 resize-none py-3 max-h-32 text-[15px] block hide-scrollbar"
               rows={1}
