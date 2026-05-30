@@ -7,6 +7,8 @@ import { InputField } from "@/components/ui/InputField";
 import { cn } from "@/lib/utils";
 import { isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
+import { VideoFilters, getFilterClass } from "@/components/studio/VideoFilters";
+import { AudioLibrary } from "@/components/studio/AudioLibrary";
 
 const selectClass = "w-full rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white focus:bg-white/10 transition-colors outline-none";
 
@@ -18,6 +20,8 @@ export default function Upload() {
   const [visibility, setVisibility] = useState("team");
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
+  const [filter, setFilter] = useState("none");
+  const [audio, setAudio] = useState("original");
   const fileInputRef = useRef(null);
 
   const { saveUpload, isSavingUpload, publishUpload, isPublishingUpload } = useCreatorStudio();
@@ -38,7 +42,7 @@ export default function Upload() {
   const onSubmit = async () => {
     try {
       const result = await saveUpload({
-        payload: { title, description, category, visibility },
+        payload: { title, description, category, visibility, filter, audio },
         file: canUploadFiles ? file : null,
       });
       toast({ title: "Draft saved", description: `Upload ${result.id} has been stored successfully.` });
@@ -49,11 +53,11 @@ export default function Upload() {
   };
 
   const nextStep = () => {
-    if (step === 2 && !title) {
+    if (step === 3 && !title) {
       toast({ title: "Title required", description: "Please enter a title.", variant: "destructive" });
       return;
     }
-    setStep((s) => Math.min(s + 1, 3));
+    setStep((s) => Math.min(s + 1, 4));
   };
   const prevStep = () => setStep((s) => Math.max(s - 1, 1));
 
@@ -68,11 +72,11 @@ export default function Upload() {
         <button onClick={() => step > 1 ? prevStep() : navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors">
           <span className="material-symbols-outlined">{step > 1 ? "arrow_back" : "close"}</span>
         </button>
-        <div className="flex gap-1.5">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === step ? "w-6 bg-[#3b82f6]" : i < step ? "w-2 bg-[#3b82f6]/50" : "w-2 bg-slate-700"}`} />
-          ))}
-        </div>
+          <div className="flex gap-1.5 w-32 justify-center mx-auto absolute left-1/2 -translate-x-1/2">
+            {[1, 2, 3, 4].map((s) => (
+              <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${step >= s ? "bg-[#3b82f6]" : "bg-white/20"}`} />
+            ))}
+          </div>
         <div className="w-10" /> {/* Spacer */}
       </header>
 
@@ -131,6 +135,57 @@ export default function Upload() {
               initial={{ opacity: 0, x: -50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
+              className="flex-1 flex flex-col gap-6"
+            >
+              <div className="mt-4">
+                <h1 className="text-2xl font-bold">Edit & Trim</h1>
+              </div>
+
+              {/* Live Preview Miniature for Editing */}
+              <div className="h-64 rounded-2xl bg-black overflow-hidden relative shadow-lg ring-1 ring-white/10 shrink-0">
+                {filePreview ? (
+                  file?.type?.startsWith("image") ? (
+                    <img src={filePreview} alt="Preview" className={`w-full h-full object-cover opacity-90 ${getFilterClass(filter)}`} />
+                  ) : (
+                    <video src={filePreview} className={`w-full h-full object-cover opacity-90 ${getFilterClass(filter)}`} muted loop autoPlay playsInline />
+                  )
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
+                    <span className="text-slate-500 font-medium">No Media</span>
+                  </div>
+                )}
+                
+                {/* Mock timeline trimmer overlay */}
+                {filePreview && file?.type?.startsWith("video") && (
+                  <div className="absolute bottom-4 left-4 right-4 h-12 bg-black/40 backdrop-blur-md rounded-xl border border-white/20 flex items-center px-2 py-1">
+                    <div className="w-full h-8 bg-slate-700/50 rounded-lg relative overflow-hidden">
+                       {/* Playhead */}
+                       <div className="absolute top-0 bottom-0 w-1 bg-[#3b82f6] left-1/3 shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
+                       <div className="absolute top-0 bottom-0 left-4 right-1/4 bg-white/20 border-x-2 border-white" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-6 flex-1 overflow-y-auto hide-scrollbar pb-10">
+                <VideoFilters currentFilter={filter} onSelectFilter={setFilter} />
+                <AudioLibrary selectedAudio={audio} onSelectAudio={setAudio} />
+              </div>
+
+              <div className="mt-auto pt-6 bg-[#0a0f16]">
+                <PrimaryButton className="w-full py-4 rounded-full text-base font-semibold" onClick={nextStep}>
+                  Next
+                </PrimaryButton>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 3 && (
+            <motion.div
+              key="step3"
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 50 }}
               className="flex-1 flex flex-col gap-5"
             >
               <div className="mt-4">
@@ -167,9 +222,9 @@ export default function Upload() {
             </motion.div>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <motion.div
-              key="step3"
+              key="step4"
               initial={{ opacity: 0, x: -50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
@@ -183,9 +238,9 @@ export default function Upload() {
               <div className="h-48 rounded-2xl bg-black overflow-hidden relative shadow-lg ring-1 ring-white/10">
                 {filePreview ? (
                   file?.type?.startsWith("image") ? (
-                    <img src={filePreview} alt="Preview" className="w-full h-full object-cover opacity-80" />
+                    <img src={filePreview} alt="Preview" className={`w-full h-full object-cover opacity-80 ${getFilterClass(filter)}`} />
                   ) : (
-                    <video src={filePreview} className="w-full h-full object-cover opacity-80" muted loop autoPlay playsInline />
+                    <video src={filePreview} className={`w-full h-full object-cover opacity-80 ${getFilterClass(filter)}`} muted loop autoPlay playsInline />
                   )
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
