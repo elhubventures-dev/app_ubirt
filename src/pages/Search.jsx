@@ -11,28 +11,34 @@ const TRENDING_TAGS = ["#Tech", "#Vlog", "#Tutorial", "#Lifestyle", "#Comedy", "
 
 export default function Search() {
   const [term, setTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("all"); // 'all' | 'creators' | 'posts'
+  const [activeTab, setActiveTab] = useState("top"); // 'top' | 'users' | 'videos' | 'sounds'
+  const [showFilters, setShowFilters] = useState(false);
   const { data: posts = [] } = useFeed();
   const { data: chats = [] } = useConversations();
   const { data: notifications = [] } = useNotifications();
 
   const results = useMemo(() => {
     const query = term.trim().toLowerCase();
-    if (!query) return { all: [], creators: [], posts: [] };
+    if (!query) return { top: [], users: [], videos: [], sounds: [] };
 
     const postResults = posts
       .filter((p) => `${p.author} ${p.caption}`.toLowerCase().includes(query))
-      .map((p) => ({ id: p.id, type: "post", title: p.author, subtitle: p.caption, ...p }));
+      .map((p) => ({ id: p.id, type: "video", title: p.author, subtitle: p.caption, ...p }));
       
-    // Re-use chats as a mock for 'creators' to search
     const creatorResults = chats
       .filter((c) => `${c.name}`.toLowerCase().includes(query))
-      .map((c) => ({ id: c.id, type: "creator", title: c.name, subtitle: "Content Creator" }));
+      .map((c) => ({ id: c.id, type: "user", title: c.name, subtitle: "Content Creator" }));
+
+    const soundResults = [
+      { id: "s1", type: "sound", title: "Original Sound", subtitle: query },
+      { id: "s2", type: "sound", title: "Trending Beat", subtitle: query },
+    ];
 
     return {
-      all: [...creatorResults, ...postResults],
-      creators: creatorResults,
-      posts: postResults
+      top: [...creatorResults, ...postResults, ...soundResults].slice(0, 5),
+      users: creatorResults,
+      videos: postResults,
+      sounds: soundResults
     };
   }, [term, posts, chats]);
 
@@ -59,11 +65,50 @@ export default function Search() {
             className="w-full bg-[#1a2332]/80 backdrop-blur-md border border-white/10 rounded-full py-3.5 pl-12 pr-4 text-white placeholder-slate-400 focus:outline-none focus:border-[#3b82f6]/50 focus:ring-1 focus:ring-[#3b82f6]/50 transition-all shadow-inner"
           />
           {term && (
-            <button onClick={() => setTerm("")} className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-white">
+            <button onClick={() => setTerm("")} className="absolute inset-y-0 right-12 flex items-center text-slate-400 hover:text-white">
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           )}
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={`absolute inset-y-0 right-2 flex items-center p-2 rounded-full transition-colors ${showFilters ? 'text-[#3b82f6] bg-[#3b82f6]/10' : 'text-slate-400 hover:text-white'}`}
+          >
+            <span className="material-symbols-outlined text-[20px]">tune</span>
+          </button>
         </div>
+
+        {/* Filters Panel */}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden mt-3"
+            >
+              <div className="bg-[#1a2332]/80 backdrop-blur-md rounded-2xl p-4 border border-white/10 flex flex-col gap-3 text-sm">
+                <div className="flex justify-between items-center">
+                   <span className="font-semibold text-slate-300">Date Posted</span>
+                   <select className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 outline-none">
+                     <option>Any time</option><option>Today</option><option>This Week</option><option>This Month</option>
+                   </select>
+                </div>
+                <div className="flex justify-between items-center">
+                   <span className="font-semibold text-slate-300">Popularity</span>
+                   <select className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 outline-none">
+                     <option>Most Relevant</option><option>Most Liked</option><option>Most Viewed</option>
+                   </select>
+                </div>
+                <div className="flex justify-between items-center">
+                   <span className="font-semibold text-slate-300">Length</span>
+                   <select className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 outline-none">
+                     <option>Any length</option><option>Under 1 min</option><option>1 - 3 mins</option><option>Over 3 mins</option>
+                   </select>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Trending Pills */}
         {!term && (
@@ -101,12 +146,12 @@ export default function Search() {
         {term && (
           <div className="mt-6">
             {/* Tabs */}
-            <div className="flex gap-1 border-b border-white/10 mb-4 pb-0.5">
-              {["all", "creators", "posts"].map((tab) => (
+            <div className="flex gap-4 border-b border-white/10 mb-4 pb-0.5 overflow-x-auto hide-scrollbar">
+              {["top", "users", "videos", "sounds"].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 text-sm font-semibold capitalize relative transition-colors ${activeTab === tab ? "text-[#3b82f6]" : "text-slate-400 hover:text-slate-200"}`}
+                  className={`py-2 text-sm font-semibold capitalize relative transition-colors whitespace-nowrap ${activeTab === tab ? "text-[#3b82f6]" : "text-slate-400 hover:text-slate-200"}`}
                 >
                   {tab}
                   {activeTab === tab && (
@@ -132,7 +177,7 @@ export default function Search() {
                       exit={{ opacity: 0, scale: 0.95 }}
                       key={`${result.type}-${result.id}`}
                     >
-                      {result.type === "creator" ? (
+                      {result.type === "user" ? (
                         <Link to={`/user/${result.title}`} className="bg-white/5 border border-white/5 p-3 rounded-2xl flex items-center gap-3">
                           <div className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0">
                              <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${result.title}`} className="w-full h-full object-cover" />
@@ -143,6 +188,19 @@ export default function Search() {
                           </div>
                           <button className="px-4 py-1.5 bg-[#3b82f6]/10 text-[#3b82f6] font-semibold text-xs rounded-full">Follow</button>
                         </Link>
+                      ) : result.type === "sound" ? (
+                        <div className="bg-white/5 border border-white/5 p-3 rounded-2xl flex items-center gap-3 group cursor-pointer hover:bg-white/10 transition-colors">
+                           <div className="w-12 h-12 bg-gradient-to-br from-[#3b82f6] to-purple-500 rounded-lg flex items-center justify-center shrink-0 shadow-inner">
+                             <span className="material-symbols-outlined text-white">music_note</span>
+                           </div>
+                           <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-white text-sm truncate">{result.title}</p>
+                              <p className="text-[10px] text-slate-400 font-medium truncate">{result.subtitle}</p>
+                           </div>
+                           <button className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors">
+                             <span className="material-symbols-outlined text-[18px] ml-0.5">play_arrow</span>
+                           </button>
+                        </div>
                       ) : (
                         <Link to="/feed" className="bg-white/5 border border-white/5 p-3 rounded-2xl flex gap-3 group">
                            <div className="w-16 h-20 bg-slate-800 rounded-lg overflow-hidden shrink-0 relative">

@@ -525,7 +525,7 @@ export const supabaseApi = {
         user_id: userId,
         caption: upload.description || upload.title,
         media_url: upload.media_url,
-        media_type: upload.media_url?.includes("video") ? "video" : "image",
+        media_type: upload.media_url?.match(/\.(mp4|webm|ogg|mov)$/i) ? "video" : "image",
         category: (upload.category ?? "general").toLowerCase(),
       })
       .select()
@@ -534,7 +534,7 @@ export const supabaseApi = {
     return data;
   },
 
-  async updateProfile(name, bio, username, avatarFile) {
+  async updateProfile(name, username, avatarFile) {
     const userId = await getUserId();
     const supabase = getSupabase();
     
@@ -545,7 +545,7 @@ export const supabaseApi = {
        avatarUrl = res.url;
     }
     
-    const updates = { display_name: name, bio: bio, username: username };
+    const updates = { display_name: name, username: username };
     if (avatarUrl) updates.avatar_url = avatarUrl;
     
     const { data, error } = await supabase

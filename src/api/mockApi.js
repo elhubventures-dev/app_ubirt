@@ -263,10 +263,16 @@ export const mockApi = {
     await wait();
     return creatorStats;
   },
-  async saveUpload(payload, _file = null) {
+  async saveUpload(payload, file = null) {
     await wait();
     creatorStats = { ...creatorStats, views: creatorStats.views + 140 };
-    const upload = { id: `upload-${Date.now()}`, status: "draft", ...payload };
+    let mediaUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80";
+    let mediaType = "image";
+    if (file) {
+      mediaUrl = URL.createObjectURL(file);
+      mediaType = file.type.startsWith("video") ? "video" : "image";
+    }
+    const upload = { id: `upload-${Date.now()}`, status: "draft", media_url: mediaUrl, media_type: mediaType, ...payload };
     uploads = [upload, ...uploads];
     persistState();
     return upload;
@@ -283,22 +289,40 @@ export const mockApi = {
   },
   async publishUpload(uploadId) {
     await wait();
-    uploads = uploads.map((upload) =>
-      upload.id === uploadId ? { ...upload, status: "published" } : upload
+    const upload = uploads.find((u) => u.id === uploadId);
+    if (!upload) return null;
+    
+    uploads = uploads.map((u) =>
+      u.id === uploadId ? { ...u, status: "published" } : u
     );
+    
+    const newPost = {
+      id: `post-${Date.now()}`,
+      author: "You",
+      handle: "@you",
+      caption: upload.description || upload.title,
+      tags: upload.category ? [`#${upload.category}`] : [],
+      likes: 0,
+      comments: 0,
+      bookmarked: false,
+      media_url: upload.media_url,
+      media_type: upload.media_type,
+    };
+    feedPosts = [newPost, ...feedPosts];
+    
     persistState();
-    return uploads.find((upload) => upload.id === uploadId) ?? null;
+    return { ...upload, status: "published" };
   },
   async getNotifications() {
     await wait();
     return mockNotifications;
   },
-  async updateProfile(name, bio, username, avatarFile) {
+  async updateProfile(name, username, avatarFile) {
     await wait();
     let avatarUrl = undefined;
     if (avatarFile) {
        avatarUrl = URL.createObjectURL(avatarFile);
     }
-    return { name, bio, username, avatar: avatarUrl };
+    return { name, username, avatar: avatarUrl };
   },
 };

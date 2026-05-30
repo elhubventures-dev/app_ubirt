@@ -31,7 +31,6 @@ export default function Settings() {
   
   const [name, setName] = useState(user?.name || "");
   const [username, setUsername] = useState(user?.username || "");
-  const [bio, setBio] = useState(user?.bio || "");
   const [avatarFile, setAvatarFile] = useState(null);
   
   const { toast } = useToast();
@@ -54,7 +53,7 @@ export default function Settings() {
     e.preventDefault();
     setIsSaving(true);
     try {
-      const updated = await dataProvider.updateProfile(name, bio, username, avatarFile);
+      const updated = await dataProvider.updateProfile(name, username, avatarFile);
       updateUserSession(updated);
       toast({ title: "Profile updated", description: "Your changes have been saved." });
     } catch (error) {
@@ -110,15 +109,7 @@ export default function Settings() {
                   <label className="text-xs font-semibold text-slate-400 block mb-1.5 pl-1">Display Name</label>
                   <InputField value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-[#0a0f16]/50 border-white/5" placeholder="Your Name" />
                </div>
-               <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1.5 pl-1">Bio</label>
-                  <textarea 
-                     value={bio} 
-                     onChange={(e) => setBio(e.target.value)} 
-                     className="w-full bg-[#0a0f16]/50 border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#3b82f6]/50 resize-none h-24 placeholder-slate-500" 
-                     placeholder="Tell us about yourself..."
-                  />
-               </div>
+
                <div className="pt-2">
                  <PrimaryButton type="submit" className="w-full" disabled={isSaving}>
                    {isSaving ? "Saving..." : "Save Changes"}

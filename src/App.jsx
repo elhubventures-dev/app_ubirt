@@ -27,6 +27,7 @@ import Wallet from "./pages/Wallet";
 import UserProfile from "./pages/UserProfile";
 import HashtagFeed from "./pages/HashtagFeed";
 import Analytics from "./pages/Analytics";
+import CommunityChat from "./pages/CommunityChat";
 
 const LOGO_URL =
   "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=160&h=160&fit=crop";
@@ -81,6 +82,7 @@ const AuthenticatedApp = () => {
       </Route>
 
       <Route path="/chat/:id" element={<ChatDetail />} />
+      <Route path="/community/:id" element={<CommunityChat />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/upload" element={<Upload />} />
       <Route path="/create" element={<Camera />} />
