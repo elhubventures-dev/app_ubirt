@@ -1,0 +1,281 @@
+import { useState, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { useFeed, useFeedComments } from "@/hooks/useFeed";
+import { useToast } from "@/components/ui/use-toast";
+import { PrimaryButton } from "@/components/ui/PrimaryButton";
+import { InputField } from "@/components/ui/InputField";
+import { motion, AnimatePresence } from "framer-motion";
+
+function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPostId, isMutating }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    if (isVisible) {
+      videoRef.current.play().catch(() => {});
+    } else {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+  }, [isVisible]);
+
+  // Handle double tap to like
+  const [showHeart, setShowHeart] = useState(false);
+  const handleDoubleTap = (e) => {
+    e.preventDefault();
+    if (!post.liked) {
+      toggleLike(post.id);
+    }
+    setShowHeart(true);
+    setTimeout(() => setShowHeart(false), 800);
+  };
+
+  const hasMedia = !!post.media_url;
+
+  return (
+    <div className="relative w-full h-[100dvh] bg-black snap-start flex justify-center items-center overflow-hidden">
+      {/* Media Background */}
+      {hasMedia ? (
+        post.media_type === "image" ? (
+          <img src={post.media_url} alt="Post media" className="w-full h-full object-cover" onDoubleClick={handleDoubleTap} />
+        ) : (
+          <video
+            ref={videoRef}
+            src={post.media_url}
+            className="w-full h-full object-cover"
+            loop
+            muted
+            playsInline
+            onDoubleClick={handleDoubleTap}
+          />
+        )
+      ) : (
+        <div className="w-full h-full bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center" onDoubleClick={handleDoubleTap}>
+          <p className="text-slate-500 font-medium tracking-widest uppercase">No Media</p>
+        </div>
+      )}
+
+      {/* Double Tap Heart Animation */}
+      <AnimatePresence>
+        {showHeart && (
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1.5, opacity: 1 }}
+            exit={{ scale: 2, opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="absolute z-10 pointer-events-none text-red-500 flex items-center justify-center"
+          >
+            <span className="material-symbols-outlined fill-1" style={{ fontSize: "120px" }}>favorite</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Overlays */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/80 pointer-events-none" />
+
+      {/* Info Area (Bottom Left) */}
+      <div className="absolute bottom-24 left-4 right-20 pb-4 pointer-events-auto">
+        <Link to={`/user/${post.author}`} className="text-white font-bold text-lg drop-shadow-md hover:underline">@{post.author}</Link>
+        <p className="text-slate-200 text-sm mt-1 drop-shadow-md line-clamp-3">{post.caption}</p>
+        {post.tags && post.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {post.tags.map((tag, i) => (
+              <Link key={i} to={`/tag/${tag.replace('#', '')}`} onClick={(e) => e.stopPropagation()} className="text-xs font-semibold text-[#3b82f6] drop-shadow-md hover:underline">{tag}</Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Action Bar (Bottom Right) */}
+      <div className="absolute bottom-28 right-4 flex flex-col items-center gap-6 pointer-events-auto">
+        {/* Avatar */}
+        <Link to={`/user/${post.author}`} className="w-12 h-12 rounded-full border-2 border-white overflow-hidden bg-slate-800 transition-transform active:scale-90">
+          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${post.author}`} alt="Avatar" className="w-full h-full object-cover" />
+        </Link>
+
+        {/* Like */}
+        <button onClick={() => toggleLike(post.id)} disabled={isMutating} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
+          <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white/20">
+            <span className={`material-symbols-outlined ${post.liked ? 'fill-1 text-red-500' : ''}`}>favorite</span>
+          </div>
+          <span className="text-white text-xs font-semibold drop-shadow-md">{post.likes}</span>
+        </button>
+
+        {/* Comment */}
+        <button onClick={() => setExpandedPostId(post.id)} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
+          <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white/20">
+            <span className="material-symbols-outlined fill-1">chat_bubble</span>
+          </div>
+          <span className="text-white text-xs font-semibold drop-shadow-md">{post.comments}</span>
+        </button>
+
+        {/* Bookmark */}
+        <button onClick={() => toggleBookmark(post.id)} disabled={isMutating} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
+          <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white/20">
+            <span className={`material-symbols-outlined ${post.bookmarked ? 'fill-1 text-yellow-400' : ''}`}>bookmark</span>
+          </div>
+          <span className="text-white text-xs font-semibold drop-shadow-md">{post.bookmarked ? "Saved" : "Save"}</span>
+        </button>
+
+        {/* Share */}
+        <button className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
+          <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white/20">
+            <span className="material-symbols-outlined fill-1">share</span>
+          </div>
+          <span className="text-white text-xs font-semibold drop-shadow-md">Share</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function VideoFeed() {
+  const [expandedPostId, setExpandedPostId] = useState("");
+  const [commentDraft, setCommentDraft] = useState("");
+  const [activePostIndex, setActivePostIndex] = useState(0);
+  const [feedType, setFeedType] = useState("foryou"); // "foryou" | "following"
+  
+  const { data: posts = [], isLoading, toggleLike, toggleBookmark, addComment, isMutating, isCommenting } = useFeed(feedType);
+  const { data: comments = [] } = useFeedComments(expandedPostId);
+  const { toast } = useToast();
+
+  const containerRef = useRef(null);
+
+  const handleScroll = () => {
+    if (!containerRef.current) return;
+    const scrollPos = containerRef.current.scrollTop;
+    const windowHeight = window.innerHeight;
+    const index = Math.round(scrollPos / windowHeight);
+    if (index !== activePostIndex) {
+      setActivePostIndex(index);
+    }
+  };
+
+  if (isLoading) return (
+    <div className="w-full h-[100dvh] flex items-center justify-center bg-black">
+      <div className="animate-spin-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-[#0d5bba]"></div>
+    </div>
+  );
+
+  if (!posts.length) return (
+    <div className="w-full h-[100dvh] flex items-center justify-center bg-black">
+      <p className="text-slate-300">No posts yet. Create the first upload draft.</p>
+    </div>
+  );
+
+  return (
+    <div className="relative w-full h-[100dvh] bg-black">
+      {/* Top Navigation Toggle */}
+      <div className="absolute top-0 left-0 right-0 z-10 pt-12 pb-4 flex justify-center gap-6 pointer-events-auto bg-gradient-to-b from-black/60 to-transparent">
+        <button 
+          onClick={() => setFeedType("following")}
+          className={`text-lg font-bold transition-colors ${feedType === "following" ? "text-white drop-shadow-md" : "text-white/50"}`}
+        >
+          Following
+          {feedType === "following" && <motion.div layoutId="feedTab" className="h-1 w-6 bg-white mx-auto rounded-full mt-1" />}
+        </button>
+        <button 
+          onClick={() => setFeedType("foryou")}
+          className={`text-lg font-bold transition-colors ${feedType === "foryou" ? "text-white drop-shadow-md" : "text-white/50"}`}
+        >
+          For You
+          {feedType === "foryou" && <motion.div layoutId="feedTab" className="h-1 w-6 bg-white mx-auto rounded-full mt-1" />}
+        </button>
+      </div>
+
+      {/* Scrollable Feed Container */}
+      <div 
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="w-full h-full overflow-y-scroll snap-y snap-mandatory hide-scrollbar pb-20"
+      >
+        {posts.map((post, index) => (
+          <VideoPost
+            key={post.id}
+            post={post}
+            isVisible={index === activePostIndex}
+            toggleLike={toggleLike}
+            toggleBookmark={toggleBookmark}
+            setExpandedPostId={setExpandedPostId}
+            isMutating={isMutating}
+          />
+        ))}
+      </div>
+
+      {/* Comments Panel (Slide Up) */}
+      <AnimatePresence>
+        {expandedPostId && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setExpandedPostId("")}
+              className="absolute inset-0 bg-black/60 z-40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="absolute bottom-0 left-0 right-0 h-[60dvh] bg-[#101822] rounded-t-3xl z-50 flex flex-col shadow-2xl border-t border-white/10"
+            >
+              <div className="flex justify-center p-3">
+                <div className="w-12 h-1.5 bg-white/20 rounded-full" />
+              </div>
+              <div className="px-4 pb-3 flex justify-between items-center border-b border-white/5">
+                <h3 className="font-semibold text-lg">Comments</h3>
+                <button onClick={() => setExpandedPostId("")} className="text-slate-400 p-1 hover:text-white rounded-full bg-white/5">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {comments.length === 0 ? (
+                  <p className="text-center text-slate-400 mt-10">No comments yet. Be the first to comment!</p>
+                ) : (
+                  comments.map((comment) => (
+                    <div key={comment.id} className="flex gap-3">
+                       <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden shrink-0 mt-1">
+                          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${comment.author}`} alt="Avatar" className="w-full h-full object-cover" />
+                       </div>
+                       <div>
+                         <span className="font-semibold text-sm text-slate-200">{comment.author}</span>
+                         <p className="text-slate-100 text-sm mt-0.5">{comment.text}</p>
+                       </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="p-4 border-t border-white/5 bg-[#101822] pb-8">
+                <form
+                  className="flex gap-2"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const text = commentDraft.trim();
+                    if (!text) return;
+                    try {
+                      await addComment({ postId: expandedPostId, text });
+                      setCommentDraft("");
+                    } catch (error) {
+                      toast({ title: "Comment failed", description: error.message, variant: "destructive" });
+                    }
+                  }}
+                >
+                  <InputField
+                    value={commentDraft}
+                    onChange={(e) => setCommentDraft(e.target.value)}
+                    className="flex-1 rounded-full bg-white/5 border-transparent focus:bg-white/10"
+                    placeholder="Add a comment..."
+                  />
+                  <PrimaryButton type="submit" className="rounded-full px-6" disabled={isCommenting}>
+                    Post
+                  </PrimaryButton>
+                </form>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

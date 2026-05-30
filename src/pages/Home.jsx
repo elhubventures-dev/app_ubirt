@@ -1,0 +1,139 @@
+import { Link } from "react-router-dom";
+import { useAuth } from "@/lib/AuthContext";
+import { useFeed } from "@/hooks/useFeed";
+import { useCreatorStudio } from "@/hooks/useCreatorStudio";
+import { motion } from "framer-motion";
+
+export default function Home() {
+  const { user } = useAuth();
+  const { data: posts = [], isLoading: isLoadingFeed } = useFeed();
+  const { data: stats } = useCreatorStudio();
+
+  const greeting = new Date().getHours() < 12 ? "Good Morning" : new Date().getHours() < 18 ? "Good Afternoon" : "Good Evening";
+
+  return (
+    <div className="flex flex-col min-h-full pb-20 pt-4 px-4 overflow-hidden relative">
+      {/* Premium Background */}
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#0a111a] via-[#101822] to-[#152336] z-0" />
+      <div className="absolute top-0 right-0 w-[60%] h-[40%] bg-[#3b82f6]/10 blur-[100px] rounded-full z-0 pointer-events-none" />
+
+      <div className="relative z-10 space-y-6">
+        {/* Header Greeting */}
+        <header className="flex justify-between items-center">
+          <div>
+            <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-[#3b82f6] text-xs font-bold uppercase tracking-wider">
+              {greeting}
+            </motion.p>
+            <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="text-2xl font-bold text-white mt-1 tracking-tight">
+              {user?.name || "Creator"}
+            </motion.h1>
+          </div>
+          <Link to="/profile" className="w-12 h-12 rounded-full bg-slate-800 border-2 border-white/10 overflow-hidden hover:border-[#3b82f6]/50 transition-colors shadow-lg">
+             <img src={user?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${user?.username || "default"}`} alt="Profile" className="w-full h-full object-cover" />
+          </Link>
+        </header>
+
+        {/* Mini Analytics Overview */}
+        <motion.section 
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+          className="bg-gradient-to-r from-white/10 to-white/5 border border-white/10 p-5 rounded-3xl shadow-xl backdrop-blur-md relative overflow-hidden"
+        >
+          <div className="absolute -right-10 -top-10 w-32 h-32 bg-[#3b82f6]/20 blur-3xl rounded-full pointer-events-none" />
+          <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-[#3b82f6]">analytics</span>
+            Quick Insights
+          </h2>
+          <div className="grid grid-cols-2 gap-4">
+             <div>
+               <p className="text-xs text-slate-400 uppercase font-medium">Followers</p>
+               <div className="flex items-end gap-2 mt-1">
+                 <p className="text-3xl font-bold text-white">{stats?.followers || "12.4k"}</p>
+                 <span className="text-xs text-emerald-400 font-bold mb-1 flex items-center"><span className="material-symbols-outlined text-[14px]">arrow_upward</span> 12%</span>
+               </div>
+             </div>
+             <div>
+               <p className="text-xs text-slate-400 uppercase font-medium">Views (7d)</p>
+               <div className="flex items-end gap-2 mt-1">
+                 <p className="text-3xl font-bold text-white">{(stats?.views || "842k").replace('k', 'K')}</p>
+                 <span className="text-xs text-emerald-400 font-bold mb-1 flex items-center"><span className="material-symbols-outlined text-[14px]">arrow_upward</span> 5%</span>
+               </div>
+             </div>
+          </div>
+        </motion.section>
+
+        {/* Quick Actions */}
+        <section>
+          <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Studio Tools</h2>
+          <div className="grid grid-cols-2 gap-3">
+             <Link to="/upload" className="bg-gradient-to-br from-[#3b82f6] to-[#1e40af] p-4 rounded-3xl text-white hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-[0_4px_14px_rgba(59,130,246,0.4)] flex flex-col items-start gap-3">
+               <div className="p-2 bg-white/20 rounded-full">
+                  <span className="material-symbols-outlined text-[24px]">add_circle</span>
+               </div>
+               <div>
+                 <h3 className="font-bold text-base">New Draft</h3>
+                 <p className="text-xs text-blue-200 mt-0.5">Upload media</p>
+               </div>
+             </Link>
+             <Link to="/ai-chat" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
+               <div className="p-2 bg-[#8b5cf6]/20 text-[#a78bfa] rounded-full">
+                  <span className="material-symbols-outlined text-[24px]">smart_toy</span>
+               </div>
+               <div>
+                 <h3 className="font-bold text-white text-base">UBIRT AI</h3>
+                 <p className="text-xs text-slate-400 mt-0.5">Content ideas</p>
+               </div>
+             </Link>
+             <Link to="/creator-studio" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
+               <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-full">
+                  <span className="material-symbols-outlined text-[24px]">dashboard</span>
+               </div>
+               <div>
+                 <h3 className="font-bold text-white text-base">Manage</h3>
+                 <p className="text-xs text-slate-400 mt-0.5">Your uploads</p>
+               </div>
+             </Link>
+             <Link to="/search" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
+               <div className="p-2 bg-orange-500/20 text-orange-400 rounded-full">
+                  <span className="material-symbols-outlined text-[24px]">explore</span>
+               </div>
+               <div>
+                 <h3 className="font-bold text-white text-base">Discover</h3>
+                 <p className="text-xs text-slate-400 mt-0.5">Find creators</p>
+               </div>
+             </Link>
+          </div>
+        </section>
+
+        {/* Trending Snippet */}
+        <section>
+          <div className="flex justify-between items-end mb-3 px-1">
+             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Trending on UBIRT</h2>
+             <Link to="/feed" className="text-xs font-bold text-[#3b82f6] flex items-center hover:text-white transition-colors">See all <span className="material-symbols-outlined text-[14px]">chevron_right</span></Link>
+          </div>
+          <div className="flex gap-3 overflow-x-auto snap-x hide-scrollbar pb-4 -mx-4 px-4">
+             {isLoadingFeed ? (
+                [1,2,3].map(i => <div key={i} className="w-32 h-48 shrink-0 bg-white/5 rounded-2xl animate-pulse" />)
+             ) : (
+                posts.slice(0, 5).map(post => (
+                  <Link key={post.id} to="/feed" className="w-32 h-48 shrink-0 snap-start bg-slate-800 rounded-2xl overflow-hidden relative group shadow-lg ring-1 ring-white/5">
+                     <img 
+                        src={`https://images.unsplash.com/photo-1616469829581-73993eb86b02?w=300&h=400&fit=crop&q=80&seed=${post.id}`} 
+                        alt="Thumbnail" 
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-80" 
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent flex flex-col justify-end p-3">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${post.author}`} alt={post.author} className="w-4 h-4 rounded-full bg-slate-700" />
+                          <span className="text-[10px] text-white font-medium truncate">{post.author}</span>
+                        </div>
+                        <p className="text-xs text-slate-300 font-medium truncate">{post.caption}</p>
+                      </div>
+                  </Link>
+                ))
+             )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

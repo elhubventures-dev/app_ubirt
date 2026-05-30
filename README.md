@@ -1,0 +1,125 @@
+# UBIRT
+
+React + Vite social/creator web app with optional **Supabase** backend and **Vercel** deployment.
+
+## Quick start (mock mode — no accounts)
+
+```bash
+npm install
+npm run dev
+```
+
+Uses in-browser mock data. No login required.
+
+## Accounts & env vars
+
+**Full checklist:** [docs/ACCOUNTS.md](docs/ACCOUNTS.md)  
+**Template to fill in:** [`.env.local`](.env.local) (copy from [`.env.example`](.env.example))
+
+| Service | Required? | Env variables |
+|---------|-----------|---------------|
+| [Supabase](https://supabase.com) | Yes (live mode) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
+| [GitHub](https://github.com) | Yes (deploy) | — |
+| [Vercel](https://vercel.com) | Yes (deploy) | all vars from `.env.local` |
+| [OpenAI](https://platform.openai.com) | Recommended | `OPENAI_API_KEY`, `OPENAI_MODEL` |
+| [Resend](https://resend.com) | Recommended | `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME` |
+| [Mux](https://mux.com) | Optional | `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET` |
+| [Stripe](https://stripe.com) | Optional | `VITE_STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
+| [Sentry](https://sentry.io) | Optional | `VITE_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` |
+| [PostHog](https://posthog.com) | Optional | `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` |
+
+Also set `VITE_APP_URL` (local or production URL) and optionally `SUPABASE_SERVICE_ROLE_KEY` for admin server routes.
+
+## Production stack (steps 1–7)
+
+| Step | What | Accounts |
+|------|------|----------|
+| 1 | Auth + database | Supabase |
+| 2 | Live API | Supabase |
+| 3 | Deploy | Vercel + GitHub |
+| 4 | File storage | Supabase Storage |
+| 5 | AI chat | OpenAI |
+| 6 | Realtime chat | Supabase Realtime |
+| 7 | Video streaming | Mux (optional) |
+| — | Email | Resend (+ Supabase SMTP for auth emails) |
+
+---
+
+## 1. Supabase setup
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor** and run the full script:
+   `supabase/migrations/001_initial_schema.sql`
+3. Under **Authentication → Providers**, enable Email.
+4. Copy **Project URL** and **anon public key** from **Settings → API**.
+
+## 2. Local live mode
+
+Copy and fill in `.env.local` (see `.env.example` for every variable):
+
+```bash
+cp .env.example .env.local
+# Edit .env.local — at minimum Supabase URL + anon key
+```
+
+```bash
+npm run dev
+```
+
+Sign up at `/login`, then use the app with real data.
+
+## 3. Deploy on Vercel
+
+1. Push the repo to GitHub.
+2. Import the project in [Vercel](https://vercel.com).
+3. Set environment variables:
+
+Copy **all** keys from `.env.example` into Vercel → Project → Settings → Environment Variables. See [docs/ACCOUNTS.md](docs/ACCOUNTS.md).
+
+4. Deploy. SPA routing is configured in `vercel.json`.
+
+**Local API routes (AI + Mux):** run `npx vercel dev` instead of `npm run dev` to test `/api/*` locally.
+
+## 4. Storage
+
+- Buckets `uploads` and `avatars` are created by the migration.
+- Upload page accepts image/video files in live mode → Supabase Storage.
+
+## 5. AI proxy
+
+- Browser calls `POST /api/ai/chat` (Vercel function in `api/ai/chat.js`).
+- `OPENAI_API_KEY` never goes to the client.
+
+## 6. Realtime chat
+
+- Enabled on `messages` table (see migration).
+- New messages appear without refresh when using live mode.
+
+## 7. Video pipeline (Mux)
+
+- After upload, the app calls `POST /api/video/ingest` with the public file URL.
+- If Mux credentials are set on Vercel, playback uses Mux HLS URLs.
+- Without Mux, videos play from Supabase Storage URLs.
+
+---
+
+## Scripts
+
+```bash
+npm run dev      # Vite dev server
+npm run build    # Production build
+npm run preview  # Preview build
+npm run test     # Vitest
+```
+
+## UI components
+
+Shared primitives in `src/components/ui/` — `Card`, `PrimaryButton`, `SkeletonRow`, `InputField`.
+
+## Architecture
+
+```
+Pages → hooks → dataProvider → mockApi | supabaseApi
+                              ↘ Supabase (auth, DB, storage, realtime)
+API routes (Vercel) → OpenAI, Resend, Mux
+```

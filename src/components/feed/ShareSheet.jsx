@@ -1,0 +1,2 @@
+// ShareSheet.jsx
+// Placeholder component
