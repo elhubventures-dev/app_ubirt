@@ -10,6 +10,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import MainLayout from "@/components/layout/MainLayout";
 import { motion } from "framer-motion";
 import Login from "./pages/Login";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 import Home from "./pages/Home";
 import VideoFeed from "./pages/VideoFeed";
@@ -35,6 +36,9 @@ const LOGO_URL =
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth } = useAuth();
+  
+  // Initialize push notifications when user is authenticated
+  usePushNotifications();
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (

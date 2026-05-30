@@ -267,6 +267,11 @@ export const mockApi = {
     persistState();
     return true;
   },
+  async updateDeviceToken(token) {
+    await wait(200);
+    console.log("Mock: Device token updated:", token);
+    return true;
+  },
   async clearAiConversation() {
     await wait(100);
     aiMessages = mockAiMessages;

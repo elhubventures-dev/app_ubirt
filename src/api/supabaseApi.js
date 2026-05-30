@@ -428,6 +428,20 @@ export const supabaseApi = {
     return true;
   },
 
+  async updateDeviceToken(token) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    // In a real app, you might have a push_tokens table or an array on the profile.
+    // Assuming there's a device_token string or string array on profiles.
+    const { error } = await supabase
+      .from("profiles")
+      .update({ device_token: token })
+      .eq("id", userId);
+    if (error) throw error;
+    console.log("Device token updated in Supabase:", token);
+    return true;
+  },
+
   async clearAiConversation() {
     const userId = await getUserId();
     const conv = await getOrCreateAiConversation(userId);
