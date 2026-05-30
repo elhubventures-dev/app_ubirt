@@ -416,10 +416,21 @@ export const supabaseApi = {
   },
 
   async analyzeCommentToxicity(text) {
-    // Mocked AI analysis until API key is provided
-    const toxicWords = ["hate", "stupid", "idiot", "ugly"];
-    const isToxic = toxicWords.some(word => text.toLowerCase().includes(word));
-    return isToxic;
+    try {
+      const res = await fetch("/api/ai/moderate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: text }),
+      });
+      if (!res.ok) throw new Error("Moderation API failed");
+      const json = await res.json();
+      return json.flagged ?? false;
+    } catch (e) {
+      console.warn("Toxicity check failed, falling back to basic check:", e);
+      // Fallback if API fails or key is missing
+      const toxicWords = ["hate", "stupid", "idiot", "ugly"];
+      return toxicWords.some(word => text.toLowerCase().includes(word));
+    }
   },
 
   async deleteAiMessage(messageId) {

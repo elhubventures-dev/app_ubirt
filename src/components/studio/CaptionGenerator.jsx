@@ -10,9 +10,30 @@ export default function CaptionGenerator({ videoFile, onCaptionsGenerated }) {
 
   const handleGenerate = async () => {
     setIsGenerating(true);
-    // Simulate AI API call
-    setTimeout(() => {
-      setIsGenerating(false);
+    try {
+      const topic = videoFile?.name || "a random interesting topic";
+      const res = await fetch("/api/ai/captions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic })
+      });
+      
+      let captions;
+      if (res.ok) {
+        const json = await res.json();
+        captions = json.captions;
+      } else {
+        throw new Error("API failed");
+      }
+      
+      setIsOpen(false);
+      onCaptionsGenerated(captions);
+      toast({
+        title: "Captions generated!",
+        description: "AI successfully generated captions for your video."
+      });
+    } catch (e) {
+      // Fallback if API fails or key is missing
       setIsOpen(false);
       onCaptionsGenerated([
         { time: "0:00", text: "Welcome to this new video!" },
@@ -20,10 +41,12 @@ export default function CaptionGenerator({ videoFile, onCaptionsGenerated }) {
         { time: "0:06", text: "Stay tuned for more." }
       ]);
       toast({
-        title: "Captions generated!",
-        description: "AI successfully generated captions for your video."
+        title: "Mock Captions Generated",
+        description: "Add OPENAI_API_KEY in Vercel for real AI captions.",
       });
-    }, 2500);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
