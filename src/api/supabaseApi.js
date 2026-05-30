@@ -23,6 +23,7 @@ function mapPost(row, profile, liked, bookmarked) {
     comments: row.comments_count ?? 0,
     bookmarked: Boolean(bookmarked),
     media_url: row.media_url,
+    mux_playback_id: row.mux_playback_id,
   };
 }
 

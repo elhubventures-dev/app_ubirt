@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useFeed, useFeedComments } from "@/hooks/useFeed";
 import { useAuth } from "@/lib/AuthContext";
+import MuxPlayer from "@mux/mux-player-react";
 import { useToast } from "@/components/ui/use-toast";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
@@ -65,6 +66,20 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
       {hasMedia ? (
         post.media_type === "image" ? (
           <img src={post.media_url} alt="Post media" className="w-full h-full object-cover" onClick={handleTap} />
+        ) : post.mux_playback_id ? (
+          <div onClick={handleTap} className="w-full h-full overflow-hidden relative">
+            <MuxPlayer
+              ref={videoRef}
+              playbackId={post.mux_playback_id}
+              className="w-full h-full object-cover absolute inset-0 scale-[1.01]"
+              loop={false}
+              muted
+              autoPlay="muted"
+              onEnded={() => onAutoScroll && onAutoScroll()}
+              streamType="on-demand"
+              style={{ "--controls": "none", "--media-object-fit": "cover" }}
+            />
+          </div>
         ) : (
           <video
             ref={videoRef}
