@@ -51,7 +51,11 @@ Also set `VITE_APP_URL` (local or production URL) and optionally `SUPABASE_SERVI
 2. Open **SQL Editor** and run the full script:
    `supabase/migrations/001_initial_schema.sql`
 3. Under **Authentication → Providers**, enable Email.
-4. Copy **Project URL** and **anon public key** from **Settings → API**.
+4. Under **Authentication → URL Configuration**, set:
+   - **Site URL:** `http://localhost:5173` (or your production URL)
+   - **Redirect URLs:** `http://localhost:5173/login`, `http://localhost:5173/**`
+5. Run `supabase/migrations/002_profiles_auth_fix.sql` in the SQL Editor (profile insert policy + signup fix).
+6. Copy **Project URL** and **anon public key** from **Settings → API**.
 
 ## 2. Local live mode
 

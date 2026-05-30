@@ -13,10 +13,10 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
-  const { user, signIn, signUp, isLiveAuth } = useAuth();
+  const { user, signIn, signUp, isLiveAuth, isLoadingAuth } = useAuth();
   const { toast } = useToast();
 
-  if (user && isLiveAuth) {
+  if (user && isLiveAuth && !isLoadingAuth) {
     return <Navigate to="/" replace />;
   }
 
@@ -25,14 +25,20 @@ export default function Login() {
     setLoading(true);
     try {
       if (mode === "signin") {
-        await signIn(email, password);
+        await signIn(email.trim(), password);
         toast({ title: "Welcome back" });
       } else {
-        await signUp(email, password, username);
-        toast({ title: "Account created", description: "Check email if confirmation is enabled." });
+        await signUp(email.trim(), password, username.trim());
+        toast({ title: "Account created", description: "You're signed in." });
       }
     } catch (error) {
-      toast({ title: "Auth failed", description: error.message, variant: "destructive" });
+      const needsConfirm = error.message?.includes("Check your email");
+      toast({
+        title: needsConfirm ? "Confirm your email" : "Auth failed",
+        description: error.message,
+        variant: needsConfirm ? "default" : "destructive",
+      });
+      if (needsConfirm) setMode("signin");
     } finally {
       setLoading(false);
     }

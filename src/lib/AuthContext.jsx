@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ensureUserProfile } from "@/lib/authHelpers";
 import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 const AuthContext = createContext(null);
@@ -35,98 +36,139 @@ export function AuthProvider({ children }) {
   const [isLoadingPublicSettings] = useState(false);
   const [authError, setAuthError] = useState(null);
 
-  const loadProfile = useCallback(async (authUser) => {
-    try {
+  const applySession = useCallback(async (session) => {
+    if (session?.user) {
+      await ensureUserProfile(session.user);
       const supabase = getSupabase();
       const { data: profile, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq("id", authUser.id)
+        .eq("id", session.user.id)
         .single();
+
       if (error) {
-        console.warn("Profile load error (non-fatal):", error.message);
+        console.warn("Profile load error (using fallback):", error.message);
       }
-      setUser(mapProfile(authUser, profile));
-    } catch (e) {
-      console.warn("loadProfile failed (non-fatal):", e);
-      setUser(mapProfile(authUser, null));
+      setUser(mapProfile(session.user, profile));
+      setAuthError(null);
+      return true;
     }
-    setAuthError(null);
+
+    setUser(null);
+    setAuthError({ type: "auth_required" });
+    return false;
   }, []);
 
   useEffect(() => {
     if (!useLiveAuth) return undefined;
 
     const supabase = getSupabase();
+    let active = true;
 
-    const sessionTimeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Session check timed out")), 8000)
-    );
-
-    Promise.race([supabase.auth.getSession(), sessionTimeout])
-      .then(({ data: { session } }) => {
-        if (session?.user) {
-          loadProfile(session.user).finally(() => setIsLoadingAuth(false));
-        } else {
+    const boot = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (active) await applySession(session);
+      } catch (error) {
+        console.error("Auth bootstrap error:", error);
+        if (active) {
           setUser(null);
           setAuthError({ type: "auth_required" });
-          setIsLoadingAuth(false);
         }
-      })
-      .catch((error) => {
-        console.error("Auth session error:", error);
-        setUser(null);
-        setAuthError({ type: "auth_required" });
-        setIsLoadingAuth(false);
-      });
+      } finally {
+        if (active) setIsLoadingAuth(false);
+      }
+    };
+
+    boot();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!active) return;
+      // getSession() handles the first load; avoid clearing session twice
+      if (event === "INITIAL_SESSION") return;
+
+      setIsLoadingAuth(true);
       try {
-        if (session?.user) {
-          await loadProfile(session.user);
-          setAuthError(null);
-        } else {
-          setUser(null);
-          setAuthError({ type: "auth_required" });
-        }
+        await applySession(session);
       } catch (error) {
         console.error("Auth state change error:", error);
         setUser(null);
         setAuthError({ type: "auth_error", message: error.message });
       } finally {
-        setIsLoadingAuth(false);
+        if (active) setIsLoadingAuth(false);
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, [useLiveAuth, loadProfile]);
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [useLiveAuth, applySession]);
 
-  const signIn = useCallback(async (email, password) => {
-    const supabase = getSupabase();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    navigate("/");
-  }, [navigate]);
+  const signIn = useCallback(
+    async (email, password) => {
+      const supabase = getSupabase();
+      setIsLoadingAuth(true);
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        if (!data.session?.user) {
+          throw new Error("Sign in failed. Please try again.");
+        }
+        await applySession(data.session);
+        navigate("/", { replace: true });
+      } finally {
+        setIsLoadingAuth(false);
+      }
+    },
+    [applySession, navigate]
+  );
 
-  const signUp = useCallback(async (email, password, username) => {
-    const supabase = getSupabase();
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { username, display_name: username } },
-    });
-    if (error) throw error;
-    navigate("/");
-  }, [navigate]);
+  const signUp = useCallback(
+    async (email, password, username) => {
+      const supabase = getSupabase();
+      setIsLoadingAuth(true);
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { username, display_name: username },
+            emailRedirectTo: `${import.meta.env.VITE_APP_URL || window.location.origin}/login`,
+          },
+        });
+        if (error) throw error;
+
+        if (data.session?.user) {
+          await applySession(data.session);
+          navigate("/", { replace: true });
+          return;
+        }
+
+        if (data.user && !data.session) {
+          throw new Error(
+            "Account created. Check your email to confirm your address, then sign in."
+          );
+        }
+
+        throw new Error("Sign up could not be completed. Please try again.");
+      } finally {
+        setIsLoadingAuth(false);
+      }
+    },
+    [applySession, navigate]
+  );
 
   const signOut = useCallback(async () => {
     if (useLiveAuth) {
       await getSupabase().auth.signOut();
     }
     setUser(null);
-    navigate("/login");
+    setAuthError({ type: "auth_required" });
+    navigate("/login", { replace: true });
   }, [useLiveAuth, navigate]);
 
   const updateUserSession = useCallback((updates) => {
@@ -134,7 +176,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const navigateToLogin = useCallback(() => {
-    navigate("/login");
+    navigate("/login", { replace: true });
   }, [navigate]);
 
   const value = useMemo(
@@ -150,7 +192,18 @@ export function AuthProvider({ children }) {
       updateUserSession,
       isLiveAuth: useLiveAuth,
     }),
-    [user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, signIn, signUp, signOut, updateUserSession, useLiveAuth]
+    [
+      user,
+      isLoadingAuth,
+      isLoadingPublicSettings,
+      authError,
+      navigateToLogin,
+      signIn,
+      signUp,
+      signOut,
+      updateUserSession,
+      useLiveAuth,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
