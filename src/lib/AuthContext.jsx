@@ -36,13 +36,21 @@ export function AuthProvider({ children }) {
   const [authError, setAuthError] = useState(null);
 
   const loadProfile = useCallback(async (authUser) => {
-    const supabase = getSupabase();
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", authUser.id)
-      .single();
-    setUser(mapProfile(authUser, profile));
+    try {
+      const supabase = getSupabase();
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
+      if (error) {
+        console.warn("Profile load error (non-fatal):", error.message);
+      }
+      setUser(mapProfile(authUser, profile));
+    } catch (e) {
+      console.warn("loadProfile failed (non-fatal):", e);
+      setUser(mapProfile(authUser, null));
+    }
     setAuthError(null);
   }, []);
 
