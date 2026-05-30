@@ -190,7 +190,6 @@ export default function VideoFeed() {
     containerRef.current.scrollBy({ top: height, behavior: 'smooth' });
   };
 
-  const containerRef = useRef(null);
 
   const handleScroll = () => {
     if (!containerRef.current) return;
