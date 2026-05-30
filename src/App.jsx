@@ -31,8 +31,7 @@ import HashtagFeed from "./pages/HashtagFeed";
 import Analytics from "./pages/Analytics";
 import CommunityChat from "./pages/CommunityChat";
 
-const LOGO_URL =
-  "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=160&h=160&fit=crop";
+const LOGO_URL = "/pwa-192x192.png";
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth } = useAuth();

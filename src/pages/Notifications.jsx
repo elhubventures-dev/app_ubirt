@@ -59,7 +59,7 @@ export default function Notifications() {
                     <div className="relative shrink-0 ml-2">
                        {item.type === "system" ? (
                           <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center">
-                             <img src="https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=48&h=48&fit=crop" className="w-full h-full object-cover rounded-full opacity-80" alt="UBIRT" />
+                             <img src="/pwa-192x192.png" className="w-full h-full object-contain rounded-full" alt="UBIRT" />
                           </div>
                        ) : (
                           <div className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden">

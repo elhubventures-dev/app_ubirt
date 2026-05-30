@@ -66,7 +66,7 @@ export default function Login() {
       >
         <div className="text-center mb-8">
            <div className="w-16 h-16 bg-[#3b82f6]/10 rounded-2xl mx-auto mb-4 flex items-center justify-center border border-[#3b82f6]/20 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-             <img src="https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=64&h=64&fit=crop" className="w-full h-full object-cover rounded-2xl opacity-80" alt="UBIRT" />
+             <img src="/pwa-192x192.png" className="w-full h-full object-contain rounded-2xl" alt="UBIRT" />
            </div>
            <h1 className="text-3xl font-bold tracking-tight text-white mb-1">
              UBIRT<span className="text-[#3b82f6]">.AI</span>
