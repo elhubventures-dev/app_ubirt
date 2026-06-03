@@ -74,14 +74,22 @@ export function AuthProvider({ children }) {
         console.error("Auth bootstrap error:", error);
         if (active) {
           setUser(null);
-          setAuthError({ type: "auth_required" });
+          setAuthError({ type: "auth_error", message: error.message });
         }
       } finally {
         if (active) setIsLoadingAuth(false);
       }
     };
 
-    boot();
+    const fallbackTimeout = setTimeout(() => {
+      if (active) {
+        console.error("Auth boot timed out after 10 seconds.");
+        setAuthError({ type: "auth_error", message: "Connection timed out. Please check your Supabase configuration." });
+        setIsLoadingAuth(false);
+      }
+    }, 10000);
+
+    boot().finally(() => clearTimeout(fallbackTimeout));
 
     const {
       data: { subscription },

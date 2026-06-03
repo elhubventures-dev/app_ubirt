@@ -72,6 +72,16 @@ const AuthenticatedApp = () => {
   if (authError?.type === "auth_required" && isLiveAuth) {
     return <Navigate to="/login" replace />;
   }
+  if (authError?.type === "auth_error") {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#101822] gap-4 px-6 text-center">
+        <span className="material-symbols-outlined text-[48px] text-red-500">error</span>
+        <h2 className="text-white text-xl font-bold">Authentication Error</h2>
+        <p className="text-slate-400 text-sm">{authError.message}</p>
+        <button onClick={() => window.location.reload()} className="mt-4 px-6 py-2 bg-[#3b82f6] text-white rounded-full font-bold">Retry</button>
+      </div>
+    );
+  }
 
   return (
     <Routes>
