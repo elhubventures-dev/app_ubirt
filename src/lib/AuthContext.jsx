@@ -83,8 +83,14 @@ export function AuthProvider({ children }) {
 
     const fallbackTimeout = setTimeout(() => {
       if (active) {
-        console.error("Auth boot timed out after 10 seconds.");
-        setAuthError({ type: "auth_error", message: "Connection timed out. Please check your Supabase configuration." });
+        console.error("Auth boot timed out after 10 seconds. Clearing potentially corrupted local storage.");
+        try {
+          localStorage.removeItem("ubirt-auth");
+          sessionStorage.removeItem("ubirt-auth");
+        } catch (e) {
+          // ignore
+        }
+        setAuthError({ type: "auth_error", message: "Connection timed out. If this persists, disable your ad-blocker or VPN." });
         setIsLoadingAuth(false);
       }
     }, 10000);
