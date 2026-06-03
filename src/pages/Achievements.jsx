@@ -17,12 +17,27 @@ const QUESTS = [
   { id: 3, title: "Upload a Video", progress: 0, total: 1, reward: 100, completed: false },
 ];
 
+import { useQuery } from "@tanstack/react-query";
+import { dataProvider } from "@/api/dataProvider";
+
 export default function Achievements() {
   const [activeTab, setActiveTab] = useState("badges");
-  const level = 12;
-  const xp = 2450;
-  const xpNeeded = 3000;
+  
+  const { data, isLoading } = useQuery({
+    queryKey: ["achievements"],
+    queryFn: () => dataProvider.getAchievements(),
+  });
+
+  const level = data?.level || 1;
+  const xp = data?.xp || 0;
+  const xpNeeded = level * level * 100;
   const progress = (xp / xpNeeded) * 100;
+  
+  const unlockedBadges = new Set(data?.badges || []);
+  const displayBadges = BADGES.map(b => ({
+    ...b,
+    unlocked: unlockedBadges.has(b.id.toString()) || b.id === 1 // Badge 1 is free
+  }));
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
@@ -87,7 +102,7 @@ export default function Achievements() {
           {/* Badges Gallery */}
           {activeTab === "badges" && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-2 gap-4">
-              {BADGES.map((badge, i) => (
+              {isLoading ? <p className="text-center text-slate-400 mt-10 col-span-2">Loading...</p> : displayBadges.map((badge, i) => (
                 <motion.div 
                   key={badge.id} 
                   initial={{ opacity: 0, scale: 0.9 }}

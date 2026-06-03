@@ -11,11 +11,8 @@ export default function HashtagFeed() {
 
   useEffect(() => {
     setIsLoading(true);
-    dataProvider.getFeed("foryou").then((allFeedPosts) => {
-      // Filter posts by checking if the post tags include `#tag`
-      const hashtagPosts = allFeedPosts.filter(p => p.tags && p.tags.includes(`#${tag.toLowerCase()}`));
-      // If we don't have enough posts with this tag, just show random ones for mockup
-      setUploads(hashtagPosts.length > 0 ? hashtagPosts : allFeedPosts.slice(0, 6));
+    dataProvider.getFeed("hashtag", tag).then((hashtagPosts) => {
+      setUploads(hashtagPosts);
       setIsLoading(false);
     }).catch(() => {
       setUploads([]);
@@ -68,11 +65,13 @@ export default function HashtagFeed() {
            <div className="grid grid-cols-3 gap-0.5">
               {uploads.map((upload) => (
                  <div key={upload.id} className="aspect-[3/4] bg-slate-800 relative group cursor-pointer overflow-hidden">
-                    <img 
-                      src={`https://images.unsplash.com/photo-1616469829581-73993eb86b02?w=300&h=400&fit=crop&q=80&seed=${upload.id}`} 
-                      alt="Thumbnail" 
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80" 
-                    />
+                    {upload.mux_playback_id ? (
+                      <img src={`https://image.mux.com/${upload.mux_playback_id}/thumbnail.jpg?width=300&height=400&fit_mode=crop`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80" />
+                    ) : upload.media_type === "image" ? (
+                      <img src={upload.media_url} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80" />
+                    ) : (
+                      <video src={upload.media_url} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80" />
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
                        <p className="text-white text-[10px] font-semibold truncate">@{upload.author}</p>
                        <div className="flex items-center gap-1 mt-0.5 text-slate-300">

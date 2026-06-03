@@ -279,8 +279,15 @@ export const mockApi = {
     return aiMessages;
   },
   async getCreatorStats() {
-    await wait();
-    return creatorStats;
+    return { views: 45000, followers: 1200, completionRate: 78 };
+  },
+
+  async getAchievements() {
+    return {
+      xp: 2450,
+      level: 12,
+      badges: ["1", "2", "3"]
+    };
   },
   async saveUpload(payload, file = null) {
     await wait();

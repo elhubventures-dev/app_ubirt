@@ -13,14 +13,19 @@ async function getUserId() {
 }
 
 function mapPost(row, profile, liked, bookmarked) {
+  const hashtags = row.caption?.match(/#[\w]+/g) || [];
+  const tags = new Set(hashtags);
+  if (row.category) tags.add(`#${row.category.toLowerCase()}`);
+
   return {
     id: row.id,
     author: profile?.display_name ?? "Creator",
     handle: `@${profile?.username ?? "user"}`,
     caption: row.caption,
-    tags: row.category ? [`#${row.category}`] : [],
+    tags: Array.from(tags),
     likes: row.likes_count ?? 0,
     comments: row.comments_count ?? 0,
+    views: row.views_count ?? 0,
     bookmarked: Boolean(bookmarked),
     media_url: row.media_url,
     mux_playback_id: row.mux_playback_id,
@@ -49,24 +54,27 @@ async function getOrCreateAiConversation(userId) {
 }
 
 export const supabaseApi = {
-  async getFeed(feedType = "foryou") {
+  async getFeed(feedType = "foryou", hashtag = null) {
     const userId = await getUserId();
     const supabase = getSupabase();
     
-    // For "following", we would normally join with a follows table.
-    // For now, if feedType === "following", we can just return a subset or empty if no table exists.
     let query = supabase
       .from("posts")
-      .select("*, profiles:user_id (username, display_name, avatar_url)")
+      .select("*, profiles:user_id (id, username, display_name, avatar_url)")
       .order("created_at", { ascending: false });
       
+    if (hashtag) {
+      query = query.ilike("caption", `%#${hashtag}%`);
+    }
+
     const { data: posts, error } = await query;
     if (error) throw error;
     
     let filteredPosts = posts;
     if (feedType === "following") {
-      // Stub: return only half the posts to mock "following" feed until table exists
-      filteredPosts = posts.slice(0, Math.ceil(posts.length / 2));
+      const { data: follows } = await supabase.from("follows").select("following_id").eq("follower_id", userId);
+      const followingIds = new Set((follows || []).map(f => f.following_id));
+      filteredPosts = posts.filter(p => p.profiles && followingIds.has(p.profiles.id));
     }
 
     const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", userId);
@@ -78,13 +86,20 @@ export const supabaseApi = {
   },
 
   async toggleFollow(username) {
-    // Stub for now. Would write to 'follows' table.
-    console.log("Toggle follow in Supabase:", username);
-    return true;
+    const supabase = getSupabase();
+    const { data: targetProfile } = await supabase.from("profiles").select("id").eq("username", username).single();
+    if (!targetProfile) return false;
+    const { data, error } = await supabase.rpc("toggle_follow", { p_following_id: targetProfile.id });
+    if (error) throw error;
+    return data;
   },
   async isFollowing(username) {
-    // Stub for now.
-    return false;
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data: targetProfile } = await supabase.from("profiles").select("id").eq("username", username).single();
+    if (!targetProfile) return false;
+    const { data } = await supabase.from("follows").select("*").eq("follower_id", userId).eq("following_id", targetProfile.id).maybeSingle();
+    return !!data;
   },
 
   async toggleLike(postId) {
@@ -104,6 +119,7 @@ export const supabaseApi = {
       await supabase.from("post_likes").insert({ post_id: postId, user_id: userId });
       const { data: post } = await supabase.from("posts").select("likes_count").eq("id", postId).single();
       await supabase.from("posts").update({ likes_count: (post?.likes_count ?? 0) + 1 }).eq("id", postId);
+      await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 5 });
     }
     const feed = await this.getFeed();
     return feed.find((p) => p.id === postId);
@@ -152,12 +168,19 @@ export const supabaseApi = {
   },
 
   async getCreatorAnalytics() {
-    // In a real app, this would aggregate views/likes from posts tables
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    
+    const { count: followers } = await supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", userId);
+    const { data: posts } = await supabase.from("posts").select("views_count, likes_count").eq("user_id", userId);
+    const views = (posts ?? []).reduce((sum, p) => sum + (p.views_count ?? 0), 0);
+    const { data: profile } = await supabase.from("profiles").select("coins").eq("id", userId).single();
+    
     return {
-      followers: Math.floor(Math.random() * 20000),
-      views: Math.floor(Math.random() * 1000000),
-      completionRate: 78,
-      earnings: Math.floor(Math.random() * 10000),
+      followers: followers ?? 0,
+      views,
+      completionRate: Math.min(100, 40 + (posts?.length ?? 0) * 5),
+      earnings: profile?.coins ?? 0,
       chartData: [30, 45, 25, 60, 40, 75, 90]
     };
   },
@@ -191,6 +214,7 @@ export const supabaseApi = {
       .from("posts")
       .update({ comments_count: (post?.comments_count ?? 0) + 1 })
       .eq("id", postId);
+    await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 10 });
     return { id: data.id, author: "You", text: data.text };
   },
 
@@ -520,16 +544,14 @@ export const supabaseApi = {
   async getCreatorStats() {
     const userId = await getUserId();
     const supabase = getSupabase();
-    const { count: followers } = await supabase
-      .from("post_likes")
-      .select("*", { count: "exact", head: true });
+    const { count: followers } = await supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", userId);
+    const { data: posts } = await supabase.from("posts").select("views_count").eq("user_id", userId);
+    const views = (posts ?? []).reduce((sum, p) => sum + (p.views_count ?? 0), 0);
     const { data: uploads } = await supabase.from("uploads").select("id").eq("user_id", userId);
-    const { data: posts } = await supabase.from("posts").select("likes_count").eq("user_id", userId);
-    const views = (uploads?.length ?? 0) * 140 + (posts ?? []).reduce((s, p) => s + (p.likes_count ?? 0) * 10, 0);
     return {
       views,
       followers: followers ?? 0,
-      completionRate: Math.min(95, 40 + (uploads?.length ?? 0) * 5),
+      completionRate: Math.min(100, 40 + (uploads?.length ?? 0) * 5),
     };
   },
 
@@ -631,7 +653,25 @@ export const supabaseApi = {
       .select()
       .single();
     if (error) throw error;
+    await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 50 });
     return data;
+  },
+
+  async getAchievements() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data: profile } = await supabase.from("profiles").select("xp, level").eq("id", userId).single();
+    const { data: unlocked } = await supabase.from("user_achievements").select("badge_id").eq("user_id", userId);
+    return {
+      xp: profile?.xp ?? 0,
+      level: profile?.level ?? 1,
+      badges: (unlocked ?? []).map(u => u.badge_id)
+    };
+  },
+
+  async recordVideoView(postId) {
+    const supabase = getSupabase();
+    await supabase.rpc("increment_post_views", { p_post_id: postId });
   },
 
   async updateProfile(name, username, avatarFile) {
