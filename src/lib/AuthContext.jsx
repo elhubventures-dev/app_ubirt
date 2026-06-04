@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ensureUserProfile } from "@/lib/authHelpers";
+import { ensureUserProfile, getAuthAvatarUrl, getAuthDisplayName, getOAuthRedirectUrl } from "@/lib/authHelpers";
 import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 const AuthContext = createContext(null);
@@ -14,16 +14,17 @@ const demoUser = {
     "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&h=120&fit=crop",
 };
 
+const defaultAvatar =
+  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&h=120&fit=crop";
+
 function mapProfile(user, profile) {
   return {
     id: user.id,
     email: user.email,
-    name: profile?.display_name ?? user.email?.split("@")[0] ?? "User",
+    name: profile?.display_name ?? getAuthDisplayName(user),
     username: profile?.username ?? "user",
     coins: profile?.coins ?? 1000,
-    avatar:
-      profile?.avatar_url ??
-      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&h=120&fit=crop",
+    avatar: profile?.avatar_url ?? getAuthAvatarUrl(user) ?? defaultAvatar,
   };
 }
 
@@ -101,12 +102,14 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!active) return;
-      // getSession() handles the first load; avoid clearing session twice
       if (event === "INITIAL_SESSION") return;
 
       setIsLoadingAuth(true);
       try {
-        await applySession(session);
+        const signedIn = await applySession(session);
+        if (signedIn && event === "SIGNED_IN") {
+          navigate("/", { replace: true });
+        }
       } catch (error) {
         console.error("Auth state change error:", error);
         setUser(null);
@@ -120,7 +123,7 @@ export function AuthProvider({ children }) {
       active = false;
       subscription.unsubscribe();
     };
-  }, [useLiveAuth, applySession]);
+  }, [useLiveAuth, applySession, navigate]);
 
   const signIn = useCallback(
     async (email, password) => {
@@ -176,6 +179,21 @@ export function AuthProvider({ children }) {
     [applySession, navigate]
   );
 
+  const signInWithGoogle = useCallback(async () => {
+    const supabase = getSupabase();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: getOAuthRedirectUrl(),
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
+    });
+    if (error) throw error;
+  }, []);
+
   const signOut = useCallback(async () => {
     if (useLiveAuth) {
       await getSupabase().auth.signOut();
@@ -202,6 +220,7 @@ export function AuthProvider({ children }) {
       navigateToLogin,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
       updateUserSession,
       isLiveAuth: useLiveAuth,
@@ -214,6 +233,7 @@ export function AuthProvider({ children }) {
       navigateToLogin,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
       updateUserSession,
       useLiveAuth,

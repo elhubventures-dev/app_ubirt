@@ -9,6 +9,24 @@ function sanitizeUsername(value) {
   return cleaned || "user";
 }
 
+/** Display name from email signup or Google OAuth metadata. */
+export function getAuthDisplayName(authUser) {
+  const meta = authUser.user_metadata ?? {};
+  return (
+    meta.display_name ??
+    meta.full_name ??
+    meta.name ??
+    authUser.email?.split("@")[0] ??
+    "User"
+  );
+}
+
+/** Avatar from profile upload, Google `picture`, or custom metadata. */
+export function getAuthAvatarUrl(authUser) {
+  const meta = authUser.user_metadata ?? {};
+  return meta.avatar_url ?? meta.picture ?? null;
+}
+
 /** Create profile row if signup trigger did not run or failed. */
 export async function ensureUserProfile(authUser) {
   const supabase = getSupabase();
@@ -21,18 +39,24 @@ export async function ensureUserProfile(authUser) {
   if (existing) return;
 
   const base = sanitizeUsername(
-    authUser.user_metadata?.username ?? authUser.email?.split("@")[0]
+    authUser.user_metadata?.username ??
+      authUser.user_metadata?.full_name ??
+      authUser.email?.split("@")[0]
   );
   const username = `${base}_${authUser.id.replace(/-/g, "").slice(0, 6)}`;
 
   const { error } = await supabase.from("profiles").insert({
     id: authUser.id,
     username,
-    display_name: authUser.user_metadata?.display_name ?? base,
-    avatar_url: authUser.user_metadata?.avatar_url ?? null,
+    display_name: getAuthDisplayName(authUser),
+    avatar_url: getAuthAvatarUrl(authUser),
   });
 
   if (error && error.code !== "23505") {
     throw error;
   }
+}
+
+export function getOAuthRedirectUrl() {
+  return `${import.meta.env.VITE_APP_URL || window.location.origin}/`;
 }

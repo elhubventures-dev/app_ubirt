@@ -31,6 +31,21 @@ In Supabase: **Authentication → SMTP Settings**
 
 Also set **Authentication → URL Configuration** site URL to your `VITE_APP_URL`.
 
+### Google sign-in (OAuth)
+
+No extra env vars in the app — configure in Supabase + Google Cloud.
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → **Create OAuth client ID** (Web application).
+2. **Authorized redirect URI** (from Supabase **Authentication → Providers → Google**):
+   `https://<your-project-ref>.supabase.co/auth/v1/callback`
+3. Paste **Client ID** and **Client Secret** into Supabase Google provider → Enable.
+4. Supabase **URL Configuration**:
+   - Site URL: `http://localhost:5173` (dev) or production URL
+   - Redirect URLs: `http://localhost:5173/**`, `https://your-domain.com/**`
+5. Set `VITE_APP_URL` in `.env.local` to match (used after Google redirect).
+
+The login page **Continue with Google** button uses `signInWithOAuth` and creates a profile from Google name/avatar.
+
 ## Optional (by feature)
 
 | Service | Env variables | When you need it |

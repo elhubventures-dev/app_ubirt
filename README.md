@@ -50,7 +50,7 @@ Also set `VITE_APP_URL` (local or production URL) and optionally `SUPABASE_SERVI
 1. Create a project at [supabase.com](https://supabase.com).
 2. Open **SQL Editor** and run the full script:
    `supabase/migrations/001_initial_schema.sql`
-3. Under **Authentication → Providers**, enable Email.
+3. Under **Authentication → Providers**, enable Email and optionally **Google** (see [docs/ACCOUNTS.md](docs/ACCOUNTS.md#google-sign-in-oauth)).
 4. Under **Authentication → URL Configuration**, set:
    - **Site URL:** `http://localhost:5173` (or your production URL)
    - **Redirect URLs:** `http://localhost:5173/login`, `http://localhost:5173/**`
