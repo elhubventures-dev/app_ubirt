@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { creditCoinPurchase } from "../lib/payment/creditPurchase.js";
 
 /**
  * Vercel serverless: Paystack Webhook Listener
@@ -51,36 +52,16 @@ export default async function handler(req, res) {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
-      // 1. Check if transaction already exists (idempotency)
-      const { data: existingTx } = await supabaseAdmin
-        .from("transactions")
-        .select("id")
-        .eq("reference", reference)
-        .single();
-        
-      if (existingTx) {
-        return res.status(200).json({ status: "already_processed" });
-      }
-
-      // 2. Add transaction record
-      await supabaseAdmin.from("transactions").insert({
-        user_id: userId,
-        reference: reference,
-        amount: amount, // in kobo/pesewas etc.
-        status: "success",
-        coins_added: coinsToAdd,
-        email: customer?.email
+      const result = await creditCoinPurchase(supabaseAdmin, {
+        reference,
+        gateway: "paystack",
+        userId,
+        coinsToAdd,
+        amount,
+        email: customer?.email,
       });
 
-      // 3. Credit coins atomically via RPC
-      const { data: newBalance, error: coinsErr } = await supabaseAdmin.rpc("add_user_coins", {
-        p_user_id: userId,
-        p_amount: parseInt(coinsToAdd, 10),
-      });
-
-      if (coinsErr) throw coinsErr;
-
-      return res.status(200).json({ status: "success", newBalance });
+      return res.status(200).json(result);
     } catch (err) {
       console.error("Webhook processing error:", err);
       return res.status(500).json({ error: "Database update failed" });

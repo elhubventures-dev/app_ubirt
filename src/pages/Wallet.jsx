@@ -1,26 +1,29 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { dataProvider } from "@/api/dataProvider";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { useToast } from "@/components/ui/use-toast";
 import { usePaystackPayment } from "react-paystack";
-
-const COIN_PACKAGES = [
-  { id: "pack1", coins: 100, price: "$0.99" },
-  { id: "pack2", coins: 500, price: "$4.99", popular: true },
-  { id: "pack3", coins: 1200, price: "$9.99" },
-  { id: "pack4", coins: 6500, price: "$49.99" },
-];
+import { COIN_PACKAGES } from "@/lib/coinPackages";
+import {
+  getActiveGatewayLabel,
+  getPaystackAmount,
+  PAYMENT_CURRENCY,
+  PAYMENT_GATEWAY,
+  startFincraCheckout,
+} from "@/lib/paymentGateways";
 
 export default function Wallet() {
   const { user, updateUserSession } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [purchaseError, setPurchaseError] = useState("");
 
   const { data: balance } = useQuery({
     queryKey: ["wallet-balance"],
@@ -33,70 +36,103 @@ export default function Wallet() {
   });
 
   const displayBalance = balance ?? user?.coins ?? 0;
+  const gatewayLabel = getActiveGatewayLabel();
 
-  // Paystack configuration base
   const paystackConfig = {
     publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_placeholder",
     email: user?.email || "user@example.com",
-    currency: "NGN", // Change to GHS, ZAR, etc as needed
+    currency: PAYMENT_CURRENCY,
   };
 
   const initializePayment = usePaystackPayment(paystackConfig);
 
-  const onSuccess = async (reference) => {
+  const refreshWallet = async () => {
+    try {
+      const coins = await dataProvider.getWalletBalance();
+      updateUserSession?.({ coins });
+      queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet-transactions"] });
+    } catch {
+      // Webhook may still be processing
+    }
+  };
+
+  useEffect(() => {
+    const paymentReturn = searchParams.get("payment");
+    const reference = searchParams.get("reference");
+    if (paymentReturn !== "return" || !reference) return;
+
+    toast({
+      title: "Payment received",
+      description: `Reference: ${reference}. Updating your balance...`,
+    });
+
+    setSearchParams({}, { replace: true });
+    setTimeout(refreshWallet, 3000);
+  }, [searchParams, setSearchParams, toast]);
+
+  const onPaystackSuccess = async (reference) => {
     setIsPurchasing(false);
     toast({
       title: "Payment Successful!",
       description: `Reference: ${reference.reference}. Updating your balance...`,
     });
-    setTimeout(async () => {
-      try {
-        const coins = await dataProvider.getWalletBalance();
-        updateUserSession?.({ coins });
-        queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
-        queryClient.invalidateQueries({ queryKey: ["wallet-transactions"] });
-      } catch {
-        // Webhook may still be processing
-      }
-    }, 3000);
+    setTimeout(refreshWallet, 3000);
   };
 
-  const onClose = () => {
+  const onPaystackClose = () => {
     setIsPurchasing(false);
     toast({
       title: "Payment Cancelled",
       description: "You closed the payment window.",
-      variant: "destructive"
+      variant: "destructive",
     });
   };
 
-  const handlePurchase = (pack) => {
+  const handlePurchase = async (pack) => {
     setIsPurchasing(true);
-    
-    // Parse price to integer amount (e.g. "$4.99" -> 499 kobo/cents)
-    // Note: In a real production app, you should define prices in your local currency.
-    const numericPrice = parseFloat(pack.price.replace(/[^0-9.]/g, ''));
-    const amountInKobo = Math.round(numericPrice * 100 * 1500); // Rough USD to NGN conversion for demo
+    setPurchaseError("");
 
-    const config = {
-      ...paystackConfig,
-      amount: amountInKobo,
-      metadata: {
-        userId: user?.id,
-        coins: pack.coins,
-      },
-    };
+    try {
+      if (PAYMENT_GATEWAY === "fincra") {
+        await startFincraCheckout(pack);
+        return;
+      }
 
-    initializePayment(onSuccess, onClose, config);
+      if (PAYMENT_GATEWAY === "paystack") {
+        const config = {
+          ...paystackConfig,
+          amount: getPaystackAmount(pack),
+          metadata: {
+            userId: user?.id,
+            coins: pack.coins,
+          },
+        };
+        initializePayment(onPaystackSuccess, onPaystackClose, config);
+        return;
+      }
+
+      throw new Error(`Unsupported payment gateway: ${PAYMENT_GATEWAY}`);
+    } catch (err) {
+      const message = err.message || "Unable to start payment.";
+      setPurchaseError(message);
+      toast({
+        title: "Checkout failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      if (PAYMENT_GATEWAY === "fincra") {
+        setIsPurchasing(false);
+      }
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#101822] text-white flex flex-col relative overflow-hidden">
-      {/* Aesthetics */}
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-[#0a111a] via-[#101822] to-[#152336] z-0" />
       <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#f59e0b]/20 blur-[120px] rounded-full z-0 pointer-events-none" />
 
-      {/* Header */}
       <header className="relative z-10 px-4 py-4 flex items-center border-b border-white/5 bg-[#101822]/50 backdrop-blur-md">
         <button onClick={() => navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors mr-4">
           <span className="material-symbols-outlined">arrow_back</span>
@@ -105,9 +141,7 @@ export default function Wallet() {
       </header>
 
       <main className="flex-1 relative z-10 p-6 max-w-md mx-auto w-full flex flex-col gap-8">
-        
-        {/* Balance Card */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-3xl p-6 shadow-[0_10px_30px_rgba(245,158,11,0.3)] text-center relative overflow-hidden"
@@ -122,14 +156,21 @@ export default function Wallet() {
           </div>
         </motion.div>
 
-        {/* Buy Coins Section */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
           className="flex flex-col gap-4"
         >
-          <h2 className="text-lg font-bold">Buy Coins</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold">Buy Coins</h2>
+            <span className="text-xs text-slate-400">via {gatewayLabel}</span>
+          </div>
+          {purchaseError ? (
+            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+              {purchaseError}
+            </p>
+          ) : null}
           <div className="grid grid-cols-1 gap-3">
             {COIN_PACKAGES.map((pack) => (
               <div key={pack.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors relative overflow-hidden">
@@ -143,15 +184,17 @@ export default function Wallet() {
                     <span className="material-symbols-outlined text-2xl">monetization_on</span>
                   </div>
                   <div>
-                    <p className="font-bold text-lg">{pack.coins} <span className="text-sm font-normal text-slate-400">Coins</span></p>
+                    <p className="font-bold text-lg">
+                      {pack.coins} <span className="text-sm font-normal text-slate-400">Coins</span>
+                    </p>
                   </div>
                 </div>
-                <PrimaryButton 
+                <PrimaryButton
                   onClick={() => handlePurchase(pack)}
                   disabled={isPurchasing}
-                  className="rounded-full py-2 px-6"
+                  className="rounded-full py-2 px-6 min-w-[96px]"
                 >
-                  {pack.price}
+                  {isPurchasing ? "..." : pack.priceLabel}
                 </PrimaryButton>
               </div>
             ))}
@@ -200,7 +243,6 @@ export default function Wallet() {
             </div>
           )}
         </motion.div>
-
       </main>
     </div>
   );

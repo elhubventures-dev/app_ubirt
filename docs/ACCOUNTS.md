@@ -60,18 +60,45 @@ Apple Sign In is supported in code (`signInWithApple`) but the login button is c
 
 Native iOS/Android OAuth uses deep-link callback `com.elhubventures.ubirt://login` (see `docs/MOBILE.md`).
 
-### Paystack (wallet coin purchases)
+### Payments (wallet coin purchases)
+
+The wallet supports multiple gateways. Set `VITE_PAYMENT_GATEWAY` to choose the active provider (`fincra` or `paystack`).
 
 | Variable | Where | Purpose |
 |----------|--------|---------|
-| `VITE_PAYSTACK_PUBLIC_KEY` | Browser (Vercel + `.env.local`) | Paystack inline checkout on `/wallet` |
-| `PAYSTACK_SECRET_KEY` | Server only | Webhook signature verification at `POST /api/webhooks/paystack` |
+| `VITE_PAYMENT_GATEWAY` | Browser | Active gateway: `fincra` (default) or `paystack` |
+| `VITE_PAYMENT_CURRENCY` | Browser | Checkout currency, e.g. `NGN`, `GHS`, `KES` |
+| `PAYMENT_GATEWAY` | Server | Should match `VITE_PAYMENT_GATEWAY` for `/api/payments/checkout` |
+
+#### Fincra (default)
+
+| Variable | Where | Purpose |
+|----------|--------|---------|
+| `FINCRA_API_KEY` | Server only | Secret API key for checkout + verify |
+| `FINCRA_PUBLIC_KEY` | Server only | Public key header for checkout |
+| `FINCRA_BUSINESS_ID` | Server only | Optional; used when verifying payments |
+| `FINCRA_WEBHOOK_SECRET` | Server only | Webhook HMAC validation at `POST /api/webhooks/fincra` |
+| `FINCRA_API_BASE_URL` | Server only | `https://sandboxapi.fincra.com` (test) or `https://api.fincra.com` (live) |
+
+1. Create a merchant account at [Fincra](https://app.fincra.com/)
+2. **Settings → API keys** — copy secret + public keys
+3. **Settings → Portal Settings → Secret keys** — copy webhook secret
+4. Add webhook URL: `https://your-domain.com/api/webhooks/fincra` (event: `charge.successful`)
+5. Set env vars above and redeploy. Test in sandbox first.
+
+Used by `src/pages/Wallet.jsx`, `api/payments/checkout.js`, and `api/webhooks/fincra.js`.  
+Docs: [Checkout Redirect](https://docs.fincra.com/docs/checkout-redirect).
+
+#### Paystack (optional)
+
+| Variable | Where | Purpose |
+|----------|--------|---------|
+| `VITE_PAYSTACK_PUBLIC_KEY` | Browser | Paystack inline checkout on `/wallet` |
+| `PAYSTACK_SECRET_KEY` | Server only | Webhook signature at `POST /api/webhooks/paystack` |
 
 1. [Paystack Dashboard](https://dashboard.paystack.com/) → **Settings → API Keys & Webhooks**
-2. Copy **Public Key** → `VITE_PAYSTACK_PUBLIC_KEY`
-3. Copy **Secret Key** → `PAYSTACK_SECRET_KEY` (never prefix with `VITE_`)
-4. Add webhook URL: `https://your-domain.com/api/webhooks/paystack` (events: `charge.success`)
-5. Redeploy Vercel after setting env vars. Test purchases with Paystack test keys first.
+2. Set `VITE_PAYMENT_GATEWAY=paystack`
+3. Copy keys and add webhook URL: `https://your-domain.com/api/webhooks/paystack` (`charge.success`)
 
 Used by `src/pages/Wallet.jsx` and `api/webhooks/paystack.js`.
 
@@ -91,7 +118,7 @@ Implementation: `src/lib/monitoring.js`, `src/components/PageTracker.jsx`.
 | Service | Env variables | When you need it |
 |---------|-----------------|------------------|
 | **Mux** | `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET` | Adaptive video streaming |
-| **Paystack** | `VITE_PAYSTACK_PUBLIC_KEY`, `PAYSTACK_SECRET_KEY` | Wallet coin purchases |
+| **Fincra / Paystack** | See [Payments](#payments-wallet-coin-purchases) | Wallet coin purchases |
 | **Sentry** | `VITE_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` | Error tracking |
 | **PostHog** | `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` | Product analytics |
 | **Custom domain** | — | Brand URL on Vercel |
@@ -111,7 +138,7 @@ Never put `OPENAI_API_KEY`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, or `M
 |----------|--------|
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → `service_role` |
 
-Use only in serverless functions (bypasses RLS). Required for push delivery, account deletion, and Paystack webhook coin credit.
+Use only in serverless functions (bypasses RLS). Required for push delivery, account deletion, and payment webhook coin credit.
 
 ## Supabase migrations
 
@@ -142,5 +169,6 @@ Run every file in `supabase/migrations/` in numeric order in the **SQL Editor** 
 | 021 | `021_message_media_duration.sql` | Voice message duration metadata |
 | 022 | `022_message_hides.sql` | Delete-for-me hides + sender delete-for-everyone |
 | 023 | `023_comments_delete_policy.sql` | Users delete own comments + comment count decrement |
+| 024 | `024_payment_gateways.sql` | `gateway` column on wallet transactions (Fincra, Paystack) |
 
-**Minimum for current app features:** through `023`. Skipping `013` breaks DMs; skipping `015`–`022` degrades live chat, voice, deletes, and notification deep links.
+**Minimum for current app features:** through `024`. Skipping `013` breaks DMs; skipping `015`–`022` degrades live chat, voice, deletes, and notification deep links.

@@ -60,7 +60,7 @@ Also set `VITE_APP_URL` (local or production URL) and optionally `SUPABASE_SERVI
 7. Run `supabase/migrations/004_wallet_mux_push_notifications.sql` (coins, Paystack ledger, push tokens, Mux on posts, live notifications).
 8. Run `supabase/migrations/005_achievement_unlock.sql` (badge unlock RPC).
 9. Run `supabase/migrations/006_push_delivery_tokens.sql` (multi-device push token registry for FCM v1 + APNs).
-10. Run migrations `007` through `023` in order — see [docs/ACCOUNTS.md](docs/ACCOUNTS.md#supabase-migrations) for the full list (engagement counts, DMs, gifts, voice messages, notification links, unread badges, message hides, comment delete).
+10. Run migrations `007` through `024` in order — see [docs/ACCOUNTS.md](docs/ACCOUNTS.md#supabase-migrations) for the full list (engagement counts, DMs, gifts, voice messages, notification links, unread badges, message hides, comment delete, payment gateways).
 11. Copy **Project URL** and **anon public key** from **Settings → API**.
 
 ## 2. Local live mode
@@ -88,15 +88,15 @@ Copy **all** keys from `.env.example` into Vercel → Project → Settings → E
 
 4. Deploy. SPA routing is configured in `vercel.json`.
 
-**Local API routes (AI, Mux, Paystack webhooks):** use Vercel’s dev server so `/api/*` works:
+**Local API routes (AI, Mux, payment webhooks):** use Vercel’s dev server so `/api/*` works:
 
 ```bash
 npm run dev:api
 ```
 
-This runs `vercel dev`, which serves the Vite app **and** serverless routes under `api/`. Plain `npm run dev` only starts Vite — AI chat, video ingest, and Paystack webhooks will **not** work locally without `dev:api`.
+This runs `vercel dev`, which serves the Vite app **and** serverless routes under `api/`. Plain `npm run dev` only starts Vite — AI chat, video ingest, and payment webhooks will **not** work locally without `dev:api`.
 
-Ensure `.env.local` includes server keys (`OPENAI_API_KEY`, `MUX_*`, `PAYSTACK_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) when testing those routes.
+Ensure `.env.local` includes server keys (`OPENAI_API_KEY`, `MUX_*`, `FINCRA_*` or `PAYSTACK_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) when testing those routes.
 
 ## 4. Storage
 
