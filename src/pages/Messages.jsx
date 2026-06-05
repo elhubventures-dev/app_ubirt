@@ -7,7 +7,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
 import { useToast } from "@/components/ui/use-toast";
 import NewConversationSheet from "@/components/messages/NewConversationSheet";
-import NotificationBell from "@/components/layout/NotificationBell";
 
 export default function Messages() {
   const { data: chats = [], isLoading } = useConversations();
@@ -33,7 +32,6 @@ export default function Messages() {
       <div className="flex items-center justify-between px-2 mb-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">Messages</h1>
         <div className="flex items-center gap-1">
-          <NotificationBell />
           <button
             type="button"
             onClick={() => setShowNewChat(true)}
