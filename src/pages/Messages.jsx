@@ -37,30 +37,38 @@ export default function Messages() {
       navigate(`/group/${conv.id}`);
     },
     onError: (error) => {
-      toast({ title: "Could not create group", description: error.message, variant: "destructive" });
+      const msg = error.message || "Something went wrong.";
+      const needsMigration = /column|function|invite_code|create_group/i.test(msg);
+      toast({
+        title: "Could not create group",
+        description: needsMigration
+          ? `${msg} Run migration 027_group_chat.sql in Supabase.`
+          : msg,
+        variant: "destructive",
+      });
     },
   });
 
   return (
     <div className="flex flex-col min-h-full pb-20 pt-4 px-2 sm:px-4">
-      <div className="flex items-center justify-between px-2 mb-6">
-        <h1 className="text-2xl font-bold text-white tracking-tight">Messages</h1>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setShowNewGroup(true)}
-            aria-label="Create new group"
-            className="text-[#3b82f6] p-2 hover:bg-[#3b82f6]/10 rounded-full transition-colors"
-          >
-            <span className="material-symbols-outlined text-[24px]">group_add</span>
-          </button>
+      <div className="px-2 mb-4">
+        <h1 className="text-2xl font-bold text-white tracking-tight mb-4">Messages</h1>
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setShowNewChat(true)}
-            aria-label="Start new conversation"
-            className="text-[#3b82f6] p-2 hover:bg-[#3b82f6]/10 rounded-full transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-white font-semibold text-sm hover:bg-white/10 transition-colors"
           >
-            <span className="material-symbols-outlined text-[24px]">edit_square</span>
+            <span className="material-symbols-outlined text-[20px] text-[#3b82f6]">edit_square</span>
+            New Chat
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowNewGroup(true)}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#3b82f6]/15 border border-[#3b82f6]/30 text-white font-semibold text-sm hover:bg-[#3b82f6]/25 transition-colors"
+          >
+            <span className="material-symbols-outlined text-[20px] text-[#3b82f6]">groups</span>
+            New Group
           </button>
         </div>
       </div>
@@ -70,17 +78,28 @@ export default function Messages() {
           <SkeletonRow height="lg" count={5} />
         </div>
       ) : !chats.length ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+        <div className="flex flex-col items-center justify-center py-16 text-center px-4">
           <span className="material-symbols-outlined text-[64px] text-slate-700">chat_bubble</span>
           <p className="text-slate-300 font-semibold mt-4">No messages yet</p>
-          <p className="text-sm text-slate-500 mt-1 mb-6">Find someone and start a conversation.</p>
-          <button
-            type="button"
-            onClick={() => setShowNewChat(true)}
-            className="px-6 py-3 rounded-full bg-[#3b82f6] text-white font-semibold hover:bg-[#2563eb] transition-colors"
-          >
-            New Message
-          </button>
+          <p className="text-sm text-slate-500 mt-1 mb-6">
+            Start a direct chat or create a group to message multiple people.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+            <button
+              type="button"
+              onClick={() => setShowNewChat(true)}
+              className="flex-1 px-6 py-3 rounded-full bg-[#3b82f6] text-white font-semibold hover:bg-[#2563eb] transition-colors"
+            >
+              New Chat
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNewGroup(true)}
+              className="flex-1 px-6 py-3 rounded-full bg-white/10 border border-white/10 text-white font-semibold hover:bg-white/15 transition-colors"
+            >
+              Create Group
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-1">
