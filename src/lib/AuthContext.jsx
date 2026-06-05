@@ -323,8 +323,26 @@ export function AuthProvider({ children }) {
       return;
     }
     const supabase = getSupabase();
-    const { error } = await supabase.auth.deleteUser();
-    if (error) throw error;
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error("Not authenticated");
+    }
+
+    const res = await fetch("/api/account/delete", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || "Failed to delete account");
+    }
+
+    await supabase.auth.signOut();
     resetAnalyticsUser();
     setUser(null);
     setAuthError({ type: "auth_required" });
