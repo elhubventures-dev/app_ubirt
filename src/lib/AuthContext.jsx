@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ensureUserProfile, getAuthAvatarUrl, getAuthDisplayName, getOAuthRedirectUrl } from "@/lib/authHelpers";
 import { resetAnalyticsUser } from "@/lib/monitoring";
@@ -23,10 +23,22 @@ function mapProfile(user, profile) {
     id: user.id,
     email: user.email,
     name: profile?.display_name ?? getAuthDisplayName(user),
-    username: profile?.username ?? "user",
+    username: profile?.username ?? user.user_metadata?.username ?? "user",
     coins: profile?.coins ?? 1000,
     avatar: profile?.avatar_url ?? getAuthAvatarUrl(user) ?? defaultAvatar,
   };
+}
+
+/** Show the app immediately from JWT metadata; enrich from DB in the background. */
+function setUserFromSession(session, setUser, setAuthError) {
+  if (!session?.user) {
+    setUser(null);
+    setAuthError({ type: "auth_required" });
+    return false;
+  }
+  setUser(mapProfile(session.user, null));
+  setAuthError(null);
+  return true;
 }
 
 export function AuthProvider({ children }) {
@@ -37,147 +49,166 @@ export function AuthProvider({ children }) {
   const [isLoadingAuth, setIsLoadingAuth] = useState(useLiveAuth);
   const [isLoadingPublicSettings] = useState(false);
   const [authError, setAuthError] = useState(null);
+  const bootstrappedRef = useRef(false);
 
-  const applySession = useCallback(async (session) => {
-    if (session?.user) {
-      await ensureUserProfile(session.user);
-      const supabase = getSupabase();
-      const { data: profile, error } = await supabase
+  const hydrateProfile = useCallback(async (authUser) => {
+    try {
+      await ensureUserProfile(authUser);
+      const { data: profile, error } = await getSupabase()
         .from("profiles")
         .select("*")
-        .eq("id", session.user.id)
+        .eq("id", authUser.id)
         .single();
-
       if (error) {
-        console.warn("Profile load error (using fallback):", error.message);
+        console.warn("Profile hydrate error (keeping session user):", error.message);
+        return;
       }
-      setUser(mapProfile(session.user, profile));
-      setAuthError(null);
-      return true;
+      setUser(mapProfile(authUser, profile));
+    } catch (error) {
+      console.warn("Profile hydrate failed (keeping session user):", error);
     }
-
-    setUser(null);
-    setAuthError({ type: "auth_required" });
-    return false;
   }, []);
+
+  const finishBootstrap = useCallback(() => {
+    if (!bootstrappedRef.current) {
+      bootstrappedRef.current = true;
+      setIsLoadingAuth(false);
+    }
+  }, []);
+
+  const retryAuth = useCallback(async () => {
+    if (!useLiveAuth) return;
+    bootstrappedRef.current = false;
+    setAuthError(null);
+    setIsLoadingAuth(true);
+
+    try {
+      const { data: { session }, error } = await getSupabase().auth.getSession();
+      if (error) throw error;
+      if (setUserFromSession(session, setUser, setAuthError)) {
+        hydrateProfile(session.user);
+        navigate("/", { replace: true });
+      }
+    } catch (error) {
+      console.error("Auth retry error:", error);
+      setAuthError({ type: "auth_error", message: error.message });
+    } finally {
+      finishBootstrap();
+    }
+  }, [useLiveAuth, hydrateProfile, navigate, finishBootstrap]);
 
   useEffect(() => {
     if (!useLiveAuth) return undefined;
 
     const supabase = getSupabase();
     let active = true;
-
-    const boot = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        if (active) await applySession(session);
-      } catch (error) {
-        console.error("Auth bootstrap error:", error);
-        if (active) {
-          setUser(null);
-          setAuthError({ type: "auth_error", message: error.message });
-        }
-      } finally {
-        if (active) setIsLoadingAuth(false);
-      }
-    };
-
-    const fallbackTimeout = setTimeout(() => {
-      if (active) {
-        console.error("Auth boot timed out after 10 seconds. Clearing potentially corrupted local storage.");
-        try {
-          localStorage.removeItem("ubirt-auth");
-          sessionStorage.removeItem("ubirt-auth");
-        } catch (e) {
-          // ignore
-        }
-        setAuthError({ type: "auth_error", message: "Connection timed out. If this persists, disable your ad-blocker or VPN." });
-        setIsLoadingAuth(false);
-      }
-    }, 10000);
-
-    boot().finally(() => clearTimeout(fallbackTimeout));
+    bootstrappedRef.current = false;
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!active) return;
-      if (event === "INITIAL_SESSION") return;
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // Never await Supabase DB calls directly inside this callback (auth deadlock).
+      setTimeout(async () => {
+        if (!active) return;
 
-      setIsLoadingAuth(true);
-      try {
-        const signedIn = await applySession(session);
-        if (signedIn && event === "SIGNED_IN") {
-          navigate("/", { replace: true });
+        if (event === "INITIAL_SESSION") {
+          setUserFromSession(session, setUser, setAuthError);
+          if (session?.user) hydrateProfile(session.user);
+          finishBootstrap();
+          return;
         }
-      } catch (error) {
-        console.error("Auth state change error:", error);
-        setUser(null);
-        setAuthError({ type: "auth_error", message: error.message });
-      } finally {
-        if (active) setIsLoadingAuth(false);
-      }
+
+        if (event === "SIGNED_OUT") {
+          setUser(null);
+          setAuthError({ type: "auth_required" });
+          return;
+        }
+
+        if (!session?.user) {
+          setUser(null);
+          setAuthError({ type: "auth_required" });
+          return;
+        }
+
+        setUserFromSession(session, setUser, setAuthError);
+        hydrateProfile(session.user);
+
+        if (event === "SIGNED_IN") {
+          const fromOAuth =
+            window.location.hash.includes("access_token") ||
+            window.location.search.includes("code=");
+          if (fromOAuth) {
+            window.history.replaceState(null, "", window.location.pathname || "/");
+            navigate("/", { replace: true });
+          }
+        }
+      }, 0);
     });
+
+    // If INITIAL_SESSION never fires (rare), stop blocking the UI.
+    const safetyTimer = setTimeout(() => {
+      if (!active || bootstrappedRef.current) return;
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!active || bootstrappedRef.current) return;
+        setUserFromSession(session, setUser, setAuthError);
+        if (session?.user) hydrateProfile(session.user);
+        finishBootstrap();
+      });
+    }, 5000);
 
     return () => {
       active = false;
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
-  }, [useLiveAuth, applySession, navigate]);
+  }, [useLiveAuth, hydrateProfile, navigate, finishBootstrap]);
 
   const signIn = useCallback(
     async (email, password) => {
       const supabase = getSupabase();
-      setIsLoadingAuth(true);
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        if (!data.session?.user) {
-          throw new Error("Sign in failed. Please try again.");
-        }
-        await applySession(data.session);
-        navigate("/", { replace: true });
-      } finally {
-        setIsLoadingAuth(false);
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (!data.session?.user) {
+        throw new Error("Sign in failed. Please try again.");
       }
+      setUserFromSession(data.session, setUser, setAuthError);
+      finishBootstrap();
+      navigate("/", { replace: true });
+      hydrateProfile(data.session.user);
     },
-    [applySession, navigate]
+    [hydrateProfile, navigate, finishBootstrap]
   );
 
   const signUp = useCallback(
     async (email, password, username) => {
       const supabase = getSupabase();
-      setIsLoadingAuth(true);
-      try {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { username, display_name: username },
-            emailRedirectTo: `${import.meta.env.VITE_APP_URL || window.location.origin}/login`,
-          },
-        });
-        if (error) throw error;
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { username, display_name: username },
+          emailRedirectTo: `${import.meta.env.VITE_APP_URL || window.location.origin}/login`,
+        },
+      });
+      if (error) throw error;
 
-        if (data.session?.user) {
-          await applySession(data.session);
-          navigate("/", { replace: true });
-          return;
-        }
-
-        if (data.user && !data.session) {
-          throw new Error(
-            "Account created. Check your email to confirm your address, then sign in."
-          );
-        }
-
-        throw new Error("Sign up could not be completed. Please try again.");
-      } finally {
-        setIsLoadingAuth(false);
+      if (data.session?.user) {
+        setUserFromSession(data.session, setUser, setAuthError);
+        finishBootstrap();
+        navigate("/", { replace: true });
+        hydrateProfile(data.session.user);
+        return;
       }
+
+      if (data.user && !data.session) {
+        throw new Error(
+          "Account created. Check your email to confirm your address, then sign in."
+        );
+      }
+
+      throw new Error("Sign up could not be completed. Please try again.");
     },
-    [applySession, navigate]
+    [hydrateProfile, navigate, finishBootstrap]
   );
 
   const signInWithGoogle = useCallback(async () => {
@@ -245,6 +276,7 @@ export function AuthProvider({ children }) {
       isLoadingPublicSettings,
       authError,
       navigateToLogin,
+      retryAuth,
       signIn,
       signUp,
       signInWithGoogle,
@@ -261,6 +293,7 @@ export function AuthProvider({ children }) {
       isLoadingPublicSettings,
       authError,
       navigateToLogin,
+      retryAuth,
       signIn,
       signUp,
       signInWithGoogle,

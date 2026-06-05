@@ -36,7 +36,7 @@ import CommunityChat from "./pages/CommunityChat";
 const LOGO_URL = "/pwa-192x192.png";
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth, retryAuth } = useAuth();
   
   // Initialize push notifications when user is authenticated
   usePushNotifications();
@@ -80,7 +80,22 @@ const AuthenticatedApp = () => {
         <span className="material-symbols-outlined text-[48px] text-red-500">error</span>
         <h2 className="text-white text-xl font-bold">Authentication Error</h2>
         <p className="text-slate-400 text-sm">{authError.message}</p>
-        <button onClick={() => window.location.reload()} className="mt-4 px-6 py-2 bg-[#3b82f6] text-white rounded-full font-bold">Retry</button>
+        <div className="flex flex-col sm:flex-row gap-3 mt-4">
+          <button
+            type="button"
+            onClick={() => retryAuth()}
+            className="px-6 py-2 bg-[#3b82f6] text-white rounded-full font-bold"
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.assign("/login")}
+            className="px-6 py-2 bg-white/10 text-white rounded-full font-bold"
+          >
+            Back to sign in
+          </button>
+        </div>
       </div>
     );
   }
