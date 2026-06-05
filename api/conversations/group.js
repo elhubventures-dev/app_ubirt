@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { applyCors, handleCorsPreflight } from "../lib/cors.js";
 
 function getAdminSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -14,6 +15,9 @@ function generateInviteCode() {
 }
 
 export default async function handler(req, res) {
+  if (handleCorsPreflight(req, res)) return;
+  applyCors(req, res);
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }

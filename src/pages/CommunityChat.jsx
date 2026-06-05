@@ -252,6 +252,7 @@ export default function CommunityChat() {
             conversation={conversation}
             onClose={() => setShowSettings(false)}
             onUpdated={handleSettingsUpdated}
+            onLeave={() => navigate("/messages", { replace: true })}
           />
         )}
       </AnimatePresence>

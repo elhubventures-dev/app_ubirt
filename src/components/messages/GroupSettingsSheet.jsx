@@ -12,7 +12,7 @@ function roleLabel(role) {
   return "Member";
 }
 
-export default function GroupSettingsSheet({ conversation, onClose, onUpdated }) {
+export default function GroupSettingsSheet({ conversation, onClose, onUpdated, onLeave }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [showAddMembers, setShowAddMembers] = useState(false);
@@ -96,9 +96,13 @@ export default function GroupSettingsSheet({ conversation, onClose, onUpdated })
     setBusy(true);
     try {
       await dataProvider.removeGroupMember(conversation.id, memberId);
-      toast({ title: memberId === user?.id ? "You left the group" : "Member removed" });
+      const leftGroup = memberId === user?.id;
+      toast({ title: leftGroup ? "You left the group" : "Member removed" });
       onUpdated?.();
-      if (memberId === user?.id) onClose?.();
+      if (leftGroup) {
+        onClose?.();
+        onLeave?.();
+      }
     } catch (err) {
       toast({ title: "Could not remove member", description: err.message, variant: "destructive" });
     } finally {

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { applyCors, handleCorsPreflight } from "../lib/cors.js";
 
 function getAdminSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -12,10 +13,12 @@ function getAdminSupabase() {
 async function findExistingDirectConversation(admin, userId, otherUserId) {
   const { data: myRows } = await admin
     .from("conversation_members")
-    .select("conversation_id")
+    .select("conversation_id, conversations!inner(type)")
     .eq("user_id", userId);
 
   for (const row of myRows ?? []) {
+    if (row.conversations?.type && row.conversations.type !== "direct") continue;
+
     const { data: members } = await admin
       .from("conversation_members")
       .select("user_id")
@@ -30,6 +33,9 @@ async function findExistingDirectConversation(admin, userId, otherUserId) {
 }
 
 export default async function handler(req, res) {
+  if (handleCorsPreflight(req, res)) return;
+  applyCors(req, res);
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }

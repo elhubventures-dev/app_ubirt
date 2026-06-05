@@ -124,8 +124,8 @@ const AuthenticatedApp = () => {
       </Route>
 
       <Route path="/chat/:id" element={<ChatDetail />} />
-      <Route path="/group/:id" element={<CommunityChat />} />
       <Route path="/group/join/:code" element={<JoinGroup />} />
+      <Route path="/group/:id" element={<CommunityChat />} />
       <Route path="/community/:id" element={<CommunityChat />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/upload" element={<Upload />} />
