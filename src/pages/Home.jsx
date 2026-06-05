@@ -82,15 +82,6 @@ export default function Home() {
                  <p className="text-xs text-slate-400 mt-0.5">JPG or PNG</p>
                </div>
              </Link>
-             <Link to="/ai-chat" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
-               <div className="p-2 bg-[#8b5cf6]/20 text-[#a78bfa] rounded-full">
-                  <span className="material-symbols-outlined text-[24px]">smart_toy</span>
-               </div>
-               <div>
-                 <h3 className="font-bold text-white text-base">UBIRT AI</h3>
-                 <p className="text-xs text-slate-400 mt-0.5">Content ideas</p>
-               </div>
-             </Link>
              <Link to="/creator-studio" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
                <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-full">
                   <span className="material-symbols-outlined text-[24px]">dashboard</span>

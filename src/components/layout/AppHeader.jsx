@@ -5,7 +5,6 @@ const routeTitles = {
   "/": "Home",
   "/feed": "Video Feed",
   "/messages": "Messages",
-  "/ai-chat": "AI Chat",
   "/profile": "Profile",
   "/notifications": "Notifications",
   "/search": "Search",

@@ -28,7 +28,6 @@ function Toggle({ checked, onChange, label }) {
 export default function Settings() {
   const { user, signOut, deleteAccount, isLiveAuth, updateUserSession } = useAuth();
   const [autoplay, setAutoplay] = useState(() => getPreference("autoplay", true));
-  const [aiAssist, setAiAssist] = useState(() => getPreference("aiAssist", true));
   const [notifications, setNotifications] = useState(() => getPreference("push", true));
   
   const [name, setName] = useState("");
@@ -47,12 +46,6 @@ export default function Settings() {
     setAutoplay(next);
     setPreference("autoplay", next);
     toast({ title: "Preference saved", description: `Autoplay ${next ? "enabled" : "disabled"}.` });
-  };
-
-  const toggleAiAssist = (next) => {
-    setAiAssist(next);
-    setPreference("aiAssist", next);
-    toast({ title: "Preference saved", description: `AI assist ${next ? "enabled" : "disabled"}.` });
   };
 
   const togglePush = (next) => {
@@ -178,7 +171,6 @@ export default function Settings() {
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">App Preferences</h2>
             <div className="space-y-2">
                <Toggle checked={autoplay} onChange={toggleAutoplay} label="Autoplay feed posts" />
-               <Toggle checked={aiAssist} onChange={toggleAiAssist} label="AI assistance in composer" />
                <Toggle checked={notifications} onChange={togglePush} label="Push Notifications" />
             </div>
           </section>

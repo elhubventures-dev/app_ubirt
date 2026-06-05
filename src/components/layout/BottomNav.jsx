@@ -6,7 +6,6 @@ const navItems = [
   { path: "/feed", icon: "play_circle", label: "Reels" },
   { path: "/search", icon: "search", label: "Search" },
   { path: "/messages", icon: "chat_bubble", label: "Messages" },
-  { path: "/ai-chat", icon: "smart_toy", label: "AI" },
   { path: "/profile", icon: "person", label: "Profile" },
 ];
 
