@@ -20,6 +20,19 @@ export default function Login() {
     if (user) setLoading(false);
   }, [user]);
 
+  useEffect(() => {
+    const onOAuthError = (event) => {
+      setLoading(false);
+      toast({
+        title: "Google sign-in failed",
+        description: event.detail?.message || "Please try again.",
+        variant: "destructive",
+      });
+    };
+    window.addEventListener("ubirt:native-oauth-error", onOAuthError);
+    return () => window.removeEventListener("ubirt:native-oauth-error", onOAuthError);
+  }, [toast]);
+
   if (user && isLiveAuth && !isLoadingAuth) {
     return <Navigate to="/" replace />;
   }

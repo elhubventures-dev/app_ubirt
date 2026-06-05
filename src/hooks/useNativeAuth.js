@@ -9,6 +9,21 @@ import { isOAuthCallbackUrl } from "@/lib/platform";
 function parseOAuthCallback(url) {
   if (!url) return null;
 
+  try {
+    const parsed = new URL(url.replace(/^([a-z][\w+.-]*):\/\//i, "capacitor://"));
+    const errorDescription = parsed.searchParams.get("error_description") || parsed.searchParams.get("error");
+    if (errorDescription) {
+      return { type: "error", message: decodeURIComponent(errorDescription.replace(/\+/g, " ")) };
+    }
+
+    const code = parsed.searchParams.get("code");
+    if (code) {
+      return { type: "code", value: code };
+    }
+  } catch {
+    // Fall through to regex parsing for non-standard deep links.
+  }
+
   const queryMatch = url.match(/[?&]code=([^&#]+)/);
   if (queryMatch?.[1]) {
     return { type: "code", value: decodeURIComponent(queryMatch[1]) };
@@ -28,11 +43,14 @@ function parseOAuthCallback(url) {
 }
 
 async function completeOAuthFromUrl(url) {
-  if (!isOAuthCallbackUrl(url)) return false;
+  if (!isOAuthCallbackUrl(url)) return { completed: false };
 
   const supabase = getSupabase();
   const callback = parseOAuthCallback(url);
-  if (!callback) return false;
+  if (!callback) return { completed: false };
+  if (callback.type === "error") {
+    throw new Error(callback.message || "Google sign-in was cancelled.");
+  }
 
   if (callback.type === "code") {
     const { error } = await supabase.auth.exchangeCodeForSession(callback.value);
@@ -45,8 +63,17 @@ async function completeOAuthFromUrl(url) {
     if (error) throw error;
   }
 
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!session?.user) {
+    throw new Error("Sign-in completed but no session was created. Please try again.");
+  }
+
   await Browser.close().catch(() => {});
-  return true;
+  return { completed: true };
 }
 
 /** Handles OAuth deep-link returns on iOS/Android (PKCE + implicit). */
@@ -58,12 +85,17 @@ export function useNativeAuth() {
 
     const finishOAuth = async (url) => {
       try {
-        const completed = await completeOAuthFromUrl(url);
+        const { completed } = await completeOAuthFromUrl(url);
         if (completed) {
           navigate("/", { replace: true });
         }
       } catch (error) {
         console.error("OAuth deep link failed:", error);
+        window.dispatchEvent(
+          new CustomEvent("ubirt:native-oauth-error", {
+            detail: { message: error.message || "Google sign-in failed." },
+          })
+        );
       }
     };
 

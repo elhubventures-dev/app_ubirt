@@ -45,7 +45,7 @@ function NativeBootstrap() {
 }
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth, retryAuth } = useAuth();
+  const { user, isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth, retryAuth } = useAuth();
 
   usePushNotifications();
   useLastSeenHeartbeat();
@@ -81,7 +81,7 @@ const AuthenticatedApp = () => {
   }
 
   if (authError?.type === "user_not_registered") return <UserNotRegisteredError />;
-  if (authError?.type === "auth_required" && isLiveAuth) {
+  if (authError?.type === "auth_required" && isLiveAuth && !user) {
     return <Navigate to="/login" replace />;
   }
   if (authError?.type === "auth_error") {

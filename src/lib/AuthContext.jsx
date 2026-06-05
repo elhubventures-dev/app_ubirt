@@ -122,44 +122,50 @@ export function AuthProvider({ children }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      // Never await Supabase DB calls directly inside this callback (auth deadlock).
-      setTimeout(async () => {
-        if (!active) return;
-
-        if (event === "INITIAL_SESSION") {
-          setUserFromSession(session, setUser, setAuthError);
-          if (session?.user) hydrateProfile(session.user);
-          finishBootstrap();
-          return;
-        }
-
-        if (event === "SIGNED_OUT") {
-          setUser(null);
-          setAuthError({ type: "auth_required" });
-          return;
-        }
-
-        if (!session?.user) {
-          setUser(null);
-          setAuthError({ type: "auth_required" });
-          return;
-        }
-
+      // Update React auth state synchronously so native OAuth navigation does not
+      // briefly hit AuthenticatedApp with stale auth_required and bounce to /login.
+      if (event === "INITIAL_SESSION") {
         setUserFromSession(session, setUser, setAuthError);
-        hydrateProfile(session.user);
-
-        if (event === "SIGNED_IN") {
-          const fromOAuth =
-            isNativePlatform() ||
-            window.location.hash.includes("access_token") ||
-            window.location.search.includes("code=");
-          if (fromOAuth) {
-            if (!isNativePlatform()) {
-              window.history.replaceState(null, "", window.location.pathname || "/");
-            }
-            navigate("/", { replace: true });
-          }
+        finishBootstrap();
+        if (session?.user) {
+          setTimeout(() => {
+            if (active) hydrateProfile(session.user);
+          }, 0);
         }
+        return;
+      }
+
+      if (event === "SIGNED_OUT") {
+        setUser(null);
+        setAuthError({ type: "auth_required" });
+        return;
+      }
+
+      if (!session?.user) {
+        setUser(null);
+        setAuthError({ type: "auth_required" });
+        return;
+      }
+
+      setUserFromSession(session, setUser, setAuthError);
+      finishBootstrap();
+
+      if (event === "SIGNED_IN") {
+        const fromOAuth =
+          isNativePlatform() ||
+          window.location.hash.includes("access_token") ||
+          window.location.search.includes("code=");
+        if (fromOAuth) {
+          if (!isNativePlatform()) {
+            window.history.replaceState(null, "", window.location.pathname || "/");
+          }
+          navigate("/", { replace: true });
+        }
+      }
+
+      // Never await Supabase DB calls directly inside this callback (auth deadlock).
+      setTimeout(() => {
+        if (active) hydrateProfile(session.user);
       }, 0);
     });
 
