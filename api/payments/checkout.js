@@ -9,7 +9,7 @@ import {
 const SUPPORTED_GATEWAYS = new Set(["fincra"]);
 
 const FINCRA_PAYMENT_METHODS = {
-  NGN: ["bank_transfer", "card", "payAttitude"],
+  NGN: ["bank_transfer", "card", "payattitude"],
   GHS: ["bank_transfer", "mobile_money"],
   KES: ["bank_transfer", "mobile_money"],
   UGX: ["bank_transfer", "mobile_money"],
