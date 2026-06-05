@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 function formatTime(seconds) {
-  if (!Number.isFinite(seconds)) return "0:00";
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${String(secs).padStart(2, "0")}`;
@@ -51,14 +51,21 @@ export default function VoiceMessageBubble({ url, isMe }) {
   };
 
   const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0;
+  const remaining = duration > 0 ? Math.max(0, duration - current) : 0;
 
   return (
-    <div className="flex items-center gap-3 min-w-[180px]" onClick={(e) => e.stopPropagation()}>
+    <div className="flex items-center gap-3 min-w-[200px]" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={togglePlay}
-        className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-          isMe ? "bg-white/20 hover:bg-white/30" : "bg-white/10 hover:bg-white/15"
+        className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+          playing
+            ? isMe
+              ? "bg-white/35 ring-2 ring-white/50 text-white"
+              : "bg-[#3b82f6]/50 ring-2 ring-[#60a5fa]/60 text-[#93c5fd]"
+            : isMe
+              ? "bg-white/20 hover:bg-white/30 text-white"
+              : "bg-white/10 hover:bg-white/15 text-slate-200"
         }`}
         aria-label={playing ? "Pause voice message" : "Play voice message"}
       >
@@ -66,17 +73,47 @@ export default function VoiceMessageBubble({ url, isMe }) {
           {playing ? "pause" : "play_arrow"}
         </span>
       </button>
+
       <div className="flex-1 min-w-0">
-        <div className={`h-1.5 rounded-full overflow-hidden ${isMe ? "bg-white/20" : "bg-white/10"}`}>
+        <div
+          className={`h-2 rounded-full overflow-hidden transition-colors ${
+            playing
+              ? isMe
+                ? "bg-white/30"
+                : "bg-[#3b82f6]/25"
+              : isMe
+                ? "bg-white/20"
+                : "bg-white/10"
+          }`}
+        >
           <div
-            className={`h-full rounded-full transition-all ${isMe ? "bg-white" : "bg-[#3b82f6]"}`}
+            className={`h-full rounded-full ${
+              playing
+                ? isMe
+                  ? "bg-white shadow-[0_0_10px_rgba(255,255,255,0.45)]"
+                  : "bg-[#60a5fa] shadow-[0_0_10px_rgba(96,165,250,0.45)]"
+                : isMe
+                  ? "bg-white/80"
+                  : "bg-[#3b82f6]"
+            }`}
             style={{ width: `${progress}%` }}
           />
         </div>
-        <p className={`text-[11px] mt-1 ${isMe ? "text-blue-100" : "text-slate-400"}`}>
-          {formatTime(playing || current > 0 ? current : duration)}
-        </p>
+
+        <div className={`flex items-center justify-between mt-1.5 gap-2 tabular-nums ${isMe ? "text-blue-100" : "text-slate-400"}`}>
+          {playing ? (
+            <>
+              <span className={`text-xs font-semibold ${isMe ? "text-white" : "text-[#93c5fd]"}`}>
+                {formatTime(remaining)}
+              </span>
+              <span className="text-[10px] opacity-70">{formatTime(duration)} total</span>
+            </>
+          ) : (
+            <span className="text-[11px]">{formatTime(duration)}</span>
+          )}
+        </div>
       </div>
+
       <audio ref={audioRef} src={url} preload="metadata" className="hidden" />
     </div>
   );
