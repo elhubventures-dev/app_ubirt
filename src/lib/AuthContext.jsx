@@ -34,6 +34,7 @@ function mapProfile(user, profile) {
     username: profile?.username ?? user.user_metadata?.username ?? "user",
     coins: profile?.coins ?? SIGNUP_BONUS_COINS,
     avatar: profile?.avatar_url ?? getAuthAvatarUrl(user) ?? defaultAvatar,
+    cover: profile?.cover_url ?? "",
     bio: profile?.bio ?? "",
     website: profile?.website ?? "",
     location: profile?.location ?? "",

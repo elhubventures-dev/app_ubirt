@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useFeed, useFeedComments } from "@/hooks/useFeed";
 import CommentsSheet from "@/components/feed/CommentsSheet";
 import ShareSheet from "@/components/feed/ShareSheet";
@@ -213,18 +213,46 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
 
 export default function VideoFeed() {
   const { user, updateUserSession } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetPostId = searchParams.get("post");
   const [expandedPostId, setExpandedPostId] = useState("");
   const [optionsPostId, setOptionsPostId] = useState("");
   const [sharePostId, setSharePostId] = useState("");
   const [giftPostId, setGiftPostId] = useState("");
   const [commentDraft, setCommentDraft] = useState("");
   const [activePostIndex, setActivePostIndex] = useState(0);
-  const [feedType, setFeedType] = useState("foryou"); // "foryou" | "following"
-  
+  const [feedType, setFeedType] = useState("foryou");
+  const scrolledToPostRef = useRef(null);
+
   const { data: posts = [], isLoading, toggleLike, toggleBookmark, addComment, deletePost, sendGift, isMutating, isCommenting, isGifting } = useFeed(feedType);
-  const { data: comments = [] } = useFeedComments(expandedPostId);
+  const { data: comments = [], isLoading: isLoadingComments } = useFeedComments(expandedPostId);
   const { toast } = useToast();
   const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!targetPostId || isLoading || !posts.length || !containerRef.current) return;
+    if (scrolledToPostRef.current === `${feedType}:${targetPostId}`) return;
+
+    const index = posts.findIndex((p) => p.id === targetPostId);
+    if (index === -1) {
+      if (feedType === "following") {
+        setFeedType("foryou");
+      }
+      return;
+    }
+
+    const height = window.innerHeight;
+    containerRef.current.scrollTo({ top: index * height, behavior: "auto" });
+    setActivePostIndex(index);
+    scrolledToPostRef.current = `${feedType}:${targetPostId}`;
+    setSearchParams({}, { replace: true });
+  }, [targetPostId, posts, isLoading, feedType, setSearchParams]);
+
+  useEffect(() => {
+    if (!targetPostId) {
+      scrolledToPostRef.current = null;
+    }
+  }, [targetPostId]);
 
   const handleAutoScroll = () => {
     if (!containerRef.current) return;
@@ -326,6 +354,7 @@ export default function VideoFeed() {
         {expandedPostId && (
           <CommentsSheet
             comments={comments}
+            isLoading={isLoadingComments}
             commentDraft={commentDraft}
             onCommentDraftChange={setCommentDraft}
             isSubmitting={isCommenting}

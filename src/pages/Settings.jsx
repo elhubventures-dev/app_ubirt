@@ -9,6 +9,7 @@ import { getDataMode, dataProvider } from "@/api/dataProvider";
 import { getPreference, setPreference } from "@/lib/preferences";
 import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { getProfileCoverUrl } from "@/lib/profileDefaults";
 import { motion } from "framer-motion";
 
 function Toggle({ checked, onChange, label }) {
@@ -65,6 +66,7 @@ export default function Settings() {
   const [website, setWebsite] = useState("");
   const [location, setLocation] = useState("");
   const [avatarFile, setAvatarFile] = useState(null);
+  const [coverFile, setCoverFile] = useState(null);
 
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -75,6 +77,7 @@ export default function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const avatarInputRef = useRef(null);
+  const coverInputRef = useRef(null);
 
   const { data: ownProfile, isLoading: isLoadingProfile } = useQuery({
     queryKey: ["own-profile", user?.id],
@@ -162,18 +165,20 @@ export default function Settings() {
         phone,
         website,
         location,
-        avatarFile,
+        coverFile,
       });
       updateUserSession({
         name: updated.name ?? name,
         username: updated.username ?? username,
         avatar: updated.avatar ?? user?.avatar,
+        cover: updated.cover ?? user?.cover,
         bio: updated.bio ?? bio,
         phone: updated.phone ?? phone,
         website: updated.website ?? website,
         location: updated.location ?? location,
       });
       setAvatarFile(null);
+      setCoverFile(null);
       queryClient.invalidateQueries({ queryKey: ["own-profile"] });
       queryClient.invalidateQueries({ queryKey: ["public-profile"] });
       queryClient.invalidateQueries({ queryKey: ["creator-stats"] });
@@ -244,6 +249,9 @@ export default function Settings() {
   const avatarPreview = avatarFile
     ? URL.createObjectURL(avatarFile)
     : user?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${user?.username || "default"}`;
+  const coverPreview = coverFile
+    ? URL.createObjectURL(coverFile)
+    : getProfileCoverUrl(ownProfile?.cover || user?.cover);
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
@@ -270,6 +278,41 @@ export default function Settings() {
           <section>
             <SectionTitle>Profile</SectionTitle>
             <form onSubmit={handleSaveProfile} className="bg-white/5 border border-white/10 p-5 rounded-3xl backdrop-blur-sm space-y-4">
+              <div>
+                <FieldLabel hint="JPG or PNG, recommended 1200×400">Cover image</FieldLabel>
+                <label className="block relative h-28 rounded-2xl overflow-hidden border border-white/10 cursor-pointer group">
+                  <img src={coverPreview} alt="Cover" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="material-symbols-outlined text-white text-[24px]">photo_camera</span>
+                  </div>
+                  <input
+                    ref={coverInputRef}
+                    type="file"
+                    accept={ALLOWED_IMAGE_ACCEPT}
+                    className="hidden"
+                    onChange={(e) => {
+                      const selected = e.target.files?.[0];
+                      if (!selected) return;
+                      try {
+                        validateImageFile(selected);
+                        setCoverFile(selected);
+                      } catch (error) {
+                        toast({ title: "Invalid file", description: error.message, variant: "destructive" });
+                      }
+                    }}
+                  />
+                </label>
+                <PrimaryButton
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => coverInputRef.current?.click()}
+                >
+                  Change cover
+                </PrimaryButton>
+              </div>
+
               <div className="flex items-center gap-4">
                 <label className="w-20 h-20 rounded-full bg-slate-800 border-2 border-white/10 overflow-hidden relative group cursor-pointer block shrink-0">
                   <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />

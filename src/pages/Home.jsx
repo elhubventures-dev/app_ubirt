@@ -5,6 +5,7 @@ import { useCreatorStudio } from "@/hooks/useCreatorStudio";
 import { formatCount } from "@/lib/formatStats";
 import { motion } from "framer-motion";
 import NotificationBell from "@/components/layout/NotificationBell";
+import { feedPostPath } from "@/lib/feedLinks";
 
 export default function Home() {
   const { user } = useAuth();
@@ -118,7 +119,7 @@ export default function Home() {
                 [1,2,3].map(i => <div key={i} className="w-32 h-48 shrink-0 bg-white/5 rounded-2xl animate-pulse" />)
              ) : (
                 posts.slice(0, 5).map(post => (
-                  <Link key={post.id} to="/feed" className="w-32 h-48 shrink-0 snap-start bg-slate-800 rounded-2xl overflow-hidden relative group shadow-lg ring-1 ring-white/5">
+                  <Link key={post.id} to={feedPostPath(post.id)} className="w-32 h-48 shrink-0 snap-start bg-slate-800 rounded-2xl overflow-hidden relative group shadow-lg ring-1 ring-white/5">
                      <img 
                         src={post.media_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${post.id}`} 
                         alt="Thumbnail" 

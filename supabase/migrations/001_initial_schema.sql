@@ -169,10 +169,7 @@ create policy "Members view conversations" on public.conversations for select us
 create policy "Authenticated create conversations" on public.conversations for insert with check (auth.uid() is not null);
 
 create policy "Members view membership" on public.conversation_members for select using (
-  user_id = auth.uid() or exists (
-    select 1 from public.conversation_members cm
-    where cm.conversation_id = conversation_members.conversation_id and cm.user_id = auth.uid()
-  )
+  user_id = auth.uid()
 );
 create policy "Users join conversations" on public.conversation_members for insert with check (auth.uid() = user_id);
 

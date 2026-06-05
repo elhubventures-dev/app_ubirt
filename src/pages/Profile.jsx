@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { formatCount } from "@/lib/formatStats";
 import { dataProvider } from "@/api/dataProvider";
 import { useToast } from "@/components/ui/use-toast";
+import { getProfileCoverUrl } from "@/lib/profileDefaults";
 import PostManageSheet from "@/components/profile/PostManageSheet";
 
 export default function Profile() {
@@ -38,7 +39,7 @@ export default function Profile() {
     queryFn: () => dataProvider.getCreatorAnalytics(28),
     enabled: activeTab === "analytics",
   });
-  const bannerUrl = `https://images.unsplash.com/photo-1557683311-eac922347aa1?w=800&h=300&fit=crop&q=80`;
+  const bannerUrl = getProfileCoverUrl(user?.cover);
 
   const openUpload = (upload) => {
     setSelectedUpload(upload);

@@ -1,5 +1,6 @@
 import { dataProvider } from "@/api/dataProvider";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/lib/AuthContext";
 
 function patchFeedPosts(queryClient, feedType, postId, patch) {
   queryClient.setQueryData(["feed", feedType], (old) => {
@@ -10,6 +11,7 @@ function patchFeedPosts(queryClient, feedType, postId, patch) {
 
 export function useFeed(feedType = "foryou") {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const feedQuery = useQuery({
     queryKey: ["feed", feedType],
     queryFn: () => dataProvider.getFeed(feedType),
@@ -68,23 +70,48 @@ export function useFeed(feedType = "foryou") {
       }
       return dataProvider.addComment(postId, text);
     },
-    onMutate: async ({ postId }) => {
+    onMutate: async ({ postId, text }) => {
       await queryClient.cancelQueries({ queryKey: ["feed", feedType] });
+      await queryClient.cancelQueries({ queryKey: ["feed-comments", postId] });
+
       const previous = queryClient.getQueryData(["feed", feedType]);
+      const previousComments = queryClient.getQueryData(["feed-comments", postId]);
       const current = Array.isArray(previous) ? previous.find((p) => p.id === postId) : null;
+
       if (current) {
         patchFeedPosts(queryClient, feedType, postId, {
           comments: (current.comments ?? 0) + 1,
         });
       }
-      return { previous };
+
+      queryClient.setQueryData(["feed-comments", postId], (old = []) => [
+        ...(Array.isArray(old) ? old : []),
+        {
+          id: `pending-${Date.now()}`,
+          author: user?.name ?? "You",
+          text,
+        },
+      ]);
+
+      return { previous, previousComments, postId };
     },
-    onError: (_err, _vars, context) => {
+    onError: (_err, vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(["feed", feedType], context.previous);
       }
+      if (context?.previousComments !== undefined) {
+        queryClient.setQueryData(["feed-comments", vars.postId], context.previousComments);
+      }
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
+      queryClient.setQueryData(["feed-comments", vars.postId], (old = []) => {
+        const list = Array.isArray(old) ? old : [];
+        const withoutPending = list.filter((c) => !String(c.id).startsWith("pending-"));
+        if (data && !withoutPending.some((c) => c.id === data.id)) {
+          return [...withoutPending, data];
+        }
+        return withoutPending;
+      });
       queryClient.invalidateQueries({ queryKey: ["feed"] });
       queryClient.invalidateQueries({ queryKey: ["feed-comments", vars.postId] });
     },
@@ -123,5 +150,6 @@ export function useFeedComments(postId) {
     queryKey: ["feed-comments", postId],
     queryFn: () => dataProvider.getComments(postId),
     enabled: Boolean(postId),
+    staleTime: 10_000,
   });
 }

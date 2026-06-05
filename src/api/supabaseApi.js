@@ -1,5 +1,5 @@
 import { getSupabase } from "@/lib/supabaseClient";
-import { uploadAvatar } from "@/api/storage";
+import { uploadAvatar, uploadCover } from "@/api/storage";
 import { processImageUpload } from "@/lib/videoPipeline";
 import { inferMediaType } from "@/lib/media";
 
@@ -264,7 +264,7 @@ export const supabaseApi = {
 
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("id, username, display_name, avatar_url, bio, website, location")
+      .select("id, username, display_name, avatar_url, cover_url, bio, website, location")
       .eq("username", username)
       .maybeSingle();
     if (error) throw error;
@@ -300,6 +300,7 @@ export const supabaseApi = {
       username: profile.username,
       name: profile.display_name ?? profile.username,
       avatar: profile.avatar_url,
+      cover: profile.cover_url ?? "",
       bio: profile.bio ?? "",
       website: profile.website ?? "",
       location: profile.location ?? "",
@@ -316,7 +317,7 @@ export const supabaseApi = {
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, username, display_name, avatar_url, bio, phone, website, location")
+      .select("id, username, display_name, avatar_url, cover_url, bio, phone, website, location")
       .eq("id", userId)
       .single();
     if (error) throw error;
@@ -412,13 +413,12 @@ export const supabaseApi = {
         .insert({ post_id: postId, user_id: userId });
       if (insertError) throw insertError;
 
-      await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 5 }).catch(() => {});
+      await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 5 });
       const actorName = await getActorDisplayName(userId);
       await notifyUser(post?.user_id, "like", `${actorName} liked your post`);
     }
 
-    const feed = await this.getFeed();
-    return feed.find((p) => p.id === postId);
+    return { id: postId, liked: !existing };
   },
 
   async toggleBookmark(postId) {
@@ -446,8 +446,7 @@ export const supabaseApi = {
       if (insertError) throw insertError;
     }
 
-    const feed = await this.getFeed();
-    return feed.find((p) => p.id === postId);
+    return { id: postId, bookmarked: !existing };
   },
   async deletePost(postId) {
     const userId = await getUserId();
@@ -664,10 +663,10 @@ export const supabaseApi = {
       .single();
     if (postError) throw postError;
 
-    await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 10 }).catch(() => {});
+    await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 10 });
     const actorName = await getActorDisplayName(userId);
     await notifyUser(post?.user_id, "comment", `${actorName} commented on your post`);
-    return { id: data.id, author: "You", text: data.text };
+    return { id: data.id, author: actorName, text: data.text };
   },
 
   async getConversations() {
@@ -1289,7 +1288,7 @@ export const supabaseApi = {
     await supabase.rpc("increment_post_views", { p_post_id: postId });
   },
 
-  async updateProfile({ name, username, bio, phone, website, location, avatarFile }) {
+  async updateProfile({ name, username, bio, phone, website, location, avatarFile, coverFile }) {
     const userId = await getUserId();
     const supabase = getSupabase();
 
@@ -1311,6 +1310,9 @@ export const supabaseApi = {
     };
     if (avatarFile) {
       updates.avatar_url = await uploadAvatar(avatarFile, userId);
+    }
+    if (coverFile) {
+      updates.cover_url = await uploadCover(coverFile, userId);
     }
 
     const { data, error } = await supabase
@@ -1345,6 +1347,7 @@ function mapProfileRow(row) {
     name: row.display_name,
     username: row.username,
     avatar: row.avatar_url,
+    cover: row.cover_url ?? "",
     bio: row.bio ?? "",
     phone: row.phone ?? "",
     website: row.website ?? "",
@@ -1371,6 +1374,6 @@ async function syncAchievementBadges(supabase, stats) {
   if (stats.followers >= 100) toUnlock.push("4");
 
   for (const badgeId of toUnlock) {
-    await supabase.rpc("unlock_badge", { p_badge_id: badgeId }).catch(() => {});
+    await supabase.rpc("unlock_badge", { p_badge_id: badgeId });
   }
 }

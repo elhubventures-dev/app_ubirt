@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
+import { feedPostPath } from "@/lib/feedLinks";
+import { getProfileCoverUrl } from "@/lib/profileDefaults";
 
 export default function UserProfile() {
   const { username } = useParams();
@@ -47,7 +49,7 @@ export default function UserProfile() {
   };
 
   const isSelf = currentUser?.username?.toLowerCase() === username?.toLowerCase();
-  const bannerUrl = "https://images.unsplash.com/photo-1557683311-eac922347aa1?w=800&h=300&fit=crop&q=80";
+  const bannerUrl = getProfileCoverUrl(profile?.cover);
 
   if (isLoading) {
     return (
@@ -219,7 +221,7 @@ export default function UserProfile() {
                 {profile.posts.map((post) => (
                   <Link
                     key={post.id}
-                    to="/feed"
+                    to={feedPostPath(post.id)}
                     className="aspect-[3/4] bg-slate-800 relative group cursor-pointer overflow-hidden"
                   >
                     <img

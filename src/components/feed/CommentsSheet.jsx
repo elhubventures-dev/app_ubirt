@@ -9,6 +9,7 @@ export default function CommentsSheet({
   onSubmit,
   onClose,
   isSubmitting = false,
+  isLoading = false,
 }) {
   const content = (
     <>
@@ -41,7 +42,9 @@ export default function CommentsSheet({
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
-          {comments.length === 0 ? (
+          {isLoading ? (
+            <p className="text-center text-slate-400 mt-6">Loading comments...</p>
+          ) : comments.length === 0 ? (
             <p className="text-center text-slate-400 mt-6">No comments yet. Be the first to comment!</p>
           ) : (
             comments.map((comment) => (
@@ -53,9 +56,9 @@ export default function CommentsSheet({
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <span className="font-semibold text-sm text-slate-200">{comment.author}</span>
-                  <p className="text-slate-100 text-sm mt-0.5">{comment.text}</p>
+                  <p className="text-slate-100 text-sm mt-0.5 break-words">{comment.text}</p>
                 </div>
               </div>
             ))

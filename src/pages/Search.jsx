@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { dataProvider } from "@/api/dataProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
+import { feedPostPath } from "@/lib/feedLinks";
 
 const DATE_FILTERS = {
   any: null,
@@ -238,7 +239,7 @@ export default function Search() {
                              </div>
                           </Link>
                         ) : (
-                          <Link to="/feed" className="bg-white/5 border border-white/5 p-3 rounded-2xl flex gap-3 group">
+                          <Link to={feedPostPath(result.id)} className="bg-white/5 border border-white/5 p-3 rounded-2xl flex gap-3 group">
                              <div className="w-16 h-20 bg-slate-800 rounded-lg overflow-hidden shrink-0 relative">
                                <img src={result.media_url || `https://images.unsplash.com/photo-1616469829581-73993eb86b02?w=150&h=200&fit=crop&q=80&seed=${result.id}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-80" alt="" />
                              </div>

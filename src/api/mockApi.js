@@ -32,6 +32,7 @@ let mockProfileExtras = {
   phone: "",
   website: "",
   location: "",
+  cover: "",
 };
 let mockWalletBalance = SIGNUP_BONUS_COINS;
 let mockReceiverBalances = {};
@@ -596,29 +597,36 @@ export const mockApi = {
       name: "Alex Demo",
       username: "alexdemo",
       avatar: null,
+      cover: mockProfileExtras.cover,
       bio: mockProfileExtras.bio,
       phone: mockProfileExtras.phone,
       website: mockProfileExtras.website,
       location: mockProfileExtras.location,
     };
   },
-  async updateProfile({ name, username, bio, phone, website, location, avatarFile }) {
+  async updateProfile({ name, username, bio, phone, website, location, avatarFile, coverFile }) {
     await wait();
     let avatarUrl = undefined;
+    let coverUrl = undefined;
     if (avatarFile) {
       avatarUrl = URL.createObjectURL(avatarFile);
+    }
+    if (coverFile) {
+      coverUrl = URL.createObjectURL(coverFile);
     }
     mockProfileExtras = {
       bio: bio ?? mockProfileExtras.bio,
       phone: phone ?? mockProfileExtras.phone,
       website: website ?? mockProfileExtras.website,
       location: location ?? mockProfileExtras.location,
+      cover: coverUrl ?? mockProfileExtras.cover,
     };
     persistState();
     return {
       name,
       username,
       avatar: avatarUrl,
+      cover: mockProfileExtras.cover,
       bio: mockProfileExtras.bio,
       phone: mockProfileExtras.phone,
       website: mockProfileExtras.website,
