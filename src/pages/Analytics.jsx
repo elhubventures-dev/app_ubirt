@@ -1,40 +1,56 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { Card } from "@/components/ui/card";
 import { dataProvider } from "@/api/dataProvider";
 import { useQuery } from "@tanstack/react-query";
 
+const RANGES = [
+  { label: "7 Days", days: 7 },
+  { label: "28 Days", days: 28 },
+  { label: "90 Days", days: 90 },
+  { label: "All Time", days: 365 },
+];
+
 export default function Analytics() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [days, setDays] = useState(28);
 
   const { data: stats, isLoading } = useQuery({
-    queryKey: ["analytics", user?.id],
-    queryFn: () => dataProvider.getCreatorAnalytics(),
+    queryKey: ["analytics", user?.id, days],
+    queryFn: () => dataProvider.getCreatorAnalytics(days),
   });
+
+  const growthLabel =
+    (stats?.growthPct ?? 0) >= 0
+      ? `+${stats?.growthPct ?? 0}% this period`
+      : `${stats?.growthPct ?? 0}% this period`;
 
   return (
     <div className="min-h-screen bg-[#101822] text-white flex flex-col relative overflow-hidden">
-      {/* Aesthetics */}
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#0d5bba]/10 via-[#101822] to-[#152336] z-0" />
 
-      {/* Header */}
       <header className="relative z-10 px-4 py-4 flex items-center border-b border-white/5 bg-[#101822]/50 backdrop-blur-md">
-        <button onClick={() => navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors mr-4">
+        <button type="button" onClick={() => navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors mr-4">
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
         <h1 className="text-xl font-bold flex-1 text-center pr-10">Creator Analytics</h1>
       </header>
 
       <main className="flex-1 relative z-10 p-4 max-w-md mx-auto w-full flex flex-col gap-6 pb-10">
-        
-        {/* Date Range Selector (Visual only) */}
         <div className="flex justify-between items-center bg-white/5 rounded-full p-1">
-          {["7 Days", "28 Days", "90 Days", "All Time"].map((range, i) => (
-            <button key={range} className={`flex-1 py-1.5 text-xs font-bold rounded-full ${i === 1 ? 'bg-white text-black shadow-md' : 'text-slate-400 hover:text-white'}`}>
-              {range}
+          {RANGES.map((range) => (
+            <button
+              key={range.label}
+              type="button"
+              onClick={() => setDays(range.days)}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-full transition-colors ${
+                days === range.days ? "bg-white text-black shadow-md" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              {range.label}
             </button>
           ))}
         </div>
@@ -47,7 +63,6 @@ export default function Analytics() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
-            {/* Key Metrics */}
             <div className="grid grid-cols-2 gap-3">
               <Card className="p-4 bg-white/5 border-white/5 flex flex-col items-center text-center">
                 <span className="material-symbols-outlined text-[#3b82f6] text-[32px] mb-2">group</span>
@@ -71,15 +86,14 @@ export default function Analytics() {
               </Card>
             </div>
 
-            {/* Growth Chart */}
             <Card className="p-5 bg-gradient-to-br from-[#0d5bba]/10 to-transparent border-[#0d5bba]/20 mt-4">
                <div className="flex justify-between items-center mb-4">
                  <h3 className="font-semibold text-lg">Growth Trajectory</h3>
-                 <span className="text-xs px-2 py-1 bg-[#3b82f6]/20 text-[#3b82f6] rounded-full font-bold">+12% this week</span>
+                 <span className="text-xs px-2 py-1 bg-[#3b82f6]/20 text-[#3b82f6] rounded-full font-bold">{growthLabel}</span>
                </div>
                <div className="h-40 flex items-end justify-between gap-1 sm:gap-2 px-2">
-                  {(stats?.chartData || [30, 45, 25, 60, 40, 75, 90]).map((h, i) => (
-                    <div key={i} className="w-full bg-[#3b82f6] rounded-t-sm" style={{ height: `${h}%`, opacity: 0.5 + (i * 0.05) }}></div>
+                  {(stats?.chartData || [0, 0, 0, 0, 0, 0, 0]).map((h, i) => (
+                    <div key={i} className="w-full bg-[#3b82f6] rounded-t-sm" style={{ height: `${h}%`, opacity: 0.5 + (i * 0.05) }} />
                   ))}
                </div>
                <div className="flex justify-between mt-2 text-xs text-slate-500 px-2 font-medium">

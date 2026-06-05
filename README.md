@@ -55,7 +55,10 @@ Also set `VITE_APP_URL` (local or production URL) and optionally `SUPABASE_SERVI
    - **Site URL:** `http://localhost:5173` (or your production URL)
    - **Redirect URLs:** `http://localhost:5173/login`, `http://localhost:5173/**`
 5. Run `supabase/migrations/002_profiles_auth_fix.sql` in the SQL Editor (profile insert policy + signup fix).
-6. Copy **Project URL** and **anon public key** from **Settings → API**.
+6. Run `supabase/migrations/003_analytics_gamification.sql` (views, XP, follows, achievements).
+7. Run `supabase/migrations/004_wallet_mux_push_notifications.sql` (coins, Paystack ledger, push tokens, Mux on posts, live notifications).
+8. Run `supabase/migrations/005_achievement_unlock.sql` (badge unlock RPC).
+9. Copy **Project URL** and **anon public key** from **Settings → API**.
 
 ## 2. Local live mode
 
@@ -82,7 +85,15 @@ Copy **all** keys from `.env.example` into Vercel → Project → Settings → E
 
 4. Deploy. SPA routing is configured in `vercel.json`.
 
-**Local API routes (AI + Mux):** run `npx vercel dev` instead of `npm run dev` to test `/api/*` locally.
+**Local API routes (AI, Mux, Paystack webhooks):** use Vercel’s dev server so `/api/*` works:
+
+```bash
+npm run dev:api
+```
+
+This runs `vercel dev`, which serves the Vite app **and** serverless routes under `api/`. Plain `npm run dev` only starts Vite — AI chat, video ingest, and Paystack webhooks will **not** work locally without `dev:api`.
+
+Ensure `.env.local` includes server keys (`OPENAI_API_KEY`, `MUX_*`, `PAYSTACK_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) when testing those routes.
 
 ## 4. Storage
 
@@ -105,6 +116,13 @@ Copy **all** keys from `.env.example` into Vercel → Project → Settings → E
 - If Mux credentials are set on Vercel, playback uses Mux HLS URLs.
 - Without Mux, videos play from Supabase Storage URLs.
 
+## 8. Monitoring (optional)
+
+- **Sentry:** set `VITE_SENTRY_DSN` — errors from `ErrorBoundary` are reported automatically.
+- **PostHog:** set `VITE_POSTHOG_KEY` (+ optional `VITE_POSTHOG_HOST`) — page views and user sessions tracked on navigation.
+
+See [docs/ACCOUNTS.md](docs/ACCOUNTS.md#error-monitoring--analytics-optional).
+
 ---
 
 ## Scripts
@@ -118,7 +136,11 @@ npm run test     # Vitest
 
 ## UI components
 
-Shared primitives in `src/components/ui/` — `Card`, `PrimaryButton`, `SkeletonRow`, `InputField`.
+**Active primitives** (used across the app): `Card`, `PrimaryButton`, `SkeletonRow`, `InputField`, `toaster` / `use-toast`.
+
+Other files under `src/components/ui/` are unused shadcn scaffolds kept for future expansion — safe to ignore or replace when needed.
+
+Feed-specific: `src/components/feed/CommentsSheet.jsx` powers the video feed comment drawer.
 
 ## Architecture
 

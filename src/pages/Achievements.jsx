@@ -11,12 +11,6 @@ const BADGES = [
   { id: 6, title: "Diamond Status", description: "Received 1,000 gifts.", icon: "diamond", color: "from-cyan-300 to-blue-500", unlocked: false },
 ];
 
-const QUESTS = [
-  { id: 1, title: "Watch 5 Videos", progress: 5, total: 5, reward: 50, completed: true },
-  { id: 2, title: "Leave 3 Comments", progress: 1, total: 3, reward: 30, completed: false },
-  { id: 3, title: "Upload a Video", progress: 0, total: 1, reward: 100, completed: false },
-];
-
 import { useQuery } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
 
@@ -30,13 +24,14 @@ export default function Achievements() {
 
   const level = data?.level || 1;
   const xp = data?.xp || 0;
-  const xpNeeded = level * level * 100;
-  const progress = (xp / xpNeeded) * 100;
+  const xpNeeded = data?.xpForNextLevel ?? level * level * 100;
+  const progress = data?.xpProgress ?? 0;
+  const quests = data?.quests ?? [];
   
   const unlockedBadges = new Set(data?.badges || []);
   const displayBadges = BADGES.map(b => ({
     ...b,
-    unlocked: unlockedBadges.has(b.id.toString()) || b.id === 1 // Badge 1 is free
+    unlocked: unlockedBadges.has(String(b.id)) || unlockedBadges.has(b.id),
   }));
 
   return (
@@ -133,7 +128,7 @@ export default function Achievements() {
           {/* Daily Quests */}
           {activeTab === "quests" && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-               {QUESTS.map((quest, i) => (
+               {quests.map((quest, i) => (
                  <motion.div 
                    key={quest.id}
                    initial={{ opacity: 0, x: -20 }}

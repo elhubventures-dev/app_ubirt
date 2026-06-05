@@ -70,8 +70,8 @@ export const mockAiMessages = [
 ];
 
 export const mockNotifications = [
-  { id: "n1", type: "comment", text: "Maya commented on your clip draft.", time: "8m ago" },
-  { id: "n2", type: "mention", text: "Noah mentioned you in #creator-lab.", time: "30m ago" },
+  { id: "n1", type: "comment", text: "Maya commented on your clip draft.", time: "8m ago", read: false },
+  { id: "n2", type: "mention", text: "Noah mentioned you in #creator-lab.", time: "30m ago", read: true },
 ];
 
 export const mockCreatorStats = {

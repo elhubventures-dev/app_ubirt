@@ -12,6 +12,34 @@ async function getUserId() {
   return user.id;
 }
 
+async function notifyUser(recipientId, type, text) {
+  if (!recipientId) return;
+  const supabase = getSupabase();
+  await supabase.rpc("create_notification", {
+    p_recipient_id: recipientId,
+    p_type: type,
+    p_text: text,
+  });
+}
+
+async function getActorDisplayName(userId) {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", userId)
+    .maybeSingle();
+  return data?.display_name ?? "Someone";
+}
+
+function inferMediaType(mediaUrl, muxPlaybackId) {
+  if (muxPlaybackId) return "video";
+  if (!mediaUrl) return "image";
+  if (/\.(mp4|webm|ogg|mov|m3u8)(\?|$)/i.test(mediaUrl)) return "video";
+  if (/stream\.mux\.com/i.test(mediaUrl)) return "video";
+  return "image";
+}
+
 function mapPost(row, profile, liked, bookmarked) {
   const hashtags = row.caption?.match(/#[\w]+/g) || [];
   const tags = new Set(hashtags);
@@ -116,10 +144,19 @@ export const supabaseApi = {
       await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", userId);
       await supabase.rpc("decrement_post_likes", { post_id: postId }).catch(() => {});
     } else {
+      const { data: post } = await supabase
+        .from("posts")
+        .select("user_id, likes_count")
+        .eq("id", postId)
+        .single();
       await supabase.from("post_likes").insert({ post_id: postId, user_id: userId });
-      const { data: post } = await supabase.from("posts").select("likes_count").eq("id", postId).single();
-      await supabase.from("posts").update({ likes_count: (post?.likes_count ?? 0) + 1 }).eq("id", postId);
+      await supabase
+        .from("posts")
+        .update({ likes_count: (post?.likes_count ?? 0) + 1 })
+        .eq("id", postId);
       await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 5 });
+      const actorName = await getActorDisplayName(userId);
+      await notifyUser(post?.user_id, "like", `${actorName} liked your post`);
     }
     const feed = await this.getFeed();
     return feed.find((p) => p.id === postId);
@@ -167,22 +204,129 @@ export const supabaseApi = {
     return { success: true, amount };
   },
 
-  async getCreatorAnalytics() {
+  async getCreatorAnalytics(days = 28) {
     const userId = await getUserId();
     const supabase = getSupabase();
-    
-    const { count: followers } = await supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", userId);
-    const { data: posts } = await supabase.from("posts").select("views_count, likes_count").eq("user_id", userId);
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    const prevSince = new Date(since);
+    prevSince.setDate(prevSince.getDate() - days);
+
+    const { count: followers } = await supabase
+      .from("follows")
+      .select("*", { count: "exact", head: true })
+      .eq("following_id", userId);
+    const { data: posts } = await supabase
+      .from("posts")
+      .select("views_count, likes_count, created_at")
+      .eq("user_id", userId)
+      .gte("created_at", since.toISOString());
+    const { data: prevPosts } = await supabase
+      .from("posts")
+      .select("views_count")
+      .eq("user_id", userId)
+      .gte("created_at", prevSince.toISOString())
+      .lt("created_at", since.toISOString());
     const views = (posts ?? []).reduce((sum, p) => sum + (p.views_count ?? 0), 0);
+    const prevViews = (prevPosts ?? []).reduce((sum, p) => sum + (p.views_count ?? 0), 0);
     const { data: profile } = await supabase.from("profiles").select("coins").eq("id", userId).single();
-    
+
+    const chartDays = Math.min(days, 7);
+    const chartData = [];
+    for (let i = chartDays - 1; i >= 0; i -= 1) {
+      const dayStart = new Date();
+      dayStart.setHours(0, 0, 0, 0);
+      dayStart.setDate(dayStart.getDate() - i);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      const dayViews = (posts ?? [])
+        .filter((p) => {
+          const created = new Date(p.created_at);
+          return created >= dayStart && created < dayEnd;
+        })
+        .reduce((sum, p) => sum + (p.views_count ?? 0), 0);
+      chartData.push(dayViews);
+    }
+    const maxChart = Math.max(...chartData, 1);
+
     return {
       followers: followers ?? 0,
       views,
       completionRate: Math.min(100, 40 + (posts?.length ?? 0) * 5),
       earnings: profile?.coins ?? 0,
-      chartData: [30, 45, 25, 60, 40, 75, 90]
+      chartData: chartData.map((v) => Math.max(8, Math.round((v / maxChart) * 100))),
+      growthPct: prevViews > 0 ? Math.round(((views - prevViews) / prevViews) * 100) : views > 0 ? 100 : 0,
     };
+  },
+
+  async search(query, options = {}) {
+    const q = query.trim();
+    if (!q) return { users: [], posts: [], tags: [] };
+
+    const supabase = getSupabase();
+    const userId = await getUserId();
+
+    let postsQuery = supabase
+      .from("posts")
+      .select("*, profiles:user_id (username, display_name, avatar_url)")
+      .ilike("caption", `%${q}%`)
+      .limit(20);
+
+    if (options.sort === "likes") postsQuery = postsQuery.order("likes_count", { ascending: false });
+    else if (options.sort === "views") postsQuery = postsQuery.order("views_count", { ascending: false });
+    else postsQuery = postsQuery.order("created_at", { ascending: false });
+
+    if (options.since) postsQuery = postsQuery.gte("created_at", options.since);
+
+    const [{ data: postsRaw }, { data: usersRaw }] = await Promise.all([
+      postsQuery,
+      supabase
+        .from("profiles")
+        .select("id, username, display_name, avatar_url")
+        .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
+        .neq("id", userId)
+        .limit(10),
+    ]);
+
+    const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", userId);
+    const likedSet = new Set((likes ?? []).map((l) => l.post_id));
+
+    const posts = (postsRaw ?? []).map((p) => mapPost(p, p.profiles, likedSet.has(p.id), false));
+    const users = (usersRaw ?? []).map((u) => ({
+      id: u.id,
+      username: u.username,
+      name: u.display_name ?? u.username,
+      avatar: u.avatar_url,
+    }));
+    const tags = [
+      ...new Set((postsRaw ?? []).flatMap((p) => p.caption?.match(/#[\w]+/g) || [])),
+    ].slice(0, 5);
+
+    return { users, posts, tags };
+  },
+
+  async getSuggestedCreators() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data: following } = await supabase
+      .from("follows")
+      .select("following_id")
+      .eq("follower_id", userId);
+    const exclude = new Set([userId, ...(following ?? []).map((f) => f.following_id)]);
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username, display_name, avatar_url")
+      .limit(12);
+
+    return (data ?? [])
+      .filter((p) => !exclude.has(p.id))
+      .slice(0, 4)
+      .map((u) => ({
+        id: u.id,
+        username: u.username,
+        name: u.display_name ?? u.username,
+        avatar: u.avatar_url,
+      }));
   },
 
   async getComments(postId) {
@@ -209,12 +353,18 @@ export const supabaseApi = {
       .select()
       .single();
     if (error) throw error;
-    const { data: post } = await supabase.from("posts").select("comments_count").eq("id", postId).single();
+    const { data: post } = await supabase
+      .from("posts")
+      .select("user_id, comments_count")
+      .eq("id", postId)
+      .single();
     await supabase
       .from("posts")
       .update({ comments_count: (post?.comments_count ?? 0) + 1 })
       .eq("id", postId);
     await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 10 });
+    const actorName = await getActorDisplayName(userId);
+    await notifyUser(post?.user_id, "comment", `${actorName} commented on your post`);
     return { id: data.id, author: "You", text: data.text };
   },
 
@@ -633,7 +783,32 @@ export const supabaseApi = {
       type: n.type,
       text: n.text,
       time: formatRelative(n.created_at),
+      read: n.read ?? false,
     }));
+  },
+
+  async markNotificationRead(notificationId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("id", notificationId)
+      .eq("user_id", userId);
+    if (error) throw error;
+    return true;
+  },
+
+  async markAllNotificationsRead() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("user_id", userId)
+      .eq("read", false);
+    if (error) throw error;
+    return true;
   },
 
   async createPostFromUpload(uploadId) {
@@ -647,8 +822,10 @@ export const supabaseApi = {
         user_id: userId,
         caption: upload.description || upload.title,
         media_url: upload.media_url,
-        media_type: upload.media_url?.match(/\.(mp4|webm|ogg|mov)$/i) ? "video" : "image",
+        media_type: inferMediaType(upload.media_url, upload.mux_playback_id),
         category: (upload.category ?? "general").toLowerCase(),
+        mux_asset_id: upload.mux_asset_id,
+        mux_playback_id: upload.mux_playback_id,
       })
       .select()
       .single();
@@ -661,11 +838,64 @@ export const supabaseApi = {
     const userId = await getUserId();
     const supabase = getSupabase();
     const { data: profile } = await supabase.from("profiles").select("xp, level").eq("id", userId).single();
+    const xp = profile?.xp ?? 0;
+    const level = profile?.level ?? 1;
+
+    const [
+      { count: commentCount },
+      { count: uploadCount },
+      { count: followers },
+      { data: posts },
+    ] = await Promise.all([
+      supabase.from("comments").select("*", { count: "exact", head: true }).eq("user_id", userId),
+      supabase.from("uploads").select("*", { count: "exact", head: true }).eq("user_id", userId).eq("status", "published"),
+      supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", userId),
+      supabase.from("posts").select("views_count").eq("user_id", userId),
+    ]);
+
+    const views = (posts ?? []).reduce((sum, p) => sum + (p.views_count ?? 0), 0);
+    await syncAchievementBadges(supabase, {
+      uploadCount: uploadCount ?? 0,
+      commentCount: commentCount ?? 0,
+      followers: followers ?? 0,
+      views,
+    });
+
     const { data: unlocked } = await supabase.from("user_achievements").select("badge_id").eq("user_id", userId);
+    const quests = [
+      {
+        id: "upload",
+        title: "Upload a Video",
+        progress: Math.min(uploadCount ?? 0, 1),
+        total: 1,
+        reward: 100,
+        completed: (uploadCount ?? 0) >= 1,
+      },
+      {
+        id: "comments",
+        title: "Leave 3 Comments",
+        progress: Math.min(commentCount ?? 0, 3),
+        total: 3,
+        reward: 30,
+        completed: (commentCount ?? 0) >= 3,
+      },
+      {
+        id: "views",
+        title: "Reach 1,000 Views",
+        progress: Math.min(views, 1000),
+        total: 1000,
+        reward: 50,
+        completed: views >= 1000,
+      },
+    ];
+
     return {
-      xp: profile?.xp ?? 0,
-      level: profile?.level ?? 1,
-      badges: (unlocked ?? []).map(u => u.badge_id)
+      xp,
+      level,
+      xpForNextLevel: xpForLevel(level),
+      xpProgress: xpProgress(xp, level),
+      badges: (unlocked ?? []).map((u) => u.badge_id),
+      quests,
     };
   },
 
@@ -695,7 +925,7 @@ export const supabaseApi = {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    return mapProfileRow(data);
   },
 };
 
@@ -708,4 +938,35 @@ function formatRelative(iso) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function mapProfileRow(row) {
+  return {
+    name: row.display_name,
+    username: row.username,
+    avatar: row.avatar_url,
+  };
+}
+
+function xpForLevel(level) {
+  return level * level * 100;
+}
+
+function xpProgress(xp, level) {
+  const current = (level - 1) ** 2 * 100;
+  const next = xpForLevel(level);
+  if (next <= current) return 100;
+  return Math.min(100, ((xp - current) / (next - current)) * 100);
+}
+
+async function syncAchievementBadges(supabase, stats) {
+  const toUnlock = [];
+  if (stats.uploadCount >= 1) toUnlock.push("1");
+  if (stats.views >= 100000) toUnlock.push("2");
+  if (stats.commentCount >= 50) toUnlock.push("3");
+  if (stats.followers >= 100) toUnlock.push("4");
+
+  for (const badgeId of toUnlock) {
+    await supabase.rpc("unlock_badge", { p_badge_id: badgeId }).catch(() => {});
+  }
 }

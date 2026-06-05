@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ensureUserProfile, getAuthAvatarUrl, getAuthDisplayName, getOAuthRedirectUrl } from "@/lib/authHelpers";
+import { resetAnalyticsUser } from "@/lib/monitoring";
 import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 const AuthContext = createContext(null);
@@ -194,10 +195,36 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   }, []);
 
+  const signInWithApple = useCallback(async () => {
+    const supabase = getSupabase();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "apple",
+      options: {
+        redirectTo: getOAuthRedirectUrl(),
+      },
+    });
+    if (error) throw error;
+  }, []);
+
+  const resetPassword = useCallback(async (email) => {
+    const supabase = getSupabase();
+    const redirectTo = `${import.meta.env.VITE_APP_URL || window.location.origin}/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw error;
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword) => {
+    const supabase = getSupabase();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+    navigate("/login", { replace: true });
+  }, [navigate]);
+
   const signOut = useCallback(async () => {
     if (useLiveAuth) {
       await getSupabase().auth.signOut();
     }
+    resetAnalyticsUser();
     setUser(null);
     setAuthError({ type: "auth_required" });
     navigate("/login", { replace: true });
@@ -221,6 +248,9 @@ export function AuthProvider({ children }) {
       signIn,
       signUp,
       signInWithGoogle,
+      signInWithApple,
+      resetPassword,
+      updatePassword,
       signOut,
       updateUserSession,
       isLiveAuth: useLiveAuth,
@@ -234,6 +264,9 @@ export function AuthProvider({ children }) {
       signIn,
       signUp,
       signInWithGoogle,
+      signInWithApple,
+      resetPassword,
+      updatePassword,
       signOut,
       updateUserSession,
       useLiveAuth,

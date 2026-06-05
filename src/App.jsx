@@ -10,6 +10,8 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import MainLayout from "@/components/layout/MainLayout";
 import { motion } from "framer-motion";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
+import PageTracker from "@/components/PageTracker";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 import Home from "./pages/Home";
@@ -116,10 +118,12 @@ function App() {
   return (
     <Router>
       <AuthProvider>
+        <PageTracker />
         <ToastProvider>
           <QueryClientProvider client={queryClientInstance}>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/*" element={<ErrorBoundary><AuthenticatedApp /></ErrorBoundary>} />
             </Routes>
             <Toaster />

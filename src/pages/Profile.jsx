@@ -5,10 +5,16 @@ import { useCreatorStudio } from "@/hooks/useCreatorStudio";
 import { Card } from "@/components/ui/card";
 import { getButtonClasses } from "@/components/ui/PrimaryButton";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
+import { dataProvider } from "@/api/dataProvider";
 
 export default function Profile() {
   const { user } = useAuth();
   const { data: stats, uploads = [], isLoadingUploads } = useCreatorStudio();
+  const { data: achievements } = useQuery({
+    queryKey: ["achievements"],
+    queryFn: () => dataProvider.getAchievements(),
+  });
   const [activeTab, setActiveTab] = useState("grid"); // 'grid' | 'analytics'
 
   // Generate a premium dynamic banner based on user's name
@@ -58,7 +64,9 @@ export default function Profile() {
         <Link to="/achievements" className="flex justify-between items-end mb-3 group cursor-pointer">
           <div>
             <h2 className="text-sm font-bold text-white group-hover:text-[#3b82f6] transition-colors">Achievements</h2>
-            <p className="text-[10px] text-slate-400 font-medium">Level 12 • 3 Unlocked</p>
+            <p className="text-[10px] text-slate-400 font-medium">
+              Level {achievements?.level ?? 1} • {(achievements?.badges ?? []).length} Unlocked
+            </p>
           </div>
           <span className="material-symbols-outlined text-[16px] text-slate-500 group-hover:text-[#3b82f6] transition-colors">chevron_right</span>
         </Link>

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { dataProvider } from "@/api/dataProvider";
 import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -13,6 +13,16 @@ export function useNotifications() {
   const query = useQuery({
     queryKey: ["notifications"],
     queryFn: dataProvider.getNotifications,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id) => dataProvider.markNotificationRead(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: () => dataProvider.markAllNotificationsRead(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   useEffect(() => {
@@ -44,5 +54,10 @@ export function useNotifications() {
     };
   }, [user, queryClient, toast]);
 
-  return query;
+  return {
+    ...query,
+    markRead: markReadMutation.mutateAsync,
+    markAllRead: markAllReadMutation.mutateAsync,
+    isMarkingRead: markReadMutation.isPending || markAllReadMutation.isPending,
+  };
 }

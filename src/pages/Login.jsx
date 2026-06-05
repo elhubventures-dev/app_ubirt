@@ -13,7 +13,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
-  const { user, signIn, signUp, signInWithGoogle, isLiveAuth, isLoadingAuth } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, signInWithApple, resetPassword, isLiveAuth, isLoadingAuth } = useAuth();
   const { toast } = useToast();
 
   if (user && isLiveAuth && !isLoadingAuth) {
@@ -34,10 +34,33 @@ export default function Login() {
     }
   };
 
+  const onAppleSignIn = async () => {
+    setLoading(true);
+    try {
+      await signInWithApple();
+    } catch (error) {
+      toast({
+        title: "Apple sign-in failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      setLoading(false);
+    }
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
+      if (mode === "forgot") {
+        await resetPassword(email.trim());
+        toast({
+          title: "Check your email",
+          description: "We sent a password reset link if that account exists.",
+        });
+        setMode("signin");
+        return;
+      }
       if (mode === "signin") {
         await signIn(email.trim(), password);
         toast({ title: "Welcome back" });
@@ -92,7 +115,13 @@ export default function Login() {
              UBIRT<span className="text-[#3b82f6]">.AI</span>
            </h1>
            <p className="text-slate-400 text-sm font-medium">
-             {isMock ? "Mock Mode Active" : mode === "signin" ? "Welcome back, creator." : "Join the next generation of creators."}
+             {isMock
+               ? "Mock Mode Active"
+               : mode === "forgot"
+                 ? "We'll email you a reset link."
+                 : mode === "signin"
+                   ? "Welcome back, creator."
+                   : "Join the next generation of creators."}
            </p>
         </div>
 
@@ -107,6 +136,8 @@ export default function Login() {
            </div>
         ) : (
           <>
+            {mode !== "forgot" && (
+            <>
             <button
               type="button"
               disabled={loading}
@@ -134,6 +165,21 @@ export default function Login() {
               Continue with Google
             </button>
 
+            <button
+              type="button"
+              disabled={loading}
+              onClick={onAppleSignIn}
+              className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-xl bg-black text-white font-semibold border border-white/20 hover:bg-white/10 transition-colors disabled:opacity-60 mt-3"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+              </svg>
+              Continue with Apple
+            </button>
+            </>
+            )}
+
+            {mode !== "forgot" && (
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-white/10" />
@@ -142,6 +188,7 @@ export default function Login() {
                 <span className="bg-[#1a2332]/60 px-3 text-slate-500">or with email</span>
               </div>
             </div>
+            )}
 
             <form onSubmit={onSubmit} className="space-y-4">
              <AnimatePresence mode="popLayout">
@@ -176,21 +223,37 @@ export default function Login() {
                />
              </div>
              
-             <div>
-               <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-1 block">Password</label>
-               <InputField
-                 type="password"
-                 value={password}
-                 onChange={(e) => setPassword(e.target.value)}
-                 placeholder="••••••••"
-                 required
-                 minLength={6}
-                 className="w-full bg-[#0a0f16]/50 border-white/5 py-3 px-4 rounded-xl focus:bg-[#0a0f16]/80 focus:border-[#3b82f6]/50 transition-all text-white placeholder-slate-500"
-               />
-             </div>
+             {mode !== "forgot" && (
+               <>
+                 <div>
+                   <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-1 block">Password</label>
+                   <InputField
+                     type="password"
+                     value={password}
+                     onChange={(e) => setPassword(e.target.value)}
+                     placeholder="••••••••"
+                     required
+                     minLength={6}
+                     className="w-full bg-[#0a0f16]/50 border-white/5 py-3 px-4 rounded-xl focus:bg-[#0a0f16]/80 focus:border-[#3b82f6]/50 transition-all text-white placeholder-slate-500"
+                   />
+                 </div>
+
+                 {mode === "signin" && (
+                   <div className="text-right -mt-2">
+                     <button
+                       type="button"
+                       className="text-xs text-[#3b82f6] hover:text-[#2563eb] font-medium"
+                       onClick={() => setMode("forgot")}
+                     >
+                       Forgot password?
+                     </button>
+                   </div>
+                 )}
+               </>
+             )}
              
              <PrimaryButton type="submit" disabled={loading} className="w-full py-4 rounded-xl text-base font-semibold shadow-[0_4px_14px_rgba(59,130,246,0.3)] hover:-translate-y-0.5 transition-transform mt-2">
-               {mode === "signin" ? "Sign In" : "Create Account"}
+               {mode === "signin" ? "Sign In" : mode === "forgot" ? "Send Reset Link" : "Create Account"}
              </PrimaryButton>
           </form>
           </>
@@ -202,13 +265,21 @@ export default function Login() {
               type="button"
               className="text-sm text-slate-400 hover:text-white transition-colors"
               onClick={() => {
-                 setMode(mode === "signin" ? "signup" : "signin");
+                 if (mode === "forgot") {
+                   setMode("signin");
+                 } else {
+                   setMode(mode === "signin" ? "signup" : "signin");
+                 }
                  setEmail("");
                  setPassword("");
                  setUsername("");
               }}
             >
-              {mode === "signin" ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+              {mode === "forgot"
+                ? "Back to sign in"
+                : mode === "signin"
+                  ? "Don't have an account? Sign up"
+                  : "Already have an account? Sign in"}
             </button>
           </div>
         )}

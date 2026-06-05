@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
 import { getDataMode, dataProvider } from "@/api/dataProvider";
+import { getPreference, setPreference } from "@/lib/preferences";
 import { motion } from "framer-motion";
 
 function Toggle({ checked, onChange, label }) {
@@ -25,26 +26,43 @@ function Toggle({ checked, onChange, label }) {
 
 export default function Settings() {
   const { user, signOut, isLiveAuth, updateUserSession } = useAuth();
-  const [autoplay, setAutoplay] = useState(() => localStorage.getItem("ubirt.pref.autoplay") !== "false");
-  const [aiAssist, setAiAssist] = useState(() => localStorage.getItem("ubirt.pref.aiAssist") !== "false");
-  const [notifications, setNotifications] = useState(true);
+  const [autoplay, setAutoplay] = useState(() => getPreference("autoplay", true));
+  const [aiAssist, setAiAssist] = useState(() => getPreference("aiAssist", true));
+  const [notifications, setNotifications] = useState(() => getPreference("push", true));
   
-  const [name, setName] = useState(user?.name || "");
-  const [username, setUsername] = useState(user?.username || "");
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [avatarFile, setAvatarFile] = useState(null);
   
   const { toast } = useToast();
 
+  useEffect(() => {
+    if (!user) return;
+    setName(user.name || "");
+    setUsername(user.username || "");
+  }, [user]);
+
   const toggleAutoplay = (next) => {
     setAutoplay(next);
-    localStorage.setItem("ubirt.pref.autoplay", String(next));
+    setPreference("autoplay", next);
     toast({ title: "Preference saved", description: `Autoplay ${next ? "enabled" : "disabled"}.` });
   };
 
   const toggleAiAssist = (next) => {
     setAiAssist(next);
-    localStorage.setItem("ubirt.pref.aiAssist", String(next));
+    setPreference("aiAssist", next);
     toast({ title: "Preference saved", description: `AI assist ${next ? "enabled" : "disabled"}.` });
+  };
+
+  const togglePush = (next) => {
+    setNotifications(next);
+    setPreference("push", next);
+    toast({
+      title: "Push preference saved",
+      description: next
+        ? "Native push will register when you use the mobile app."
+        : "Push notifications disabled in preferences.",
+    });
   };
 
   const [isSaving, setIsSaving] = useState(false);
@@ -54,7 +72,12 @@ export default function Settings() {
     setIsSaving(true);
     try {
       const updated = await dataProvider.updateProfile(name, username, avatarFile);
-      updateUserSession(updated);
+      updateUserSession({
+        name: updated.name ?? name,
+        username: updated.username ?? username,
+        avatar: updated.avatar ?? user?.avatar,
+      });
+      setAvatarFile(null);
       toast({ title: "Profile updated", description: "Your changes have been saved." });
     } catch (error) {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
@@ -124,7 +147,7 @@ export default function Settings() {
             <div className="space-y-2">
                <Toggle checked={autoplay} onChange={toggleAutoplay} label="Autoplay feed videos" />
                <Toggle checked={aiAssist} onChange={toggleAiAssist} label="AI assistance in composer" />
-               <Toggle checked={notifications} onChange={(v) => { setNotifications(v); toast({ title: "Notifications updated" }); }} label="Push Notifications" />
+               <Toggle checked={notifications} onChange={togglePush} label="Push Notifications" />
             </div>
           </section>
 

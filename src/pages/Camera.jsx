@@ -1,144 +1,261 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+
+const DURATIONS = [
+  { label: "15s", ms: 15_000 },
+  { label: "60s", ms: 60_000 },
+  { label: "3m", ms: 180_000 },
+];
 
 export default function Camera() {
   const [isRecording, setIsRecording] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [durationMs, setDurationMs] = useState(DURATIONS[1].ms);
+  const [facingMode, setFacingMode] = useState("user");
+  const [cameraError, setCameraError] = useState("");
+  const [cameraReady, setCameraReady] = useState(false);
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+  const startedAtRef = useRef(0);
   const navigate = useNavigate();
 
-  // Simulate recording progress
+  const stopStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    setCameraError("");
+    setCameraReady(false);
+    stopStream();
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Camera is not supported in this browser.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraReady(true);
+    } catch (error) {
+      setCameraError(error.message || "Could not access camera.");
+    }
+  }, [facingMode, stopStream]);
+
   useEffect(() => {
-    let interval;
-    if (isRecording) {
-      interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            setIsRecording(false);
-            setTimeout(() => navigate('/upload'), 500); // go to upload wizard after finishing
-            return 100;
-          }
-          return prev + 1; // 1% every 100ms = 10s total
-        });
-      }, 100);
+    startCamera();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+      stopStream();
+    };
+  }, [startCamera, stopStream]);
+
+  const finishRecording = useCallback(
+    (blob) => {
+      const file = new File([blob], `recording-${Date.now()}.webm`, {
+        type: blob.type || "video/webm",
+      });
+      const preview = URL.createObjectURL(blob);
+      navigate("/upload", { state: { recordedFile: file, recordedPreview: preview } });
+    },
+    [navigate]
+  );
+
+  const stopRecording = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
     } else {
+      setIsRecording(false);
       setProgress(0);
     }
-    return () => clearInterval(interval);
-  }, [isRecording, navigate]);
+  }, []);
+
+  const startRecording = () => {
+    if (!streamRef.current || isRecording) return;
+
+    chunksRef.current = [];
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : "video/webm";
+
+    const recorder = new MediaRecorder(streamRef.current, { mimeType });
+    recorderRef.current = recorder;
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunksRef.current.push(event.data);
+    };
+
+    recorder.onstop = () => {
+      setIsRecording(false);
+      setProgress(0);
+      const blob = new Blob(chunksRef.current, { type: mimeType });
+      if (blob.size > 0) finishRecording(blob);
+    };
+
+    recorder.start(250);
+    setIsRecording(true);
+    startedAtRef.current = Date.now();
+
+    timerRef.current = setInterval(() => {
+      const elapsed = Date.now() - startedAtRef.current;
+      const pct = Math.min(100, (elapsed / durationMs) * 100);
+      setProgress(pct);
+      if (elapsed >= durationMs) stopRecording();
+    }, 100);
+  };
 
   const toggleRecording = () => {
-    setIsRecording(!isRecording);
+    if (isRecording) stopRecording();
+    else startRecording();
+  };
+
+  const flipCamera = () => {
+    if (isRecording) return;
+    setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
   };
 
   return (
     <div className="flex flex-col h-[100dvh] bg-black text-white overflow-hidden relative">
-      {/* Simulated Viewfinder Background */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-         <img 
-           src="https://images.unsplash.com/photo-1616091093714-c64882e9ab55?w=800&q=80" 
-           alt="Camera View" 
-           className={`w-full h-full object-cover transition-transform duration-1000 ${isRecording ? 'scale-105' : 'scale-100'}`} 
-         />
-         {/* Top gradient for visibility */}
-         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/60 to-transparent" />
-         {/* Bottom gradient for visibility */}
-         <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-black/80 to-transparent" />
+      <div className="absolute inset-0 z-0 overflow-hidden bg-black">
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          className={`w-full h-full object-cover transition-transform duration-500 ${
+            isRecording ? "scale-105" : "scale-100"
+          } ${facingMode === "user" ? "-scale-x-100" : ""}`}
+        />
+        {!cameraReady && !cameraError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-slate-300 text-sm">
+            Starting camera...
+          </div>
+        )}
+        {cameraError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 px-6 text-center gap-3">
+            <span className="material-symbols-outlined text-[40px] text-red-400">videocam_off</span>
+            <p className="text-sm text-slate-300">{cameraError}</p>
+            <button
+              type="button"
+              onClick={startCamera}
+              className="px-4 py-2 rounded-full bg-white/10 text-sm font-semibold hover:bg-white/20"
+            >
+              Try again
+            </button>
+            <Link to="/upload" className="text-[#3b82f6] text-sm font-medium">
+              Upload from gallery instead
+            </Link>
+          </div>
+        )}
+        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
       </div>
 
-      {/* Top Header */}
       <header className="absolute top-0 left-0 right-0 px-4 py-6 flex items-center justify-between z-10">
-        <Link to="/" className="text-white drop-shadow-md hover:bg-white/10 rounded-full p-2 -ml-2 transition-colors">
+        <Link
+          to="/"
+          className="text-white drop-shadow-md hover:bg-white/10 rounded-full p-2 -ml-2 transition-colors"
+        >
           <span className="material-symbols-outlined text-[28px]">close</span>
         </Link>
-        
+
         <div className="flex bg-black/40 backdrop-blur-md rounded-full overflow-hidden border border-white/10">
-           <button className="px-4 py-1.5 text-xs font-semibold hover:bg-white/10 transition-colors border-r border-white/10">15s</button>
-           <button className="px-4 py-1.5 text-xs font-semibold bg-white/20">60s</button>
-           <button className="px-4 py-1.5 text-xs font-semibold hover:bg-white/10 transition-colors">3m</button>
+          {DURATIONS.map((d) => (
+            <button
+              key={d.label}
+              type="button"
+              disabled={isRecording}
+              onClick={() => setDurationMs(d.ms)}
+              className={`px-4 py-1.5 text-xs font-semibold transition-colors border-r border-white/10 last:border-r-0 disabled:opacity-50 ${
+                durationMs === d.ms ? "bg-white/20" : "hover:bg-white/10"
+              }`}
+            >
+              {d.label}
+            </button>
+          ))}
         </div>
 
-        <button className="text-white drop-shadow-md hover:bg-white/10 rounded-full p-2 -mr-2 transition-colors">
-           <span className="material-symbols-outlined text-[26px]">music_note</span>
-        </button>
+        <div className="w-10" />
       </header>
 
-      {/* Right Sidebar Tools */}
       <div className="absolute right-3 top-24 flex flex-col gap-4 z-10 items-center">
-         <ToolButton icon="flip_camera_ios" label="Flip" />
-         <ToolButton icon="speed" label="Speed" />
-         <ToolButton icon="filter_vintage" label="Filters" />
-         <ToolButton icon="timer" label="Timer" />
-         <ToolButton icon="flash_off" label="Flash" />
-         <ToolButton icon="face_retouching_natural" label="Enhance" />
+        <ToolButton icon="flip_camera_ios" label="Flip" onClick={flipCamera} disabled={isRecording} />
       </div>
 
-      {/* Bottom Controls */}
       <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center justify-center z-10 gap-6">
-        
-        {/* Record Button Container */}
         <div className="relative flex items-center justify-center">
-           {/* Progress Ring */}
-           <svg className="absolute w-[88px] h-[88px] -rotate-90 pointer-events-none">
-             <circle 
-                cx="44" cy="44" r="41" 
-                fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="4" 
-             />
-             <motion.circle 
-                cx="44" cy="44" r="41" 
-                fill="none" stroke="#ef4444" strokeWidth="4" 
-                strokeDasharray="257"
-                strokeDashoffset={257 - (progress / 100) * 257}
-                strokeLinecap="round"
-             />
-           </svg>
+          <svg className="absolute w-[88px] h-[88px] -rotate-90 pointer-events-none">
+            <circle cx="44" cy="44" r="41" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="4" />
+            <motion.circle
+              cx="44"
+              cy="44"
+              r="41"
+              fill="none"
+              stroke="#ef4444"
+              strokeWidth="4"
+              strokeDasharray="257"
+              strokeDashoffset={257 - (progress / 100) * 257}
+              strokeLinecap="round"
+            />
+          </svg>
 
-           {/* Inner Record Button */}
-           <motion.button 
-             onClick={toggleRecording}
-             whileTap={{ scale: 0.9 }}
-             className={`w-[72px] h-[72px] rounded-full flex items-center justify-center transition-colors ${
-               isRecording ? 'bg-red-500/20' : 'bg-red-500/20'
-             }`}
-           >
-              <motion.div 
-                layout
-                animate={{ 
-                  borderRadius: isRecording ? "12px" : "50%",
-                  width: isRecording ? "32px" : "60px",
-                  height: isRecording ? "32px" : "60px",
-                  backgroundColor: "#ef4444"
-                }}
-                transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              />
-           </motion.button>
+          <motion.button
+            type="button"
+            onClick={toggleRecording}
+            disabled={!cameraReady || !!cameraError}
+            whileTap={{ scale: 0.9 }}
+            className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-red-500/20 disabled:opacity-40"
+          >
+            <motion.div
+              layout
+              animate={{
+                borderRadius: isRecording ? "12px" : "50%",
+                width: isRecording ? "32px" : "60px",
+                height: isRecording ? "32px" : "60px",
+                backgroundColor: "#ef4444",
+              }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            />
+          </motion.button>
         </div>
 
-        {/* Bottom Nav Text */}
-        <div className="flex gap-6 text-sm font-semibold text-slate-300 drop-shadow-md">
-           <span className="cursor-pointer hover:text-white transition-colors">Effects</span>
-           <span className="text-white cursor-pointer relative after:content-[''] after:absolute after:-bottom-2 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-white after:rounded-full">Video</span>
-           <span className="cursor-pointer hover:text-white transition-colors">Photo</span>
-           <span className="cursor-pointer hover:text-white transition-colors">Templates</span>
-        </div>
-
+        <p className="text-xs text-slate-300 drop-shadow-md">
+          {isRecording ? "Tap to stop" : "Tap to record"}
+        </p>
       </div>
 
-      {/* Upload From Gallery */}
       <AnimatePresence>
         {!isRecording && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             className="absolute bottom-12 right-6 z-10"
           >
-             <Link to="/upload" className="flex flex-col items-center gap-1 group">
-                <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/20 group-hover:border-white transition-colors relative">
-                   <img src="https://images.unsplash.com/photo-1518791841217-8f162f1e1131?w=100&q=80" alt="Gallery" className="w-full h-full object-cover" />
-                </div>
-                <span className="text-[10px] font-semibold text-slate-200 drop-shadow-md">Upload</span>
-             </Link>
+            <Link to="/upload" className="flex flex-col items-center gap-1 group">
+              <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/20 group-hover:border-white transition-colors bg-white/10 flex items-center justify-center">
+                <span className="material-symbols-outlined text-white text-[20px]">upload</span>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-200 drop-shadow-md">Upload</span>
+            </Link>
           </motion.div>
         )}
       </AnimatePresence>
@@ -146,13 +263,18 @@ export default function Camera() {
   );
 }
 
-function ToolButton({ icon, label }) {
+function ToolButton({ icon, label, onClick, disabled }) {
   return (
-    <div className="flex flex-col items-center gap-1 cursor-pointer group">
-       <div className="bg-black/30 backdrop-blur-md p-2.5 rounded-full border border-white/10 group-hover:bg-white/20 transition-colors">
-          <span className="material-symbols-outlined text-[22px] text-white drop-shadow-md">{icon}</span>
-       </div>
-       <span className="text-[10px] font-semibold text-slate-200 drop-shadow-md">{label}</span>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-1 group disabled:opacity-40"
+    >
+      <div className="bg-black/30 backdrop-blur-md p-2.5 rounded-full border border-white/10 group-hover:bg-white/20 transition-colors">
+        <span className="material-symbols-outlined text-[22px] text-white drop-shadow-md">{icon}</span>
+      </div>
+      <span className="text-[10px] font-semibold text-slate-200 drop-shadow-md">{label}</span>
+    </button>
   );
 }

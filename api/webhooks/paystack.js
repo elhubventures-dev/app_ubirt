@@ -72,24 +72,13 @@ export default async function handler(req, res) {
         email: customer?.email
       });
 
-      // 3. Increment user's coins via RPC (Best Practice) or direct fetch and update
-      // Assuming a direct update for simplicity, though RPC is safer for race conditions.
-      const { data: profile, error: profileErr } = await supabaseAdmin
-        .from("profiles")
-        .select("coins")
-        .eq("id", userId)
-        .single();
-        
-      if (profileErr) throw profileErr;
+      // 3. Credit coins atomically via RPC
+      const { data: newBalance, error: coinsErr } = await supabaseAdmin.rpc("add_user_coins", {
+        p_user_id: userId,
+        p_amount: parseInt(coinsToAdd, 10),
+      });
 
-      const newBalance = (profile.coins || 0) + parseInt(coinsToAdd, 10);
-      
-      const { error: updateErr } = await supabaseAdmin
-        .from("profiles")
-        .update({ coins: newBalance })
-        .eq("id", userId);
-        
-      if (updateErr) throw updateErr;
+      if (coinsErr) throw coinsErr;
 
       return res.status(200).json({ status: "success", newBalance });
     } catch (err) {

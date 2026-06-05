@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
 import { useToast } from "@/components/ui/use-toast";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
@@ -29,7 +29,18 @@ export default function Upload() {
   const { saveUpload, isSavingUpload, publishUpload, isPublishingUpload } = useCreatorStudio();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const canUploadFiles = isLiveMode() && isSupabaseConfigured();
+
+  useEffect(() => {
+    const recorded = location.state?.recordedFile;
+    const preview = location.state?.recordedPreview;
+    if (recorded) {
+      setFile(recorded);
+      setFilePreview(preview || URL.createObjectURL(recorded));
+      setStep(2);
+    }
+  }, [location.state]);
 
   const handleFileChange = (e) => {
     const selected = e.target.files?.[0];

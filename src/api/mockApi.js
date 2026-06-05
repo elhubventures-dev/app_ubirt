@@ -24,6 +24,7 @@ let uploads = structuredClone(mockUploads).map((upload) => ({
 let typingByChat = {};
 let aiConversationMeta = { title: "UBIRT Assistant" };
 let follows = ["creator", "tech_guru"]; // mock list of followed usernames
+let notifications = structuredClone(mockNotifications);
 
 const storageKey = "ubirt.mock.state.v1";
 
@@ -146,15 +147,43 @@ export const mockApi = {
     // Let's just simulate success for now.
     return { success: true, amount };
   },
-  async getCreatorAnalytics() {
+  async getCreatorAnalytics(days = 28) {
     await wait(500);
+    const scale = days / 28;
     return {
-      followers: 12400,
-      views: 842000,
+      followers: Math.round(12400 * scale),
+      views: Math.round(842000 * scale),
       completionRate: 78,
       earnings: 5400,
-      chartData: [30, 45, 25, 60, 40, 75, 90]
+      chartData: [30, 45, 25, 60, 40, 75, 90].map((v) => Math.round(v * scale)),
+      growthPct: 12,
     };
+  },
+  async search(query) {
+    await wait();
+    const q = query.trim().toLowerCase();
+    if (!q) return { users: [], posts: [], tags: [] };
+    const postResults = feedPosts
+      .filter((p) => `${p.author} ${p.caption}`.toLowerCase().includes(q))
+      .map((p) => ({ ...p, type: "video" }));
+    const users = conversations
+      .filter((c) => c.name.toLowerCase().includes(q))
+      .map((c) => ({
+        id: c.id,
+        username: c.name.toLowerCase().replace(/\s/g, ""),
+        name: c.name,
+        avatar: null,
+      }));
+    return { users, posts: postResults, tags: [`#${q}`] };
+  },
+  async getSuggestedCreators() {
+    await wait();
+    return [1, 2, 3, 4].map((i) => ({
+      id: `creator-${i}`,
+      username: `creator${i}`,
+      name: `Creator ${i}`,
+      avatar: null,
+    }));
   },
   async getConversations() {
     await wait();
@@ -286,7 +315,14 @@ export const mockApi = {
     return {
       xp: 2450,
       level: 12,
-      badges: ["1", "2", "3"]
+      xpForNextLevel: 14400,
+      xpProgress: 68,
+      badges: ["1", "2", "3"],
+      quests: [
+        { id: "upload", title: "Upload a Video", progress: 1, total: 1, reward: 100, completed: true },
+        { id: "comments", title: "Leave 3 Comments", progress: 1, total: 3, reward: 30, completed: false },
+        { id: "views", title: "Reach 1,000 Views", progress: 450, total: 1000, reward: 50, completed: false },
+      ],
     };
   },
   async saveUpload(payload, file = null) {
@@ -341,7 +377,21 @@ export const mockApi = {
   },
   async getNotifications() {
     await wait();
-    return mockNotifications;
+    return notifications;
+  },
+  async markNotificationRead(notificationId) {
+    await wait();
+    notifications = notifications.map((n) =>
+      n.id === notificationId ? { ...n, read: true } : n
+    );
+    persistState();
+    return true;
+  },
+  async markAllNotificationsRead() {
+    await wait();
+    notifications = notifications.map((n) => ({ ...n, read: true }));
+    persistState();
+    return true;
   },
   async updateProfile(name, username, avatarFile) {
     await wait();
