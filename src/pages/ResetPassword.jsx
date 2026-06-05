@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
 import { useToast } from "@/components/ui/use-toast";
-import { isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
@@ -13,7 +13,7 @@ export default function ResetPassword() {
   const { updatePassword, isLiveAuth, isLoadingAuth } = useAuth();
   const { toast } = useToast();
 
-  if (!isLiveMode() || !isSupabaseConfigured()) {
+  if (!isSupabaseConfigured()) {
     return <Navigate to="/login" replace />;
   }
 

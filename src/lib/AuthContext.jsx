@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ensureUserProfile, getAuthAvatarUrl, getAuthDisplayName, getOAuthRedirectUrl } from "@/lib/authHelpers";
 import { isNativePlatform } from "@/lib/platform";
 import { resetAnalyticsUser } from "@/lib/monitoring";
-import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 const AuthContext = createContext(null);
 
@@ -44,7 +44,7 @@ function setUserFromSession(session, setUser, setAuthError) {
 
 export function AuthProvider({ children }) {
   const navigate = useNavigate();
-  const useLiveAuth = isLiveMode() && isSupabaseConfigured();
+  const useLiveAuth = isSupabaseConfigured();
 
   const [user, setUser] = useState(useLiveAuth ? null : demoUser);
   const [isLoadingAuth, setIsLoadingAuth] = useState(useLiveAuth);

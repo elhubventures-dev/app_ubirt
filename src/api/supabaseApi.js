@@ -1,6 +1,6 @@
 import { getSupabase } from "@/lib/supabaseClient";
 import { uploadMediaFile } from "@/api/storage";
-import { processVideoUpload } from "@/lib/videoPipeline";
+import { processImageUpload } from "@/lib/videoPipeline";
 
 async function getUserId() {
   const supabase = getSupabase();
@@ -666,16 +666,11 @@ export const supabaseApi = {
   },
 
   async sendMessage(chatId, text, attachment) {
+    if (attachment) {
+      throw new Error("Image and video sharing is not available yet. Send text or emojis only.");
+    }
     const userId = await getUserId();
     const supabase = getSupabase();
-    
-    let mediaUrl;
-    let mediaType;
-    if (attachment) {
-      const res = await uploadMediaFile(attachment, "chat_media");
-      mediaUrl = res.url;
-      mediaType = attachment.type.startsWith("video") ? "video" : "image";
-    }
 
     const { data, error } = await supabase
       .from("messages")
@@ -684,8 +679,6 @@ export const supabaseApi = {
         sender_id: userId,
         content: text,
         status: "sent",
-        media_url: mediaUrl,
-        media_type: mediaType,
       })
       .select()
       .single();
@@ -696,8 +689,6 @@ export const supabaseApi = {
       role: "me",
       text: data.content,
       status: data.status,
-      mediaUrl: data.media_url,
-      mediaType: data.media_type,
     };
   },
 
@@ -876,7 +867,7 @@ export const supabaseApi = {
     let muxPlaybackId = null;
 
     if (file) {
-      const processed = await processVideoUpload(file, userId);
+      const processed = await processImageUpload(file, userId);
       mediaUrl = processed.mediaUrl;
       storagePath = processed.storagePath;
       muxAssetId = processed.muxAssetId;

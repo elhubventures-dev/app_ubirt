@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { dataProvider } from "@/api/dataProvider";
-import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
@@ -26,7 +26,7 @@ export function useNotifications() {
   });
 
   useEffect(() => {
-    if (!user || !isLiveMode() || !isSupabaseConfigured()) return undefined;
+    if (!user || !isSupabaseConfigured()) return undefined;
 
     const supabase = getSupabase();
     const channel = supabase

@@ -6,6 +6,7 @@ import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
 import { getDataMode, dataProvider } from "@/api/dataProvider";
 import { getPreference, setPreference } from "@/lib/preferences";
+import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { motion } from "framer-motion";
 
 function Toggle({ checked, onChange, label }) {
@@ -131,7 +132,21 @@ export default function Settings() {
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                        <span className="material-symbols-outlined text-[20px] text-white">edit</span>
                     </div>
-                    <input type="file" accept="image/*" className="hidden" onChange={(e) => setAvatarFile(e.target.files[0])} />
+                    <input
+                      type="file"
+                      accept={ALLOWED_IMAGE_ACCEPT}
+                      className="hidden"
+                      onChange={(e) => {
+                        const selected = e.target.files?.[0];
+                        if (!selected) return;
+                        try {
+                          validateImageFile(selected);
+                          setAvatarFile(selected);
+                        } catch (error) {
+                          toast({ title: "Invalid file", description: error.message, variant: "destructive" });
+                        }
+                      }}
+                    />
                  </label>
                  <div>
                     <label className="cursor-pointer block">
@@ -162,7 +177,7 @@ export default function Settings() {
           <section>
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">App Preferences</h2>
             <div className="space-y-2">
-               <Toggle checked={autoplay} onChange={toggleAutoplay} label="Autoplay feed videos" />
+               <Toggle checked={autoplay} onChange={toggleAutoplay} label="Autoplay feed posts" />
                <Toggle checked={aiAssist} onChange={toggleAiAssist} label="AI assistance in composer" />
                <Toggle checked={notifications} onChange={togglePush} label="Push Notifications" />
             </div>

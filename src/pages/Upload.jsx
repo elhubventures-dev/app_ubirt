@@ -5,11 +5,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
 import { cn } from "@/lib/utils";
-import { isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoFilters, getFilterClass } from "@/components/studio/VideoFilters";
-import { AudioLibrary } from "@/components/studio/AudioLibrary";
-import CaptionGenerator from "@/components/studio/CaptionGenerator";
 
 const selectClass = "w-full rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white focus:bg-white/10 transition-colors outline-none";
 
@@ -30,7 +29,7 @@ export default function Upload() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const canUploadFiles = isLiveMode() && isSupabaseConfigured();
+  const canUploadFiles = isSupabaseConfigured();
 
   useEffect(() => {
     const recorded = location.state?.recordedFile;
@@ -44,19 +43,26 @@ export default function Upload() {
 
   const handleFileChange = (e) => {
     const selected = e.target.files?.[0];
-    if (selected) {
+    if (!selected) return;
+    try {
+      validateImageFile(selected);
       setFile(selected);
-      const url = URL.createObjectURL(selected);
-      setFilePreview(url);
+      setFilePreview(URL.createObjectURL(selected));
       setStep(2);
+    } catch (error) {
+      toast({ title: "Invalid file", description: error.message, variant: "destructive" });
     }
   };
 
   const onSubmit = async () => {
+    if (!file) {
+      toast({ title: "Image required", description: "Select a JPG or PNG image first.", variant: "destructive" });
+      return;
+    }
     try {
       const result = await saveUpload({
         payload: { title, description, category, visibility, filter, audio, captions },
-        file: canUploadFiles ? file : null,
+        file,
       });
       toast({ title: "Draft saved", description: `Upload ${result.id} has been stored successfully.` });
       navigate("/creator-studio");
@@ -104,8 +110,8 @@ export default function Upload() {
               className="flex-1 flex flex-col"
             >
               <div className="mt-8">
-                <h1 className="text-3xl font-bold tracking-tight">Select Media</h1>
-                <p className="text-slate-400 mt-2 text-sm">Upload a video or image to get started.</p>
+                <h1 className="text-3xl font-bold tracking-tight">Select Image</h1>
+                <p className="text-slate-400 mt-2 text-sm">Upload a JPG or PNG photo to get started.</p>
               </div>
 
               <div className="flex-1 flex items-center justify-center mt-8">
@@ -116,28 +122,31 @@ export default function Upload() {
                   <div className="w-16 h-16 rounded-full bg-[#3b82f6]/20 flex items-center justify-center text-[#3b82f6] group-hover:scale-110 transition-transform">
                     <span className="material-symbols-outlined text-[32px]">upload</span>
                   </div>
-                  <span className="text-slate-300 font-medium">Tap to select media</span>
+                  <span className="text-slate-300 font-medium">Tap to select image</span>
                 </button>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,video/*"
+                  accept={ALLOWED_IMAGE_ACCEPT}
                   onChange={handleFileChange}
                   className="hidden"
                 />
               </div>
 
+              <div className="mt-6 flex gap-3">
+                <Link
+                  to="/create"
+                  className="flex-1 py-3 rounded-full bg-white/10 text-center text-sm font-semibold hover:bg-white/20"
+                >
+                  Use Camera
+                </Link>
+              </div>
+
               {!canUploadFiles && (
                 <div className="mt-6 p-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-200/80 text-sm flex gap-3">
                   <span className="material-symbols-outlined text-yellow-500">info</span>
-                  <p>Running in mock mode. File uploads are disabled. You can skip this step.</p>
+                  <p>Connect Supabase in your environment to enable uploads.</p>
                 </div>
-              )}
-              
-              {!canUploadFiles && (
-                 <PrimaryButton className="mt-4 py-4 rounded-full" onClick={() => setStep(2)}>
-                   Skip Media Selection
-                 </PrimaryButton>
               )}
             </motion.div>
           )}
@@ -151,47 +160,22 @@ export default function Upload() {
               className="flex-1 flex flex-col gap-6"
             >
               <div className="mt-4">
-                <h1 className="text-2xl font-bold">Edit & Trim</h1>
+                <h1 className="text-2xl font-bold">Edit Photo</h1>
               </div>
 
               {/* Live Preview Miniature for Editing */}
               <div className="h-64 rounded-2xl bg-black overflow-hidden relative shadow-lg ring-1 ring-white/10 shrink-0">
                 {filePreview ? (
-                  file?.type?.startsWith("image") ? (
-                    <img src={filePreview} alt="Preview" className={`w-full h-full object-cover opacity-90 ${getFilterClass(filter)}`} />
-                  ) : (
-                    <video src={filePreview} className={`w-full h-full object-cover opacity-90 ${getFilterClass(filter)}`} muted loop autoPlay playsInline />
-                  )
+                  <img src={filePreview} alt="Preview" className={`w-full h-full object-cover opacity-90 ${getFilterClass(filter)}`} />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
-                    <span className="text-slate-500 font-medium">No Media</span>
-                  </div>
-                )}
-                
-                {/* Mock timeline trimmer overlay */}
-                {filePreview && file?.type?.startsWith("video") && (
-                  <div className="absolute bottom-4 left-4 right-4 h-12 bg-black/40 backdrop-blur-md rounded-xl border border-white/20 flex items-center px-2 py-1">
-                    <div className="w-full h-8 bg-slate-700/50 rounded-lg relative overflow-hidden">
-                       {/* Playhead */}
-                       <div className="absolute top-0 bottom-0 w-1 bg-[#3b82f6] left-1/3 shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
-                       <div className="absolute top-0 bottom-0 left-4 right-1/4 bg-white/20 border-x-2 border-white" />
-                    </div>
+                    <span className="text-slate-500 font-medium">No image</span>
                   </div>
                 )}
               </div>
 
               <div className="space-y-6 flex-1 overflow-y-auto hide-scrollbar pb-10">
                 <VideoFilters currentFilter={filter} onSelectFilter={setFilter} />
-                <AudioLibrary selectedAudio={audio} onSelectAudio={setAudio} />
-                {(file?.type?.startsWith("video") || filePreview) && (
-                   <CaptionGenerator videoFile={file} onCaptionsGenerated={setCaptions} />
-                )}
-                {captions.length > 0 && (
-                  <div className="mt-2 text-xs text-green-400 font-medium flex items-center gap-1">
-                    <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                    {captions.length} captions generated
-                  </div>
-                )}
               </div>
 
               <div className="mt-auto pt-6 bg-[#0a0f16]">
@@ -259,11 +243,7 @@ export default function Upload() {
               {/* Live Preview Miniature */}
               <div className="h-48 rounded-2xl bg-black overflow-hidden relative shadow-lg ring-1 ring-white/10">
                 {filePreview ? (
-                  file?.type?.startsWith("image") ? (
-                    <img src={filePreview} alt="Preview" className={`w-full h-full object-cover opacity-80 ${getFilterClass(filter)}`} />
-                  ) : (
-                    <video src={filePreview} className={`w-full h-full object-cover opacity-80 ${getFilterClass(filter)}`} muted loop autoPlay playsInline />
-                  )
+                  <img src={filePreview} alt="Preview" className={`w-full h-full object-cover opacity-80 ${getFilterClass(filter)}`} />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
                     <span className="text-slate-500 font-medium">No Media</span>
@@ -303,10 +283,14 @@ export default function Upload() {
                 <PrimaryButton 
                   className="flex-1 py-4 rounded-full" 
                   onClick={async () => {
+                    if (!file) {
+                      toast({ title: "Image required", description: "Select a JPG or PNG image first.", variant: "destructive" });
+                      return;
+                    }
                     try {
                       const result = await saveUpload({
                         payload: { title, description, category, visibility },
-                        file: canUploadFiles ? file : null,
+                        file,
                       });
                       await publishUpload(result.id);
                       toast({ title: "Published!", description: "Your post is now live." });

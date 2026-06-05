@@ -6,18 +6,22 @@ import { Card } from "@/components/ui/card";
 import { getButtonClasses } from "@/components/ui/PrimaryButton";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
+import { formatCount } from "@/lib/formatStats";
 import { dataProvider } from "@/api/dataProvider";
 
 export default function Profile() {
   const { user } = useAuth();
   const { data: stats, uploads = [], isLoadingUploads } = useCreatorStudio();
+  const [activeTab, setActiveTab] = useState("grid"); // 'grid' | 'analytics'
   const { data: achievements } = useQuery({
     queryKey: ["achievements"],
     queryFn: () => dataProvider.getAchievements(),
   });
-  const [activeTab, setActiveTab] = useState("grid"); // 'grid' | 'analytics'
-
-  // Generate a premium dynamic banner based on user's name
+  const { data: analytics } = useQuery({
+    queryKey: ["analytics", user?.id, 28],
+    queryFn: () => dataProvider.getCreatorAnalytics(28),
+    enabled: activeTab === "analytics",
+  });
   const bannerUrl = `https://images.unsplash.com/photo-1557683311-eac922347aa1?w=800&h=300&fit=crop&q=80`;
 
   return (
@@ -49,7 +53,7 @@ export default function Profile() {
             <Link to="/settings" className={getButtonClasses("secondary", "sm", "rounded-full px-6")}>
               Edit Profile
             </Link>
-            <Link to="/upload" className={getButtonClasses("primary", "sm", "rounded-full px-6")}>
+            <Link to="/create" className={getButtonClasses("primary", "sm", "rounded-full px-6")}>
               Create
             </Link>
             <Link to="/wallet" className="w-9 h-9 flex items-center justify-center rounded-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors shadow-sm">
@@ -129,7 +133,7 @@ export default function Profile() {
                   <span className="material-symbols-outlined text-[48px] text-slate-600">grid_view</span>
                   <p className="text-slate-300 mt-4 font-semibold">No posts yet</p>
                   <p className="text-slate-500 text-sm mt-1 mb-4">Create your first piece of content.</p>
-                  <Link to="/upload" className={getButtonClasses("primary", "sm", "rounded-full")}>Upload</Link>
+                  <Link to="/create" className={getButtonClasses("primary", "sm", "rounded-full")}>Create</Link>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-1 md:gap-2">
@@ -137,15 +141,15 @@ export default function Profile() {
                     <div key={upload.id} className="aspect-[3/4] bg-slate-800 rounded-md sm:rounded-xl overflow-hidden relative group cursor-pointer">
                       {/* Fake thumbnail if no media, else we'd render the media */}
                       <img 
-                        src={`https://images.unsplash.com/photo-1616469829581-73993eb86b02?w=300&h=400&fit=crop&q=80&seed=${upload.id}`} 
-                        alt="Thumbnail" 
+                        src={upload.media_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${upload.id}`} 
+                        alt={upload.title || "Upload"} 
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80" 
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 sm:p-3">
                          <p className="text-white text-[10px] sm:text-xs font-semibold truncate">{upload.title}</p>
                          <div className="flex items-center gap-1 mt-1 text-slate-300">
-                           <span className="material-symbols-outlined text-[14px]">visibility</span>
-                           <span className="text-[10px] font-medium">{Math.floor(Math.random() * 1000)}</span>
+                           <span className="material-symbols-outlined text-[14px]">image</span>
+                           <span className="text-[10px] font-medium capitalize">{upload.status ?? "draft"}</span>
                          </div>
                       </div>
                     </div>
@@ -166,29 +170,30 @@ export default function Profile() {
                 <Card className="p-4 bg-white/5 border-white/5 flex flex-col items-center text-center">
                   <span className="material-symbols-outlined text-[#3b82f6] text-[32px] mb-2">group</span>
                   <p className="text-xs text-slate-400 uppercase font-semibold">Followers</p>
-                  <p className="text-2xl font-bold mt-1 text-white">{stats?.followers || "12.4k"}</p>
+                  <p className="text-2xl font-bold mt-1 text-white">{formatCount(stats?.followers ?? 0)}</p>
                 </Card>
                 <Card className="p-4 bg-white/5 border-white/5 flex flex-col items-center text-center">
                   <span className="material-symbols-outlined text-purple-500 text-[32px] mb-2">visibility</span>
                   <p className="text-xs text-slate-400 uppercase font-semibold">Total Views</p>
-                  <p className="text-2xl font-bold mt-1 text-white">{stats?.views || "842k"}</p>
+                  <p className="text-2xl font-bold mt-1 text-white">{formatCount(stats?.views ?? 0)}</p>
                 </Card>
                 <Card className="p-4 bg-white/5 border-white/5 flex flex-col items-center text-center col-span-2 sm:col-span-1">
                   <span className="material-symbols-outlined text-emerald-500 text-[32px] mb-2">trending_up</span>
                   <p className="text-xs text-slate-400 uppercase font-semibold">Avg. Completion</p>
-                  <p className="text-2xl font-bold mt-1 text-white">{stats?.completionRate || "78"}%</p>
+                  <p className="text-2xl font-bold mt-1 text-white">{stats?.completionRate ?? 0}%</p>
                 </Card>
               </div>
 
               <Card className="p-5 bg-gradient-to-br from-[#0d5bba]/10 to-transparent border-[#0d5bba]/20 mt-4">
                  <div className="flex justify-between items-center mb-4">
                    <h3 className="font-semibold text-lg">Growth Trajectory</h3>
-                   <span className="text-xs px-2 py-1 bg-[#3b82f6]/20 text-[#3b82f6] rounded-full font-bold">+12% this week</span>
+                   <span className="text-xs px-2 py-1 bg-[#3b82f6]/20 text-[#3b82f6] rounded-full font-bold">
+                     {(analytics?.growthPct ?? 0) >= 0 ? "+" : ""}{analytics?.growthPct ?? 0}% this period
+                   </span>
                  </div>
-                 {/* Mock Chart Area */}
                  <div className="h-40 flex items-end justify-between gap-1 sm:gap-2 px-2">
-                    {[30, 45, 25, 60, 40, 75, 90].map((h, i) => (
-                      <div key={i} className="w-full bg-[#3b82f6] rounded-t-sm" style={{ height: `${h}%`, opacity: 0.5 + (i * 0.05) }}></div>
+                    {(analytics?.chartData ?? [0, 0, 0, 0, 0, 0, 0]).map((h, i) => (
+                      <div key={i} className="w-full bg-[#3b82f6] rounded-t-sm" style={{ height: `${h}%`, opacity: 0.5 + (i * 0.05) }} />
                     ))}
                  </div>
                  <div className="flex justify-between mt-2 text-xs text-slate-500 px-2 font-medium">

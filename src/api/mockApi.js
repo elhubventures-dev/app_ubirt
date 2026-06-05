@@ -9,6 +9,8 @@ import {
   mockUploads,
 } from "@/api/mockData";
 
+import { validateImageFile } from "@/lib/uploadPolicy";
+
 const wait = (ms = 150) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let feedPosts = structuredClone(mockFeedPosts);
@@ -260,21 +262,18 @@ export const mockApi = {
     return true;
   },
   async sendMessage(chatId, text, attachment) {
-    await wait();
-    let mediaUrl;
-    let mediaType;
     if (attachment) {
-      mediaUrl = URL.createObjectURL(attachment);
-      mediaType = attachment.type.startsWith("video") ? "video" : "image";
+      throw new Error("Image and video sharing is not available yet. Send text or emojis only.");
     }
-    const message = { id: `m-${Date.now()}`, role: "me", text, status: "sent", mediaUrl, mediaType };
+    await wait();
+    const message = { id: `m-${Date.now()}`, role: "me", text, status: "sent" };
     messagesByChat = {
       ...messagesByChat,
       [chatId]: [...(messagesByChat[chatId] ?? []), message],
     };
     typingByChat = { ...typingByChat, [chatId]: true };
     conversations = conversations.map((c) =>
-      c.id === chatId ? { ...c, lastMessage: attachment ? "Sent an attachment" : text, updatedAt: "now", unread: 0 } : c
+      c.id === chatId ? { ...c, lastMessage: text, updatedAt: "now", unread: 0 } : c
     );
     persistState();
     window.setTimeout(() => {
@@ -380,14 +379,13 @@ export const mockApi = {
   },
   async saveUpload(payload, file = null) {
     await wait();
+    if (file) validateImageFile(file);
     creatorStats = { ...creatorStats, views: creatorStats.views + 140 };
-    let mediaUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80";
-    let mediaType = "image";
+    let mediaUrl = null;
     if (file) {
       mediaUrl = URL.createObjectURL(file);
-      mediaType = file.type.startsWith("video") ? "video" : "image";
     }
-    const upload = { id: `upload-${Date.now()}`, status: "draft", media_url: mediaUrl, media_type: mediaType, ...payload };
+    const upload = { id: `upload-${Date.now()}`, status: "draft", media_url: mediaUrl, media_type: "image", ...payload };
     uploads = [upload, ...uploads];
     persistState();
     return upload;

@@ -1,10 +1,12 @@
 import { getSupabase } from "@/lib/supabaseClient";
+import { validateImageFile } from "@/lib/uploadPolicy";
 
 /**
  * Upload a file to Supabase Storage `uploads` bucket.
  * @returns {{ path: string, publicUrl: string }}
  */
 export async function uploadMediaFile(file, userId) {
+  validateImageFile(file);
   const supabase = getSupabase();
   const ext = file.name.split(".").pop() ?? "bin";
   const path = `${userId}/${Date.now()}.${ext}`;

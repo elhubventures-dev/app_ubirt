@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
 import { useToast } from "@/components/ui/use-toast";
-import { isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Login() {
@@ -81,7 +81,7 @@ export default function Login() {
     }
   };
 
-  const isMock = !isLiveMode() || !isSupabaseConfigured();
+  const isMock = !isSupabaseConfigured();
 
   return (
     <div className="min-h-[100dvh] w-full bg-[#0a0f16] flex items-center justify-center relative overflow-hidden px-4">
@@ -128,7 +128,7 @@ export default function Login() {
         {isMock ? (
            <div className="text-center py-4">
               <p className="text-yellow-500/90 text-sm bg-yellow-500/10 p-3 rounded-xl border border-yellow-500/20 mb-6">
-                Set <code>VITE_DATA_PROVIDER=live</code> and Supabase environment variables to enable real login.
+                Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env.local</code> to enable real login.
               </p>
               <Link to="/" className="w-full inline-flex justify-center items-center py-3.5 px-4 rounded-xl bg-[#3b82f6] text-white font-semibold shadow-[0_4px_14px_rgba(59,130,246,0.4)] hover:bg-[#2563eb] hover:-translate-y-0.5 transition-all">
                  Continue to App <span className="material-symbols-outlined text-[18px] ml-1.5">arrow_forward</span>

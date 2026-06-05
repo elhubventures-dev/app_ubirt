@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { dataProvider } from "@/api/dataProvider";
-import { isLiveMode } from "@/lib/supabaseClient";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useConversations() {
@@ -22,7 +22,7 @@ export function useChatMessages(chatId) {
     queryKey: ["chat-typing", chatId],
     queryFn: () => dataProvider.getChatTyping(chatId),
     enabled: Boolean(chatId),
-    refetchInterval: isLiveMode() ? false : 1200,
+    refetchInterval: isSupabaseConfigured() ? false : 1200,
   });
 
   const [onlineUsers, setOnlineUsers] = React.useState([]);
@@ -87,7 +87,7 @@ export function useChatMessages(chatId) {
 
   return {
     ...messagesQuery,
-    isTyping: isLiveMode() ? realtimeTyping : (typingQuery.data ?? false),
+    isTyping: isSupabaseConfigured() ? realtimeTyping : (typingQuery.data ?? false),
     onlineUsers,
     sendMessage: sendMutation.mutateAsync,
     isSending: sendMutation.isPending,

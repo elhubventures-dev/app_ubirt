@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { useFeed } from "@/hooks/useFeed";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
-import { motion } from "framer-motion";
+import { formatCount } from "@/lib/formatStats";
 
 export default function Home() {
   const { user } = useAuth();
@@ -47,15 +47,13 @@ export default function Home() {
              <div>
                <p className="text-xs text-slate-400 uppercase font-medium">Followers</p>
                <div className="flex items-end gap-2 mt-1">
-                 <p className="text-3xl font-bold text-white">{stats?.followers || "12.4k"}</p>
-                 <span className="text-xs text-emerald-400 font-bold mb-1 flex items-center"><span className="material-symbols-outlined text-[14px]">arrow_upward</span> 12%</span>
+                 <p className="text-3xl font-bold text-white">{formatCount(stats?.followers ?? 0)}</p>
                </div>
              </div>
              <div>
-               <p className="text-xs text-slate-400 uppercase font-medium">Views (7d)</p>
+               <p className="text-xs text-slate-400 uppercase font-medium">Total Views</p>
                <div className="flex items-end gap-2 mt-1">
-                 <p className="text-3xl font-bold text-white">{(stats?.views || "842k").replace('k', 'K')}</p>
-                 <span className="text-xs text-emerald-400 font-bold mb-1 flex items-center"><span className="material-symbols-outlined text-[14px]">arrow_upward</span> 5%</span>
+                 <p className="text-3xl font-bold text-white">{formatCount(stats?.views ?? 0)}</p>
                </div>
              </div>
           </div>
@@ -65,13 +63,22 @@ export default function Home() {
         <section>
           <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Studio Tools</h2>
           <div className="grid grid-cols-2 gap-3">
-             <Link to="/upload" className="bg-gradient-to-br from-[#3b82f6] to-[#1e40af] p-4 rounded-3xl text-white hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-[0_4px_14px_rgba(59,130,246,0.4)] flex flex-col items-start gap-3">
+             <Link to="/create" className="bg-gradient-to-br from-[#3b82f6] to-[#1e40af] p-4 rounded-3xl text-white hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-[0_4px_14px_rgba(59,130,246,0.4)] flex flex-col items-start gap-3">
                <div className="p-2 bg-white/20 rounded-full">
+                  <span className="material-symbols-outlined text-[24px]">photo_camera</span>
+               </div>
+               <div>
+                 <h3 className="font-bold text-base">Camera</h3>
+                 <p className="text-xs text-blue-200 mt-0.5">Take a photo</p>
+               </div>
+             </Link>
+             <Link to="/upload" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
+               <div className="p-2 bg-[#3b82f6]/20 text-[#3b82f6] rounded-full">
                   <span className="material-symbols-outlined text-[24px]">add_circle</span>
                </div>
                <div>
-                 <h3 className="font-bold text-base">New Draft</h3>
-                 <p className="text-xs text-blue-200 mt-0.5">Upload media</p>
+                 <h3 className="font-bold text-white text-base">Upload</h3>
+                 <p className="text-xs text-slate-400 mt-0.5">JPG or PNG</p>
                </div>
              </Link>
              <Link to="/ai-chat" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
@@ -117,7 +124,7 @@ export default function Home() {
                 posts.slice(0, 5).map(post => (
                   <Link key={post.id} to="/feed" className="w-32 h-48 shrink-0 snap-start bg-slate-800 rounded-2xl overflow-hidden relative group shadow-lg ring-1 ring-white/5">
                      <img 
-                        src={`https://images.unsplash.com/photo-1616469829581-73993eb86b02?w=300&h=400&fit=crop&q=80&seed=${post.id}`} 
+                        src={post.media_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${post.id}`} 
                         alt="Thumbnail" 
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-80" 
                       />

@@ -184,7 +184,7 @@ export default function UserProfile() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
                       <div className="flex items-center gap-1 text-slate-300">
-                        <span className="material-symbols-outlined text-[14px]">play_arrow</span>
+                        <span className="material-symbols-outlined text-[14px]">visibility</span>
                         <span className="text-[10px] font-medium">{(post.views ?? 0).toLocaleString()}</span>
                       </div>
                     </div>

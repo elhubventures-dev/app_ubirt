@@ -29,5 +29,5 @@ export function getSupabase() {
 }
 
 export function isLiveMode() {
-  return import.meta.env.VITE_DATA_PROVIDER === "live";
+  return isSupabaseConfigured();
 }
