@@ -1,5 +1,5 @@
 import { getSupabase } from "@/lib/supabaseClient";
-import { uploadAvatar, uploadCover } from "@/api/storage";
+import { uploadAvatar, uploadCover, uploadVoiceFile } from "@/api/storage";
 import { processImageUpload } from "@/lib/videoPipeline";
 import { inferMediaType } from "@/lib/media";
 import { getNotificationPath } from "@/lib/notificationLinks";
@@ -757,7 +757,7 @@ export const supabaseApi = {
 
       const { data: lastMsg } = await supabase
         .from("messages")
-        .select("content, created_at, sender_id")
+        .select("content, created_at, sender_id, media_type")
         .eq("conversation_id", conv.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -778,7 +778,10 @@ export const supabaseApi = {
         id: conv.id,
         name: otherProfile?.display_name ?? otherProfile?.username ?? conv.title ?? "Conversation",
         avatar: otherProfile?.avatar_url ?? null,
-        lastMessage: lastMsg?.content ?? "No messages yet",
+        lastMessage:
+          lastMsg?.media_type === "audio"
+            ? "Voice message"
+            : lastMsg?.content ?? "No messages yet",
         updatedAt: formatRelative(sortAt),
         sortAt,
         unread: unreadCount ?? 0,
@@ -954,18 +957,33 @@ export const supabaseApi = {
   },
 
   async sendMessage(chatId, text, attachment) {
-    if (attachment) {
-      throw new Error("Image and video sharing is not available yet. Send text or emojis only.");
-    }
     const userId = await getUserId();
     const supabase = getSupabase();
+    let content = text?.trim() ?? "";
+    let mediaUrl = null;
+    let mediaType = null;
+
+    if (attachment?.type === "audio" && attachment.file) {
+      const uploaded = await uploadVoiceFile(attachment.file, userId, chatId);
+      mediaUrl = uploaded.publicUrl;
+      mediaType = "audio";
+      if (!content) content = "Voice message";
+    } else if (attachment) {
+      throw new Error("Only voice messages are supported as attachments right now.");
+    }
+
+    if (!content && !mediaUrl) {
+      throw new Error("Message cannot be empty.");
+    }
 
     const { data, error } = await supabase
       .from("messages")
       .insert({
         conversation_id: chatId,
         sender_id: userId,
-        content: text,
+        content,
+        media_url: mediaUrl,
+        media_type: mediaType,
         status: "sent",
       })
       .select()
@@ -974,7 +992,12 @@ export const supabaseApi = {
     await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", chatId);
 
     const actorName = await getActorDisplayName(userId);
-    const preview = text.length > 80 ? `${text.slice(0, 77)}...` : text;
+    const preview =
+      mediaType === "audio"
+        ? "Voice message"
+        : content.length > 80
+          ? `${content.slice(0, 77)}...`
+          : content;
     const { data: members } = await supabase
       .from("conversation_members")
       .select("user_id")
@@ -998,6 +1021,8 @@ export const supabaseApi = {
       role: "me",
       text: data.content,
       status: data.status,
+      mediaUrl: data.media_url,
+      mediaType: data.media_type,
     };
   },
 

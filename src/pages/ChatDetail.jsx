@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useChatMessages, useConversation } from "@/hooks/useMessages";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import VoiceMessageBubble from "@/components/messages/VoiceMessageBubble";
 import { formatPresenceStatus } from "@/lib/presence";
 import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,6 +25,7 @@ export default function ChatDetail() {
   const profileLink = conversation?.username ? `/user/${conversation.username}` : null;
   const scrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const voice = useVoiceRecorder();
 
   const handleTyping = (val) => {
     setText(val);
@@ -65,6 +68,38 @@ export default function ChatDetail() {
 
   const appendEmoji = (emoji) => {
     handleTyping(text + emoji);
+  };
+
+  const handleStartVoice = async () => {
+    try {
+      setShowEmoji(false);
+      await voice.startRecording();
+    } catch (err) {
+      toast({
+        title: "Microphone unavailable",
+        description: err.message || "Allow microphone access to send voice messages.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendVoice = async () => {
+    if (!voice.blob || voice.blob.size < 500) {
+      toast({
+        title: "Recording too short",
+        description: "Hold the mic a little longer, then send again.",
+        variant: "destructive",
+      });
+      voice.reset();
+      return;
+    }
+    try {
+      await sendMessage({ text: "", attachment: { type: "audio", file: voice.blob } });
+      voice.reset();
+      requestAnimationFrame(() => scrollToBottom());
+    } catch (err) {
+      toast({ title: "Failed to send voice", description: err.message, variant: "destructive" });
+    }
   };
 
   return (
@@ -133,7 +168,11 @@ export default function ChatDetail() {
                         : `${isFirstInGroup ? "rounded-tr-2xl" : "rounded-tr-lg"} ${isFirstInGroup ? "rounded-tl-2xl" : "rounded-tl-lg"} ${isLastInGroup ? "rounded-bl-sm" : "rounded-bl-lg"} ${isLastInGroup ? "rounded-br-2xl" : "rounded-br-lg"}`
                     }`}
                   >
-                    {message.text}
+                    {message.mediaType === "audio" && message.mediaUrl ? (
+                      <VoiceMessageBubble url={message.mediaUrl} isMe={isMe} />
+                    ) : (
+                      message.text
+                    )}
                   </div>
                   {isMe && isLastInGroup && message.status && (
                     <span className="text-[10px] text-slate-500 mt-1 mr-1 font-medium">{message.status}</span>
@@ -164,6 +203,48 @@ export default function ChatDetail() {
       </div>
 
       <footer className="shrink-0 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 bg-[#0a0f16] border-t border-white/5 z-10">
+        {(voice.isRecording || voice.hasPreview) && (
+          <div className="mb-2 flex items-center justify-between gap-3 bg-[#1a2332] border border-white/10 rounded-2xl px-4 py-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {voice.isRecording && (
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">
+                  {voice.isRecording ? "Recording..." : "Voice message ready"}
+                </p>
+                <p className="text-xs text-slate-400">{voice.durationLabel}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={voice.cancelRecording}
+                className="px-3 py-1.5 rounded-full text-xs font-semibold text-slate-300 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              {voice.isRecording ? (
+                <button
+                  type="button"
+                  onClick={voice.stopRecording}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSendVoice}
+                  disabled={isSending}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
+                >
+                  Send
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {showEmoji && (
           <div className="flex flex-wrap gap-2 bg-[#1a2332] border border-white/10 rounded-2xl p-3 mb-2">
             {QUICK_EMOJIS.map((emoji) => (
@@ -182,15 +263,30 @@ export default function ChatDetail() {
           <button
             type="button"
             onClick={() => setShowEmoji((v) => !v)}
-            className="p-2.5 text-slate-400 hover:text-white transition-colors bg-[#253043] rounded-full shrink-0"
+            disabled={voice.isRecording || voice.hasPreview}
+            className="p-2.5 text-slate-400 hover:text-white transition-colors bg-[#253043] rounded-full shrink-0 disabled:opacity-40"
           >
             <span className="material-symbols-outlined text-[20px]">mood</span>
+          </button>
+          <button
+            type="button"
+            onClick={voice.isRecording ? voice.stopRecording : handleStartVoice}
+            disabled={isSending || voice.hasPreview || Boolean(text.trim())}
+            className={`p-2.5 rounded-full shrink-0 transition-all disabled:opacity-40 ${
+              voice.isRecording
+                ? "bg-red-500 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                : "text-slate-400 hover:text-white bg-[#253043]"
+            }`}
+            aria-label={voice.isRecording ? "Stop recording" : "Record voice message"}
+          >
+            <span className="material-symbols-outlined text-[20px]">{voice.isRecording ? "stop" : "mic"}</span>
           </button>
           <textarea
             value={text}
             onChange={(e) => handleTyping(e.target.value)}
             placeholder="Message..."
-            className="flex-1 bg-transparent border-none text-white text-[15px] px-2 py-3 max-h-24 min-h-[44px] resize-none focus:outline-none hide-scrollbar leading-tight"
+            disabled={voice.isRecording || voice.hasPreview}
+            className="flex-1 bg-transparent border-none text-white text-[15px] px-2 py-3 max-h-24 min-h-[44px] resize-none focus:outline-none hide-scrollbar leading-tight disabled:opacity-50"
             rows={1}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -201,7 +297,7 @@ export default function ChatDetail() {
           />
           <button
             type="submit"
-            disabled={isSending || !text.trim()}
+            disabled={isSending || !text.trim() || voice.isRecording || voice.hasPreview}
             className={`p-2.5 rounded-full shrink-0 flex items-center justify-center transition-all ${
               text.trim() ? "bg-[#3b82f6] text-white shadow-[0_0_10px_rgba(59,130,246,0.6)] hover:bg-[#2563eb]" : "bg-[#253043] text-slate-500"
             }`}

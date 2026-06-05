@@ -40,7 +40,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>UBIRT uses your camera so you can create posts.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>UBIRT uses your microphone when recording videos.</string>
+	<string>UBIRT uses your microphone for voice messages and video recording.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>UBIRT needs photo library access so you can upload media.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

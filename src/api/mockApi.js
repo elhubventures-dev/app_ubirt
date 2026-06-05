@@ -424,11 +424,16 @@ export const mockApi = {
     return true;
   },
   async sendMessage(chatId, text, attachment) {
-    if (attachment) {
-      throw new Error("Image and video sharing is not available yet. Send text or emojis only.");
-    }
     await wait();
-    const message = { id: `m-${Date.now()}`, role: "me", text, status: "sent" };
+    const isVoice = attachment?.type === "audio";
+    const message = {
+      id: `m-${Date.now()}`,
+      role: "me",
+      text: isVoice ? "Voice message" : text,
+      status: "sent",
+      mediaUrl: isVoice ? URL.createObjectURL(attachment.file) : null,
+      mediaType: isVoice ? "audio" : null,
+    };
     messagesByChat = {
       ...messagesByChat,
       [chatId]: [...(messagesByChat[chatId] ?? []), message],
@@ -436,7 +441,15 @@ export const mockApi = {
     typingByChat = { ...typingByChat, [chatId]: true };
     const now = new Date().toISOString();
     conversations = conversations.map((c) =>
-      c.id === chatId ? { ...c, lastMessage: text, updatedAt: "now", sortAt: now, unread: 0 } : c
+      c.id === chatId
+        ? {
+            ...c,
+            lastMessage: isVoice ? "Voice message" : text,
+            updatedAt: "now",
+            sortAt: now,
+            unread: 0,
+          }
+        : c
     );
     persistState();
     window.setTimeout(() => {

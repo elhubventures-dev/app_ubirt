@@ -35,6 +35,36 @@ export async function uploadAvatar(file, userId) {
   return data.publicUrl;
 }
 
+const VOICE_MIME_TYPES = new Set([
+  "audio/webm",
+  "audio/webm;codecs=opus",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/wav",
+]);
+
+export async function uploadVoiceFile(file, userId, chatId) {
+  const mime = file.type || "audio/webm";
+  const baseMime = mime.split(";")[0].trim();
+  if (!VOICE_MIME_TYPES.has(baseMime) && !baseMime.startsWith("audio/")) {
+    throw new Error("Unsupported voice format.");
+  }
+  const supabase = getSupabase();
+  const ext = mime.includes("mp4") ? "m4a" : mime.includes("ogg") ? "ogg" : mime.includes("mpeg") ? "mp3" : "webm";
+  const path = `${userId}/voice/${chatId}/${Date.now()}.${ext}`;
+
+  const { error } = await supabase.storage.from("uploads").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: mime,
+  });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from("uploads").getPublicUrl(path);
+  return { path, publicUrl: data.publicUrl };
+}
+
 export async function uploadCover(file, userId) {
   validateImageFile(file);
   const supabase = getSupabase();
