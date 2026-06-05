@@ -4,6 +4,8 @@ This project supports iOS/Android with Capacitor.
 
 ## 1) Install and sync
 
+The native app loads the live web app from `https://app.ubirtai.site` (see `capacitor.config.json` `server.url`), so Messages/Group Chat UI updates ship with your Vercel deploy—rebuild the store app only when changing native plugins or permissions.
+
 ```bash
 npm install
 npm run build:mobile

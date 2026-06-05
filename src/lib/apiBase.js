@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 
-const PRODUCTION_APP_URL = "https://www.app.ubirtai.site";
+const PRODUCTION_APP_URL = "https://app.ubirtai.site";
 
 function cleanBaseUrl(url) {
   return String(url || "").replace(/\/$/, "");

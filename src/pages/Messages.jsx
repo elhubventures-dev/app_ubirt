@@ -8,6 +8,7 @@ import { dataProvider } from "@/api/dataProvider";
 import { useToast } from "@/components/ui/use-toast";
 import NewConversationSheet from "@/components/messages/NewConversationSheet";
 import NewGroupSheet from "@/components/messages/NewGroupSheet";
+import { isNativePlatform } from "@/lib/platform";
 
 export default function Messages() {
   const { data: chats = [], isLoading } = useConversations();
@@ -49,11 +50,12 @@ export default function Messages() {
     },
   });
 
+  const isNative = isNativePlatform();
+
   return (
-    <div className="flex flex-col min-h-full pb-20 pt-4 px-2 sm:px-4">
+    <div className="flex flex-col min-h-full pb-24 pt-2 px-2 sm:px-4">
       <div className="px-2 mb-4">
-        <h1 className="text-2xl font-bold text-white tracking-tight mb-4">Messages</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 py-2 -mx-2 px-2 bg-[#101822]/95 backdrop-blur-md">
           <button
             type="button"
             onClick={() => setShowNewChat(true)}
@@ -183,6 +185,27 @@ export default function Messages() {
           />
         )}
       </AnimatePresence>
+
+      {isNative && (
+        <div className="fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] right-4 z-40 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setShowNewGroup(true)}
+            aria-label="Create new group"
+            className="w-14 h-14 rounded-full bg-[#3b82f6] text-white shadow-[0_8px_24px_rgba(59,130,246,0.45)] flex items-center justify-center active:scale-95 transition-transform border border-white/10"
+          >
+            <span className="material-symbols-outlined text-[26px]">groups</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowNewChat(true)}
+            aria-label="Start new chat"
+            className="w-12 h-12 rounded-full bg-[#1a2332] text-white border border-white/10 shadow-lg flex items-center justify-center active:scale-95 transition-transform self-end"
+          >
+            <span className="material-symbols-outlined text-[22px] text-[#3b82f6]">edit_square</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
