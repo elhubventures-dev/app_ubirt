@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useFeed, useFeedComments } from "@/hooks/useFeed";
 import CommentsSheet from "@/components/feed/CommentsSheet";
 import ShareSheet from "@/components/feed/ShareSheet";
@@ -223,17 +224,31 @@ export default function VideoFeed() {
   const [activePostIndex, setActivePostIndex] = useState(0);
   const [feedType, setFeedType] = useState("foryou");
   const scrolledToPostRef = useRef(null);
+  const postRefs = useRef({});
 
   const { data: posts = [], isLoading, toggleLike, toggleBookmark, addComment, deletePost, sendGift, isMutating, isCommenting, isGifting } = useFeed(feedType);
+  const { data: targetPost, isLoading: isLoadingTarget } = useQuery({
+    queryKey: ["feed-post", targetPostId],
+    queryFn: () => dataProvider.getFeedPost(targetPostId),
+    enabled: Boolean(targetPostId),
+  });
+  const displayPosts = useMemo(() => {
+    if (!targetPostId) return posts;
+    if (posts.some((p) => p.id === targetPostId)) return posts;
+    if (targetPost) return [targetPost, ...posts];
+    return posts;
+  }, [posts, targetPost, targetPostId]);
+  const isFeedReady = !isLoading && (!targetPostId || !isLoadingTarget);
+
   const { data: comments = [], isLoading: isLoadingComments } = useFeedComments(expandedPostId);
   const { toast } = useToast();
   const containerRef = useRef(null);
 
   useEffect(() => {
-    if (!targetPostId || isLoading || !posts.length || !containerRef.current) return;
+    if (!targetPostId || !isFeedReady || !displayPosts.length) return;
     if (scrolledToPostRef.current === `${feedType}:${targetPostId}`) return;
 
-    const index = posts.findIndex((p) => p.id === targetPostId);
+    const index = displayPosts.findIndex((p) => p.id === targetPostId);
     if (index === -1) {
       if (feedType === "following") {
         setFeedType("foryou");
@@ -241,12 +256,24 @@ export default function VideoFeed() {
       return;
     }
 
-    const height = window.innerHeight;
-    containerRef.current.scrollTo({ top: index * height, behavior: "auto" });
-    setActivePostIndex(index);
-    scrolledToPostRef.current = `${feedType}:${targetPostId}`;
-    setSearchParams({}, { replace: true });
-  }, [targetPostId, posts, isLoading, feedType, setSearchParams]);
+    const jumpToPost = () => {
+      const el = postRefs.current[targetPostId];
+      if (el) {
+        el.scrollIntoView({ behavior: "auto", block: "start" });
+      } else if (containerRef.current) {
+        containerRef.current.scrollTo({ top: index * window.innerHeight, behavior: "auto" });
+      }
+      setActivePostIndex(index);
+      scrolledToPostRef.current = `${feedType}:${targetPostId}`;
+      setSearchParams({}, { replace: true });
+    };
+
+    jumpToPost();
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(jumpToPost);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [targetPostId, displayPosts, isFeedReady, feedType, setSearchParams]);
 
   useEffect(() => {
     if (!targetPostId) {
@@ -280,7 +307,7 @@ export default function VideoFeed() {
   };
 
   const handleBookmark = async (postId) => {
-    const wasSaved = posts.find((p) => p.id === postId)?.bookmarked;
+    const wasSaved = displayPosts.find((p) => p.id === postId)?.bookmarked;
     try {
       await toggleBookmark(postId);
       toast({
@@ -292,13 +319,13 @@ export default function VideoFeed() {
     }
   };
 
-  if (isLoading) return (
+  if (!isFeedReady) return (
     <div className="w-full h-[100dvh] flex items-center justify-center bg-black">
       <div className="animate-spin-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-[#0d5bba]"></div>
     </div>
   );
 
-  if (!posts.length) return (
+  if (!displayPosts.length) return (
     <div className="w-full h-[100dvh] flex items-center justify-center bg-black">
       <p className="text-slate-300">No posts yet. Create the first upload draft.</p>
     </div>
@@ -333,19 +360,26 @@ export default function VideoFeed() {
         onScroll={handleScroll}
         className="w-full h-full overflow-y-scroll snap-y snap-mandatory hide-scrollbar pb-20"
       >
-        {posts.map((post, index) => (
-          <VideoPost
+        {displayPosts.map((post, index) => (
+          <div
             key={post.id}
-            post={post}
-            isVisible={index === activePostIndex}
-            onLike={handleLike}
-            onBookmark={handleBookmark}
-            setExpandedPostId={setExpandedPostId}
-            isMutating={isMutating}
-            onAutoScroll={handleAutoScroll}
-            setOptionsPostId={setOptionsPostId}
-            setGiftPostId={setGiftPostId}
-          />
+            ref={(el) => {
+              if (el) postRefs.current[post.id] = el;
+              else delete postRefs.current[post.id];
+            }}
+          >
+            <VideoPost
+              post={post}
+              isVisible={index === activePostIndex}
+              onLike={handleLike}
+              onBookmark={handleBookmark}
+              setExpandedPostId={setExpandedPostId}
+              isMutating={isMutating}
+              onAutoScroll={handleAutoScroll}
+              setOptionsPostId={setOptionsPostId}
+              setGiftPostId={setGiftPostId}
+            />
+          </div>
         ))}
       </div>
 
@@ -397,7 +431,7 @@ export default function VideoFeed() {
                 <h3 className="text-white font-bold text-lg border-b border-white/10 pb-3">Post Options</h3>
                 
                 {(() => {
-                  const targetPost = posts.find((p) => p.id === optionsPostId);
+                  const targetPost = displayPosts.find((p) => p.id === optionsPostId);
                   const isAuthor =
                     targetPost?.username === user?.username ||
                     targetPost?.userId === user?.id;
@@ -459,7 +493,7 @@ export default function VideoFeed() {
       <AnimatePresence>
         {sharePostId && (
           <ShareSheet
-            post={posts.find((p) => p.id === sharePostId)}
+            post={displayPosts.find((p) => p.id === sharePostId)}
             onClose={() => setSharePostId("")}
           />
         )}

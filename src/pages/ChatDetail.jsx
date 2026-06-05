@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useChatMessages } from "@/hooks/useMessages";
+import { useChatMessages, useConversation } from "@/hooks/useMessages";
+import { formatPresenceStatus } from "@/lib/presence";
 import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -11,8 +12,15 @@ export default function ChatDetail() {
   const draftKey = `ubirt.draft.${id}`;
   const [text, setText] = useState(() => localStorage.getItem(draftKey) || "");
   const [showEmoji, setShowEmoji] = useState(false);
-  const { data: messages = [], isLoading, sendMessage, isSending, isTyping, onlineUsers, updateTyping } = useChatMessages(id);
+  const { data: conversation } = useConversation(id);
+  const { data: messages = [], isLoading, sendMessage, isSending, isTyping, peerOnlineAt, updateTyping } = useChatMessages(id);
   const { toast } = useToast();
+  const presence = useMemo(
+    () => formatPresenceStatus(conversation?.lastSeenAt, peerOnlineAt),
+    [conversation?.lastSeenAt, peerOnlineAt]
+  );
+  const avatarSrc = conversation?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${conversation?.name || id}`;
+  const profileLink = conversation?.username ? `/user/${conversation.username}` : null;
   const scrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
@@ -66,15 +74,30 @@ export default function ChatDetail() {
           <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
         </Link>
 
-        <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 cursor-pointer">
-          <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden shadow-sm mb-1">
-            <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=Chat${id}`} alt="Avatar" className="w-full h-full object-cover" />
+        {profileLink ? (
+          <Link
+            to={profileLink}
+            className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 hover:opacity-90 transition-opacity"
+          >
+            <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden shadow-sm mb-1">
+              <img src={avatarSrc} alt={conversation?.name || "User"} className="w-full h-full object-cover" />
+            </div>
+            <h1 className="text-xs font-semibold tracking-wide">{conversation?.name || "Chat"}</h1>
+            <span className={`text-[9px] font-medium ${presence.isActive ? "text-emerald-400" : "text-slate-500"}`}>
+              {presence.label}
+            </span>
+          </Link>
+        ) : (
+          <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2">
+            <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden shadow-sm mb-1">
+              <img src={avatarSrc} alt={conversation?.name || "User"} className="w-full h-full object-cover" />
+            </div>
+            <h1 className="text-xs font-semibold tracking-wide">{conversation?.name || "Chat"}</h1>
+            <span className={`text-[9px] font-medium ${presence.isActive ? "text-emerald-400" : "text-slate-500"}`}>
+              {presence.label}
+            </span>
           </div>
-          <h1 className="text-xs font-semibold tracking-wide">Chat</h1>
-          <span className={`text-[9px] font-medium ${onlineUsers?.length > 0 ? "text-emerald-400" : "text-slate-500"}`}>
-            {onlineUsers?.length > 0 ? "Active now" : "Offline"}
-          </span>
-        </div>
+        )}
 
         <div className="w-10" />
       </header>

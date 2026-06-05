@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 const iconMap = {
   like: { icon: "favorite", color: "text-red-500", bg: "bg-red-500/10" },
   comment: { icon: "chat_bubble", color: "text-[#3b82f6]", bg: "bg-[#3b82f6]/10" },
+  message: { icon: "mail", color: "text-sky-400", bg: "bg-sky-400/10" },
   follow: { icon: "person_add", color: "text-emerald-500", bg: "bg-emerald-500/10" },
   gift: { icon: "featured_seasonal_and_gifts", color: "text-amber-500", bg: "bg-amber-500/10" },
   system: { icon: "campaign", color: "text-purple-500", bg: "bg-purple-500/10" },

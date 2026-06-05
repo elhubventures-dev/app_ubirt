@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import AppHeader from "@/components/layout/AppHeader";
 import BottomNav from "@/components/layout/BottomNav";
 import { useAuth } from "@/lib/AuthContext";
+import { dataProvider } from "@/api/dataProvider";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -14,6 +15,26 @@ export default function MainLayout() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured() || !dataProvider.updateLastSeen) return undefined;
+
+    const ping = () => {
+      dataProvider.updateLastSeen().catch(() => {});
+    };
+
+    ping();
+    const intervalId = window.setInterval(ping, 2 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") ping();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!user || !isSupabaseConfigured()) return undefined;
@@ -30,11 +51,17 @@ export default function MainLayout() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
+          const type = payload.new?.type;
           queryClient.invalidateQueries({ queryKey: ["notifications"] });
-          toast({
-            title: "New notification",
-            description: payload.new.text || "Someone interacted with you.",
-          });
+          if (type === "message") {
+            queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          }
+          if (!location.pathname.startsWith("/chat/")) {
+            toast({
+              title: type === "message" ? "New message" : "New notification",
+              description: payload.new.text || "Someone interacted with you.",
+            });
+          }
         }
       )
       .subscribe();
@@ -42,7 +69,7 @@ export default function MainLayout() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, queryClient, toast]);
+  }, [user, queryClient, toast, location.pathname]);
 
   return (
     <div className="min-h-screen bg-[#101822] text-white overflow-hidden relative">

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { useFeed } from "@/hooks/useFeed";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
@@ -8,6 +8,7 @@ import NotificationBell from "@/components/layout/NotificationBell";
 import { feedPostPath } from "@/lib/feedLinks";
 
 export default function Home() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { data: posts = [], isLoading: isLoadingFeed } = useFeed();
   const { data: stats } = useCreatorStudio();
@@ -118,21 +119,29 @@ export default function Home() {
              {isLoadingFeed ? (
                 [1,2,3].map(i => <div key={i} className="w-32 h-48 shrink-0 bg-white/5 rounded-2xl animate-pulse" />)
              ) : (
-                posts.slice(0, 5).map(post => (
-                  <Link key={post.id} to={feedPostPath(post.id)} className="w-32 h-48 shrink-0 snap-start bg-slate-800 rounded-2xl overflow-hidden relative group shadow-lg ring-1 ring-white/5">
-                     <img 
-                        src={post.media_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${post.id}`} 
-                        alt="Thumbnail" 
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-80" 
+                posts.slice(0, 5).map((post) => (
+                  <button
+                    key={post.id}
+                    type="button"
+                    onClick={() => navigate(feedPostPath(post.id))}
+                    className="w-32 h-48 shrink-0 snap-start bg-slate-800 rounded-2xl overflow-hidden relative group shadow-lg ring-1 ring-white/5 text-left"
+                  >
+                     <img
+                        src={post.media_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${post.id}`}
+                        alt="Thumbnail"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-80"
+                        onError={(e) => {
+                          e.currentTarget.src = `https://api.dicebear.com/9.x/shapes/svg?seed=${post.id}`;
+                        }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent flex flex-col justify-end p-3">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent flex flex-col justify-end p-3 pointer-events-none">
                         <div className="flex items-center gap-1.5 mb-1">
-                          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${post.author}`} alt={post.author} className="w-4 h-4 rounded-full bg-slate-700" />
+                          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${post.username || post.author}`} alt={post.author} className="w-4 h-4 rounded-full bg-slate-700" />
                           <span className="text-[10px] text-white font-medium truncate">{post.author}</span>
                         </div>
                         <p className="text-xs text-slate-300 font-medium truncate">{post.caption}</p>
                       </div>
-                  </Link>
+                  </button>
                 ))
              )}
           </div>

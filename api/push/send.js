@@ -203,7 +203,7 @@ export default async function handler(req, res) {
     ...(data || {}),
     type: type || "general",
     notificationId: notificationId ? String(notificationId) : undefined,
-    url: data?.url || "/notifications",
+    url: data?.url || (type === "message" && data?.chatId ? `/chat/${data.chatId}` : "/notifications"),
   };
   Object.keys(payloadData).forEach((k) => payloadData[k] == null && delete payloadData[k]);
 

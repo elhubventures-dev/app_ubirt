@@ -13,7 +13,7 @@ async function getUserId() {
   return user.id;
 }
 
-async function notifyUser(recipientId, type, text) {
+async function notifyUser(recipientId, type, text, options = {}) {
   if (!recipientId) return;
   const supabase = getSupabase();
   const { data: notificationId, error } = await supabase.rpc("create_notification", {
@@ -22,6 +22,12 @@ async function notifyUser(recipientId, type, text) {
     p_text: text,
   });
   if (error) throw error;
+
+  const pushData = {
+    ...(options.data || {}),
+    ...(options.chatId ? { chatId: options.chatId } : {}),
+    ...(options.url ? { url: options.url } : {}),
+  };
 
   // Best-effort push fanout after in-app notification is created.
   try {
@@ -32,8 +38,9 @@ async function notifyUser(recipientId, type, text) {
         userId: recipientId,
         notificationId,
         type,
-        title: "UBIRT",
+        title: options.title || (type === "message" ? "New message" : "UBIRT"),
         body: text,
+        data: Object.keys(pushData).length ? pushData : undefined,
       }),
     });
   } catch (pushError) {
@@ -126,6 +133,24 @@ export const supabaseApi = {
     const bookmarkedSet = new Set((bookmarks || []).map((b) => b.post_id));
 
     return filteredPosts.map((p) => mapPost(p, p.profiles, likedSet.has(p.id), bookmarkedSet.has(p.id)));
+  },
+
+  async getFeedPost(postId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*, profiles:user_id (id, username, display_name, avatar_url)")
+      .eq("id", postId)
+      .single();
+    if (error) throw error;
+
+    const [{ data: like }, { data: bookmark }] = await Promise.all([
+      supabase.from("post_likes").select("post_id").eq("user_id", userId).eq("post_id", postId).maybeSingle(),
+      supabase.from("post_bookmarks").select("post_id").eq("user_id", userId).eq("post_id", postId).maybeSingle(),
+    ]);
+
+    return mapPost(data, data.profiles, Boolean(like), Boolean(bookmark));
   },
 
   async toggleFollow(username) {
@@ -669,6 +694,39 @@ export const supabaseApi = {
     return { id: data.id, author: actorName, text: data.text };
   },
 
+  async getConversation(chatId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data: members, error } = await supabase
+      .from("conversation_members")
+      .select("user_id, profiles:user_id (display_name, username, avatar_url, last_seen_at)")
+      .eq("conversation_id", chatId);
+    if (error) throw error;
+
+    const otherMember = (members ?? []).find((m) => m.user_id !== userId);
+    const otherProfile = otherMember?.profiles;
+
+    return {
+      id: chatId,
+      peerId: otherMember?.user_id ?? null,
+      name: otherProfile?.display_name ?? otherProfile?.username ?? "Chat",
+      username: otherProfile?.username ?? null,
+      avatar: otherProfile?.avatar_url ?? null,
+      lastSeenAt: otherProfile?.last_seen_at ?? null,
+    };
+  },
+
+  async updateLastSeen() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq("id", userId);
+    if (error) throw error;
+    return true;
+  },
+
   async getConversations() {
     const userId = await getUserId();
     const supabase = getSupabase();
@@ -686,7 +744,7 @@ export const supabaseApi = {
 
       const { data: members } = await supabase
         .from("conversation_members")
-        .select("user_id, profiles:user_id (display_name, username, avatar_url)")
+        .select("user_id, profiles:user_id (display_name, username, avatar_url, last_seen_at)")
         .eq("conversation_id", conv.id);
 
       const otherMember = (members ?? []).find((m) => m.user_id !== userId);
@@ -785,6 +843,7 @@ export const supabaseApi = {
 
   subscribeToMessages(chatId, onMessage) {
     const supabase = getSupabase();
+    const userIdPromise = getUserId();
     const channel = supabase
       .channel(`messages:${chatId}`)
       .on(
@@ -796,7 +855,7 @@ export const supabaseApi = {
           filter: `conversation_id=eq.${chatId}`,
         },
         async (payload) => {
-          const userId = await getUserId();
+          const userId = await userIdPromise;
           const m = payload.new;
           onMessage({
             id: m.id,
@@ -808,7 +867,11 @@ export const supabaseApi = {
           });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error(`messages:${chatId} subscription ${status}`, err);
+        }
+      });
     return () => supabase.removeChannel(channel);
   },
 
@@ -863,6 +926,26 @@ export const supabaseApi = {
       .single();
     if (error) throw error;
     await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", chatId);
+
+    const actorName = await getActorDisplayName(userId);
+    const preview = text.length > 80 ? `${text.slice(0, 77)}...` : text;
+    const { data: members } = await supabase
+      .from("conversation_members")
+      .select("user_id")
+      .eq("conversation_id", chatId)
+      .neq("user_id", userId);
+
+    for (const member of members ?? []) {
+      try {
+        await notifyUser(member.user_id, "message", `${actorName}: ${preview}`, {
+          chatId,
+          url: `/chat/${chatId}`,
+        });
+      } catch (notifyError) {
+        console.warn("Failed to notify message recipient:", notifyError);
+      }
+    }
+
     return {
       id: data.id,
       role: "me",

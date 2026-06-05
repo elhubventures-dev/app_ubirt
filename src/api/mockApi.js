@@ -100,6 +100,12 @@ export const mockApi = {
     }
     return feedPosts;
   },
+  async getFeedPost(postId) {
+    await wait();
+    const post = feedPosts.find((p) => p.id === postId);
+    if (!post) throw new Error("Post not found");
+    return post;
+  },
   async toggleLike(postId) {
     await wait();
     feedPosts = feedPosts.map((post) =>
@@ -345,6 +351,21 @@ export const mockApi = {
   async getConversations() {
     await wait();
     return conversations;
+  },
+  async getConversation(chatId) {
+    await wait(80);
+    const chat = conversations.find((c) => c.id === chatId);
+    return {
+      id: chatId,
+      peerId: chat?.peerId ?? null,
+      name: chat?.name ?? "Chat",
+      username: chat?.username ?? null,
+      avatar: chat?.avatar ?? null,
+      lastSeenAt: chat?.lastSeenAt ?? new Date().toISOString(),
+    };
+  },
+  async updateLastSeen() {
+    return true;
   },
   async startConversation(targetUserId) {
     await wait();
