@@ -39,8 +39,12 @@ describe("mockApi", () => {
     const balance = await mockApi.getWalletBalance();
     const transactions = await mockApi.getTransactions();
 
-    expect(typeof balance).toBe("number");
-    expect(balance).toBeGreaterThanOrEqual(0);
+    expect(balance).toMatchObject({
+      platformCoins: expect.any(Number),
+      giftCoins: expect.any(Number),
+    });
+    expect(balance.platformCoins).toBeGreaterThanOrEqual(0);
+    expect(balance.giftCoins).toBeGreaterThanOrEqual(0);
     expect(Array.isArray(transactions)).toBe(true);
     expect(transactions.length).toBeGreaterThan(0);
     expect(transactions[0]).toHaveProperty("coins");

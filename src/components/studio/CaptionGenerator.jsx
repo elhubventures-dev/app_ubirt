@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getApiUrl } from "@/lib/apiBase";
 import { useToast } from "@/components/ui/use-toast";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 
@@ -12,7 +13,7 @@ export default function CaptionGenerator({ videoFile, onCaptionsGenerated }) {
     setIsGenerating(true);
     try {
       const topic = videoFile?.name || "a random interesting topic";
-      const res = await fetch("/api/ai/captions", {
+      const res = await fetch(getApiUrl("/api/ai/captions"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic })

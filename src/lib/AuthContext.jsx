@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ensureUserProfile, getAuthAvatarUrl, getAuthDisplayName, getOAuthRedirectUrl } from "@/lib/authHelpers";
 import { isNativePlatform } from "@/lib/platform";
 import { resetAnalyticsUser } from "@/lib/monitoring";
+import { getApiUrl } from "@/lib/apiBase";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { SIGNUP_BONUS_COINS } from "@/lib/wallet";
 
@@ -14,6 +15,7 @@ const demoUser = {
   username: "alexdemo",
   email: "demo@ubirt.ai",
   coins: SIGNUP_BONUS_COINS,
+  giftCoins: 0,
   bio: "",
   phone: "",
   website: "",
@@ -33,6 +35,7 @@ function mapProfile(user, profile) {
     name: profile?.display_name ?? getAuthDisplayName(user),
     username: profile?.username ?? user.user_metadata?.username ?? "user",
     coins: profile?.coins ?? SIGNUP_BONUS_COINS,
+    giftCoins: profile?.gift_coins ?? 0,
     avatar: profile?.avatar_url ?? getAuthAvatarUrl(user) ?? defaultAvatar,
     cover: profile?.cover_url ?? "",
     bio: profile?.bio ?? "",
@@ -330,7 +333,7 @@ export function AuthProvider({ children }) {
       throw new Error("Not authenticated");
     }
 
-    const res = await fetch("/api/account/delete", {
+    const res = await fetch(getApiUrl("/api/account/delete"), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${session.access_token}`,

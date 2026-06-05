@@ -39,6 +39,7 @@ const VOICE_MIME_TYPES = new Set([
   "audio/webm",
   "audio/webm;codecs=opus",
   "audio/mp4",
+  "audio/aac",
   "audio/mpeg",
   "audio/ogg",
   "audio/wav",
@@ -51,7 +52,13 @@ export async function uploadVoiceFile(file, userId, chatId) {
     throw new Error("Unsupported voice format.");
   }
   const supabase = getSupabase();
-  const ext = mime.includes("mp4") ? "m4a" : mime.includes("ogg") ? "ogg" : mime.includes("mpeg") ? "mp3" : "webm";
+  const ext = mime.includes("aac") || mime.includes("mp4")
+    ? "m4a"
+    : mime.includes("ogg")
+      ? "ogg"
+      : mime.includes("mpeg")
+        ? "mp3"
+        : "webm";
   const path = `${userId}/voice/${chatId}/${Date.now()}.${ext}`;
 
   const { error } = await supabase.storage.from("uploads").upload(path, file, {

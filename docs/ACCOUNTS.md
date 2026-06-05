@@ -170,5 +170,6 @@ Run every file in `supabase/migrations/` in numeric order in the **SQL Editor** 
 | 022 | `022_message_hides.sql` | Delete-for-me hides + sender delete-for-everyone |
 | 023 | `023_comments_delete_policy.sql` | Users delete own comments + comment count decrement |
 | 024 | `024_payment_gateways.sql` | `gateway` column on wallet transactions (Fincra, Paystack) |
+| 025 | `025_dual_wallet.sql` | Platform coins vs gift coins wallets + conversion RPC |
 
-**Minimum for current app features:** through `024`. Skipping `013` breaks DMs; skipping `015`–`022` degrades live chat, voice, deletes, and notification deep links.
+**Minimum for current app features:** through `025`. Skipping `013` breaks DMs; skipping `015`–`022` degrades live chat, voice, deletes, and notification deep links.

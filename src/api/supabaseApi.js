@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabaseClient";
 import { uploadAvatar, uploadCover, uploadVoiceFile } from "@/api/storage";
+import { getApiUrl } from "@/lib/apiBase";
 import { processImageUpload } from "@/lib/videoPipeline";
 import { inferMediaType } from "@/lib/media";
 import { getNotificationPath } from "@/lib/notificationLinks";
@@ -51,7 +52,7 @@ async function notifyUser(recipientId, type, text, options = {}) {
 
   // Best-effort push fanout after in-app notification is created.
   try {
-    await fetch("/api/push/send", {
+    await fetch(getApiUrl("/api/push/send"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -183,7 +184,7 @@ export const supabaseApi = {
       try {
         const actorId = await getUserId();
         const actorName = await getActorDisplayName(actorId);
-        await fetch("/api/push/send", {
+        await fetch(getApiUrl("/api/push/send"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -393,9 +394,43 @@ export const supabaseApi = {
   async getWalletBalance() {
     const userId = await getUserId();
     const supabase = getSupabase();
-    const { data, error } = await supabase.from("profiles").select("coins").eq("id", userId).single();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("coins, gift_coins")
+      .eq("id", userId)
+      .single();
     if (error) throw error;
-    return data?.coins ?? 0;
+    return {
+      platformCoins: data?.coins ?? 0,
+      giftCoins: data?.gift_coins ?? 0,
+    };
+  },
+
+  async convertGiftCoins(amount) {
+    const parsedAmount = Math.floor(Number(amount) || 0);
+    if (parsedAmount <= 0) {
+      throw new Error("Enter a valid amount to convert.");
+    }
+
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc("convert_gift_coins", {
+      p_amount: parsedAmount,
+    });
+
+    if (error) {
+      if (error.message?.includes("convert_gift_coins")) {
+        throw new Error("Gift coin conversion is not available yet. Run migration 025 in Supabase.");
+      }
+      throw error;
+    }
+
+    const result = typeof data === "string" ? JSON.parse(data) : data;
+    return {
+      success: true,
+      amount: result.amount ?? parsedAmount,
+      platformCoins: result.platform_balance,
+      giftCoins: result.gift_balance,
+    };
   },
 
   async getTrendingTags(limit = 6) {
@@ -525,7 +560,7 @@ export const supabaseApi = {
 
     if (result?.receiver_id) {
       try {
-        await fetch("/api/push/send", {
+        await fetch(getApiUrl("/api/push/send"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -546,7 +581,7 @@ export const supabaseApi = {
       receiverAmount: result.receiver_amount,
       platformFee: result.platform_fee,
       senderBalance: result.sender_balance,
-      receiverBalance: result.receiver_balance,
+      receiverGiftBalance: result.receiver_gift_balance,
       receiverId: result.receiver_id,
     };
   },
@@ -576,7 +611,11 @@ export const supabaseApi = {
       .lt("created_at", since.toISOString());
     const views = (posts ?? []).reduce((sum, p) => sum + (p.views_count ?? 0), 0);
     const prevViews = (prevPosts ?? []).reduce((sum, p) => sum + (p.views_count ?? 0), 0);
-    const { data: profile } = await supabase.from("profiles").select("coins").eq("id", userId).single();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("gift_coins")
+      .eq("id", userId)
+      .single();
 
     const chartDays = Math.min(days, 7);
     const chartData = [];
@@ -600,7 +639,7 @@ export const supabaseApi = {
       followers: followers ?? 0,
       views,
       completionRate: Math.min(100, 40 + (posts?.length ?? 0) * 5),
-      earnings: profile?.coins ?? 0,
+      earnings: profile?.gift_coins ?? 0,
       chartData: chartData.map((v) => Math.max(8, Math.round((v / maxChart) * 100))),
       growthPct: prevViews > 0 ? Math.round(((views - prevViews) / prevViews) * 100) : views > 0 ? 100 : 0,
     };
@@ -858,7 +897,7 @@ export const supabaseApi = {
       throw new Error(rpcError?.message || "Not authenticated");
     }
 
-    const res = await fetch("/api/conversations/start", {
+    const res = await fetch(getApiUrl("/api/conversations/start"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1148,7 +1187,7 @@ export const supabaseApi = {
 
   async analyzeCommentToxicity(text) {
     try {
-      const res = await fetch("/api/ai/moderate", {
+      const res = await fetch(getApiUrl("/api/ai/moderate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ input: text }),
@@ -1227,7 +1266,7 @@ export const supabaseApi = {
 
     let assistantText;
     try {
-      const res = await fetch("/api/ai/chat", {
+      const res = await fetch(getApiUrl("/api/ai/chat"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),

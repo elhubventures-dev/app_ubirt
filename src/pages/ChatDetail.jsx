@@ -36,6 +36,7 @@ export default function ChatDetail() {
   const profileLink = conversation?.username ? `/user/${conversation.username}` : null;
   const scrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const voiceStartRef = useRef(false);
   const voice = useVoiceRecorder();
 
   const handleTyping = (val) => {
@@ -98,15 +99,23 @@ export default function ChatDetail() {
   };
 
   const handleStartVoice = async () => {
+    if (voiceStartRef.current || voice.isRecording) return;
+    voiceStartRef.current = true;
     try {
       setShowEmoji(false);
       await voice.startRecording();
     } catch (err) {
+      const message =
+        err?.name === "NotAllowedError"
+          ? "Microphone access was denied. Allow microphone permission in your device settings."
+          : err.message || "Allow microphone access to send voice messages.";
       toast({
         title: "Microphone unavailable",
-        description: err.message || "Allow microphone access to send voice messages.",
+        description: message,
         variant: "destructive",
       });
+    } finally {
+      voiceStartRef.current = false;
     }
   };
 
@@ -134,40 +143,44 @@ export default function ChatDetail() {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
-      <header className="shrink-0 px-4 py-3 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between z-10 shadow-sm relative">
-        <Link to="/messages" className="text-[#3b82f6] flex items-center gap-1 -ml-2 p-2 hover:bg-white/5 rounded-full transition-colors">
-          <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
+      <header className="shrink-0 grid grid-cols-[auto_1fr_auto] items-center gap-2 px-2 pt-[calc(env(safe-area-inset-top)+0.25rem)] pb-2 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 z-10 shadow-sm">
+        <Link to="/messages" className="text-[#3b82f6] p-1.5 hover:bg-white/5 rounded-full transition-colors">
+          <span className="material-symbols-outlined text-[22px]">arrow_back_ios</span>
         </Link>
 
         {profileLink ? (
           <Link
             to={profileLink}
-            className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 hover:opacity-90 transition-opacity"
+            className="flex items-center justify-center gap-2 min-w-0 hover:opacity-90 transition-opacity"
           >
-            <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden shadow-sm mb-1">
+            <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden shadow-sm shrink-0">
               <img src={avatarSrc} alt={conversation?.name || "User"} className="w-full h-full object-cover" />
             </div>
-            <h1 className="text-xs font-semibold tracking-wide">{conversation?.name || "Chat"}</h1>
-            <span className={`text-[9px] font-medium ${presence.isActive ? "text-emerald-400" : "text-slate-500"}`}>
-              {presence.label}
-            </span>
+            <div className="min-w-0 text-left">
+              <h1 className="text-sm font-semibold truncate leading-tight">{conversation?.name || "Chat"}</h1>
+              <span className={`text-[10px] font-medium ${presence.isActive ? "text-emerald-400" : "text-slate-500"}`}>
+                {presence.label}
+              </span>
+            </div>
           </Link>
         ) : (
-          <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2">
-            <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden shadow-sm mb-1">
+          <div className="flex items-center justify-center gap-2 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden shadow-sm shrink-0">
               <img src={avatarSrc} alt={conversation?.name || "User"} className="w-full h-full object-cover" />
             </div>
-            <h1 className="text-xs font-semibold tracking-wide">{conversation?.name || "Chat"}</h1>
-            <span className={`text-[9px] font-medium ${presence.isActive ? "text-emerald-400" : "text-slate-500"}`}>
-              {presence.label}
-            </span>
+            <div className="min-w-0 text-left">
+              <h1 className="text-sm font-semibold truncate leading-tight">{conversation?.name || "Chat"}</h1>
+              <span className={`text-[10px] font-medium ${presence.isActive ? "text-emerald-400" : "text-slate-500"}`}>
+                {presence.label}
+              </span>
+            </div>
           </div>
         )}
 
-        <div className="w-10" />
+        <div className="w-9" />
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-1 z-0 hide-scrollbar">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-3 pb-4 flex flex-col gap-1 z-0 hide-scrollbar">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin-slow rounded-full h-8 w-8 border-t-2 border-b-2 border-[#3b82f6]" />

@@ -543,7 +543,7 @@ export default function VideoFeed() {
                   <div className="flex justify-between items-center border-b border-white/10 pb-3">
                     <div>
                       <h3 className="text-white font-bold text-lg">Send a Gift</h3>
-                      <p className="text-[11px] text-slate-400 mt-1">Creators receive 80% · Platform fee 20%</p>
+                      <p className="text-[11px] text-slate-400 mt-1">Uses platform coins · Creators receive 80% as gift coins</p>
                     </div>
                     <div className="flex items-center gap-1 text-amber-400 font-bold bg-amber-400/10 px-3 py-1 rounded-full">
                        <span className="material-symbols-outlined text-sm">monetization_on</span>
@@ -576,7 +576,7 @@ export default function VideoFeed() {
                             }
                             toast({
                               title: "Gift sent!",
-                              description: `${gift.name} sent · Creator receives ${result.receiverAmount ?? receiverAmount} coins`,
+                              description: `${gift.name} sent · Creator receives ${result.receiverAmount ?? receiverAmount} gift coins`,
                             });
                             setGiftPostId("");
                           } catch (err) {

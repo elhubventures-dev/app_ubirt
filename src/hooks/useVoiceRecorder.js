@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Microphone } from "@mozartec/capacitor-microphone";
+import { ensureMicrophonePermission } from "@/lib/microphonePermission";
 
 const MAX_DURATION_MS = 120_000;
 
@@ -15,6 +18,15 @@ function formatDuration(ms) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function base64ToBlob(base64, mimeType) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType || "audio/aac" });
+}
+
 export function useVoiceRecorder() {
   const [status, setStatus] = useState("idle");
   const [durationMs, setDurationMs] = useState(0);
@@ -24,6 +36,8 @@ export function useVoiceRecorder() {
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const mimeTypeRef = useRef("");
+  const nativeRecordingRef = useRef(false);
+  const stopNativeRecordingRef = useRef(null);
 
   const cleanupStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -42,17 +56,63 @@ export function useVoiceRecorder() {
     cleanupStream();
     recorderRef.current = null;
     chunksRef.current = [];
+    nativeRecordingRef.current = false;
     setBlob(null);
     setDurationMs(0);
     setStatus("idle");
   }, [cleanupStream, clearTimer]);
 
-  const startRecording = useCallback(async () => {
+  const startTimer = useCallback((onMaxDuration) => {
+    timerRef.current = window.setInterval(() => {
+      setDurationMs((current) => {
+        const next = current + 100;
+        if (next >= MAX_DURATION_MS) {
+          onMaxDuration?.();
+          clearTimer();
+          return MAX_DURATION_MS;
+        }
+        return next;
+      });
+    }, 100);
+  }, [clearTimer]);
+
+  const stopNativeRecording = useCallback(async () => {
+    if (!nativeRecordingRef.current) return;
+    clearTimer();
+    nativeRecordingRef.current = false;
+
+    try {
+      const result = await Microphone.stopRecording();
+      const recorded = base64ToBlob(result.base64String, result.mimeType || "audio/aac");
+      const duration = result.duration ?? 0;
+      setDurationMs(duration > 0 ? duration : 0);
+      setBlob(recorded.size > 0 ? recorded : null);
+      setStatus(recorded.size > 0 ? "preview" : "idle");
+    } catch {
+      setBlob(null);
+      setStatus("idle");
+      throw new Error("Failed to save the voice recording.");
+    }
+  }, [clearTimer]);
+
+  stopNativeRecordingRef.current = stopNativeRecording;
+
+  const startNativeRecording = useCallback(async () => {
+    await ensureMicrophonePermission();
+    await Microphone.startRecording();
+    nativeRecordingRef.current = true;
+    setStatus("recording");
+    setDurationMs(0);
+    startTimer(() => {
+      stopNativeRecordingRef.current?.();
+    });
+  }, [startTimer]);
+
+  const startWebRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       throw new Error("Voice recording is not supported on this device.");
     }
 
-    reset();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     streamRef.current = stream;
     mimeTypeRef.current = getSupportedMimeType();
@@ -77,31 +137,50 @@ export function useVoiceRecorder() {
     recorder.start(200);
     setStatus("recording");
     setDurationMs(0);
+    startTimer(() => {
+      recorderRef.current?.stop();
+    });
+  }, [cleanupStream, startTimer]);
 
-    timerRef.current = window.setInterval(() => {
-      setDurationMs((current) => {
-        const next = current + 100;
-        if (next >= MAX_DURATION_MS) {
-          recorderRef.current?.stop();
-          clearTimer();
-          return MAX_DURATION_MS;
-        }
-        return next;
-      });
-    }, 100);
-  }, [cleanupStream, clearTimer, reset]);
+  const startRecording = useCallback(async () => {
+    reset();
 
-  const stopRecording = useCallback(() => {
+    if (Capacitor.isNativePlatform()) {
+      await startNativeRecording();
+      return;
+    }
+
+    await ensureMicrophonePermission();
+    await startWebRecording();
+  }, [reset, startNativeRecording, startWebRecording]);
+
+  const stopRecording = useCallback(async () => {
     if (status !== "recording") return;
     clearTimer();
-    recorderRef.current?.stop();
-  }, [clearTimer, status]);
 
-  const cancelRecording = useCallback(() => {
+    if (nativeRecordingRef.current) {
+      await stopNativeRecording();
+      return;
+    }
+
+    recorderRef.current?.stop();
+  }, [clearTimer, status, stopNativeRecording]);
+
+  const cancelRecording = useCallback(async () => {
     if (status === "recording") {
       clearTimer();
       chunksRef.current = [];
-      recorderRef.current?.stop();
+
+      if (nativeRecordingRef.current) {
+        nativeRecordingRef.current = false;
+        try {
+          await Microphone.stopRecording();
+        } catch {
+          // Ignore cleanup errors when cancelling.
+        }
+      } else {
+        recorderRef.current?.stop();
+      }
     }
     reset();
   }, [clearTimer, reset, status]);

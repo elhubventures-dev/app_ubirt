@@ -16,6 +16,8 @@ import {
   startFincraCheckout,
 } from "@/lib/paymentGateways";
 
+const EMPTY_WALLET = { platformCoins: 0, giftCoins: 0 };
+
 export default function Wallet() {
   const { user, updateUserSession } = useAuth();
   const navigate = useNavigate();
@@ -24,8 +26,10 @@ export default function Wallet() {
   const queryClient = useQueryClient();
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState("");
+  const [convertAmount, setConvertAmount] = useState("");
+  const [isConverting, setIsConverting] = useState(false);
 
-  const { data: balance } = useQuery({
+  const { data: wallet = EMPTY_WALLET } = useQuery({
     queryKey: ["wallet-balance"],
     queryFn: () => dataProvider.getWalletBalance(),
   });
@@ -35,7 +39,8 @@ export default function Wallet() {
     queryFn: () => dataProvider.getTransactions(),
   });
 
-  const displayBalance = balance ?? user?.coins ?? 0;
+  const platformCoins = wallet.platformCoins ?? user?.coins ?? 0;
+  const giftCoins = wallet.giftCoins ?? user?.giftCoins ?? 0;
   const gatewayLabel = getActiveGatewayLabel();
 
   const paystackConfig = {
@@ -46,12 +51,19 @@ export default function Wallet() {
 
   const initializePayment = usePaystackPayment(paystackConfig);
 
+  const syncWalletSession = (balances) => {
+    updateUserSession?.({
+      coins: balances.platformCoins,
+      giftCoins: balances.giftCoins,
+    });
+    queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
+    queryClient.invalidateQueries({ queryKey: ["wallet-transactions"] });
+  };
+
   const refreshWallet = async () => {
     try {
-      const coins = await dataProvider.getWalletBalance();
-      updateUserSession?.({ coins });
-      queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
-      queryClient.invalidateQueries({ queryKey: ["wallet-transactions"] });
+      const balances = await dataProvider.getWalletBalance();
+      syncWalletSession(balances);
     } catch {
       // Webhook may still be processing
     }
@@ -64,7 +76,7 @@ export default function Wallet() {
 
     toast({
       title: "Payment received",
-      description: `Reference: ${reference}. Updating your balance...`,
+      description: `Reference: ${reference}. Updating your platform balance...`,
     });
 
     setSearchParams({}, { replace: true });
@@ -75,7 +87,7 @@ export default function Wallet() {
     setIsPurchasing(false);
     toast({
       title: "Payment Successful!",
-      description: `Reference: ${reference.reference}. Updating your balance...`,
+      description: `Reference: ${reference.reference}. Updating your platform balance...`,
     });
     setTimeout(refreshWallet, 3000);
   };
@@ -128,6 +140,40 @@ export default function Wallet() {
     }
   };
 
+  const handleConvert = async (amountOverride) => {
+    const amount = amountOverride ?? parseInt(convertAmount, 10);
+    if (!amount || amount <= 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Enter how many gift coins to convert.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsConverting(true);
+    try {
+      const result = await dataProvider.convertGiftCoins(amount);
+      syncWalletSession({
+        platformCoins: result.platformCoins,
+        giftCoins: result.giftCoins,
+      });
+      setConvertAmount("");
+      toast({
+        title: "Conversion complete",
+        description: `${result.amount.toLocaleString()} gift coins moved to your platform wallet.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Conversion failed",
+        description: err.message || "Unable to convert gift coins.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#101822] text-white flex flex-col relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-[#0a111a] via-[#101822] to-[#152336] z-0" />
@@ -140,30 +186,92 @@ export default function Wallet() {
         <h1 className="text-xl font-bold flex-1 text-center pr-10">Wallet</h1>
       </header>
 
-      <main className="flex-1 relative z-10 p-6 max-w-md mx-auto w-full flex flex-col gap-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-3xl p-6 shadow-[0_10px_30px_rgba(245,158,11,0.3)] text-center relative overflow-hidden"
-        >
-          <div className="absolute top-[-20%] right-[-10%] text-white/20">
-            <span className="material-symbols-outlined text-[120px]">monetization_on</span>
-          </div>
-          <p className="text-white/80 font-semibold mb-1 relative z-10">Total Balance</p>
-          <div className="flex items-center justify-center gap-2 relative z-10">
-            <span className="material-symbols-outlined text-4xl text-amber-100">monetization_on</span>
-            <span className="text-5xl font-black text-white tracking-tight">{displayBalance.toLocaleString()}</span>
-          </div>
-        </motion.div>
+      <main className="flex-1 relative z-10 p-6 max-w-md mx-auto w-full flex flex-col gap-6 pb-10">
+        <div className="grid grid-cols-1 gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-3xl p-5 shadow-[0_10px_30px_rgba(245,158,11,0.3)] relative overflow-hidden"
+          >
+            <div className="absolute top-[-20%] right-[-10%] text-white/20">
+              <span className="material-symbols-outlined text-[100px]">monetization_on</span>
+            </div>
+            <p className="text-white/80 font-semibold mb-1 relative z-10">Platform Coins</p>
+            <p className="text-xs text-white/70 relative z-10 mb-3">Purchases, signup bonus · used on the app</p>
+            <div className="flex items-center gap-2 relative z-10">
+              <span className="material-symbols-outlined text-3xl text-amber-100">monetization_on</span>
+              <span className="text-4xl font-black text-white tracking-tight">{platformCoins.toLocaleString()}</span>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="bg-gradient-to-br from-violet-600 to-fuchsia-600 rounded-3xl p-5 shadow-[0_10px_30px_rgba(139,92,246,0.25)] relative overflow-hidden"
+          >
+            <div className="absolute top-[-20%] right-[-10%] text-white/20">
+              <span className="material-symbols-outlined text-[100px]">featured_seasonal_and_gifts</span>
+            </div>
+            <p className="text-white/80 font-semibold mb-1 relative z-10">Gift Coins</p>
+            <p className="text-xs text-white/70 relative z-10 mb-3">Earnings from fans · convert or withdraw</p>
+            <div className="flex items-center gap-2 relative z-10">
+              <span className="material-symbols-outlined text-3xl text-violet-100">featured_seasonal_and_gifts</span>
+              <span className="text-4xl font-black text-white tracking-tight">{giftCoins.toLocaleString()}</span>
+            </div>
+          </motion.div>
+        </div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
+          className="rounded-2xl bg-white/5 border border-white/10 p-4 flex flex-col gap-3"
+        >
+          <div>
+            <h2 className="text-lg font-bold">Convert Gift Coins</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Move gift coins into your platform wallet to spend on the app. Withdrawals coming soon.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min="1"
+              max={giftCoins}
+              value={convertAmount}
+              onChange={(e) => setConvertAmount(e.target.value)}
+              placeholder="Amount"
+              className="flex-1 rounded-xl bg-[#0d1420] border border-white/10 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500/50"
+            />
+            <PrimaryButton
+              onClick={() => handleConvert()}
+              disabled={isConverting || giftCoins <= 0}
+              className="rounded-xl px-5"
+            >
+              {isConverting ? "..." : "Convert"}
+            </PrimaryButton>
+          </div>
+          {giftCoins > 0 ? (
+            <button
+              type="button"
+              onClick={() => handleConvert(giftCoins)}
+              disabled={isConverting}
+              className="text-sm text-violet-300 hover:text-violet-200 text-left disabled:opacity-50"
+            >
+              Convert all {giftCoins.toLocaleString()} gift coins
+            </button>
+          ) : null}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
           className="flex flex-col gap-4"
         >
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold">Buy Coins</h2>
+            <h2 className="text-lg font-bold">Buy Platform Coins</h2>
             <span className="text-xs text-slate-400">via {gatewayLabel}</span>
           </div>
           {purchaseError ? (
@@ -205,41 +313,28 @@ export default function Wallet() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="mt-4 pb-10"
         >
-          <h2 className="text-lg font-bold mb-4">Recent Transactions</h2>
+          <h2 className="text-lg font-bold mb-4">Purchase History</h2>
           {isLoadingTx ? (
             <p className="text-slate-400 text-sm">Loading transactions...</p>
           ) : transactions.length === 0 ? (
-            <p className="text-slate-400 text-sm">No transactions yet. Buy coins to get started.</p>
+            <p className="text-slate-400 text-sm">No purchases yet. Buy platform coins to get started.</p>
           ) : (
             <div className="space-y-4">
-              {transactions.map((tx) => {
-                const isCredit = tx.coins > 0;
-                return (
-                  <div key={tx.id} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                          isCredit ? "bg-green-500/20 text-green-400" : "bg-blue-500/20 text-blue-400"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[16px]">
-                          {isCredit ? "add_circle" : "card_giftcard"}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-semibold">{tx.label}</p>
-                        <p className="text-xs text-slate-400">{tx.time}</p>
-                      </div>
+              {transactions.map((tx) => (
+                <div key={tx.id} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-green-500/20 text-green-400">
+                      <span className="material-symbols-outlined text-[16px]">add_circle</span>
                     </div>
-                    <span className={`font-bold ${isCredit ? "text-green-400" : "text-red-400"}`}>
-                      {isCredit ? "+" : ""}
-                      {tx.coins}
-                    </span>
+                    <div>
+                      <p className="font-semibold">{tx.label}</p>
+                      <p className="text-xs text-slate-400">{tx.time}</p>
+                    </div>
                   </div>
-                );
-              })}
+                  <span className="font-bold text-green-400">+{tx.coins}</span>
+                </div>
+              ))}
             </div>
           )}
         </motion.div>

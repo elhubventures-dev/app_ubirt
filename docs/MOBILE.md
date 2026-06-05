@@ -32,7 +32,27 @@ Native OAuth flow is handled in:
 - `src/lib/AuthContext.jsx`
 - `src/lib/platform.js`
 
-## 3) Native camera
+## 3) Voice messages (microphone)
+
+Voice recording in chat uses `@mozartec/capacitor-microphone` on native Android/iOS.
+
+Android `AndroidManifest.xml` must include:
+
+- `RECORD_AUDIO`
+- `MODIFY_AUDIO_SETTINGS`
+
+iOS `Info.plist` must include `NSMicrophoneUsageDescription` (already set).
+
+After pulling changes:
+
+```bash
+npm run build:mobile
+npm run cap:android
+```
+
+Rebuild/install the app on your phone. The first mic tap should show the system permission prompt.
+
+## 4) Native camera
 
 Native camera capture is implemented in:
 
@@ -42,7 +62,7 @@ Native camera capture is implemented in:
 On device, the camera page uses Capacitor Camera (photo capture and gallery pick).
 On web, it uses a file picker for JPG/PNG images (same upload policy as `/upload`).
 
-## 4) Push notifications
+## 5) Push notifications
 
 Client registration lives in:
 
@@ -182,7 +202,7 @@ When a user likes, comments, or gets followed, the app:
 2. Calls `POST /api/push/send` with the recipient user ID
 3. Server fans out to all tokens in `push_tokens` (FCM for Android, APNs for iOS)
 
-## 5) Native share
+## 6) Native share
 
 Post sharing uses `@capacitor/share` on Android and iOS (system share sheet). On web, the component falls back to the Web Share API, then copy-link.
 
@@ -192,7 +212,7 @@ Post sharing uses `@capacitor/share` on Android and iOS (system share sheet). On
 
 No extra native permissions are required for the Share plugin.
 
-## 6) Native platform files
+## 7) Native platform files
 
 Configured:
 

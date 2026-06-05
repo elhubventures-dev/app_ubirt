@@ -36,8 +36,9 @@ let mockProfileExtras = {
   location: "",
   cover: "",
 };
-let mockWalletBalance = SIGNUP_BONUS_COINS;
-let mockReceiverBalances = {};
+let mockPlatformBalance = SIGNUP_BONUS_COINS;
+let mockGiftBalance = 0;
+let mockReceiverGiftBalances = {};
 let notifications = structuredClone(mockNotifications);
 
 const storageKey = "ubirt.mock.state.v1";
@@ -64,8 +65,9 @@ function hydrateState() {
     aiConversationMeta = parsed.aiConversationMeta ?? aiConversationMeta;
     follows = parsed.follows ?? follows;
     mockProfileExtras = parsed.mockProfileExtras ?? mockProfileExtras;
-    mockWalletBalance = parsed.mockWalletBalance ?? mockWalletBalance;
-    mockReceiverBalances = parsed.mockReceiverBalances ?? mockReceiverBalances;
+    mockPlatformBalance = parsed.mockPlatformBalance ?? parsed.mockWalletBalance ?? mockPlatformBalance;
+    mockGiftBalance = parsed.mockGiftBalance ?? mockGiftBalance;
+    mockReceiverGiftBalances = parsed.mockReceiverGiftBalances ?? parsed.mockReceiverBalances ?? mockReceiverGiftBalances;
   } catch {
     window.localStorage.removeItem(storageKey);
   }
@@ -87,8 +89,9 @@ function persistState() {
       aiConversationMeta,
       follows,
       mockProfileExtras,
-      mockWalletBalance,
-      mockReceiverBalances,
+      mockPlatformBalance,
+      mockGiftBalance,
+      mockReceiverGiftBalances,
       hiddenMessageIds: [...hiddenMessageIds],
     })
   );
@@ -224,7 +227,30 @@ export const mockApi = {
   },
   async getWalletBalance() {
     await wait(100);
-    return mockWalletBalance;
+    return {
+      platformCoins: mockPlatformBalance,
+      giftCoins: mockGiftBalance,
+    };
+  },
+
+  async convertGiftCoins(amount) {
+    await wait(120);
+    const parsedAmount = Math.floor(Number(amount) || 0);
+    if (parsedAmount <= 0) {
+      throw new Error("Enter a valid amount to convert.");
+    }
+    if (mockGiftBalance < parsedAmount) {
+      throw new Error("Insufficient gift coins.");
+    }
+    mockGiftBalance -= parsedAmount;
+    mockPlatformBalance += parsedAmount;
+    persistState();
+    return {
+      success: true,
+      amount: parsedAmount,
+      platformCoins: mockPlatformBalance,
+      giftCoins: mockGiftBalance,
+    };
   },
   async getTrendingTags() {
     await wait();
@@ -294,8 +320,8 @@ export const mockApi = {
     if (giftAmount <= 0) {
       throw new Error("Invalid gift amount.");
     }
-    if (mockWalletBalance < giftAmount) {
-      throw new Error("Insufficient coins.");
+    if (mockPlatformBalance < giftAmount) {
+      throw new Error("Insufficient platform coins.");
     }
 
     const post = feedPosts.find((p) => p.id === postId);
@@ -306,13 +332,13 @@ export const mockApi = {
     const { receiverAmount, platformFee } = calculateGiftSplit(giftAmount);
     const receiverKey = post.handle?.replace("@", "") || post.author?.toLowerCase().replace(/\s+/g, "_") || "creator";
 
-    mockWalletBalance -= giftAmount;
-    mockReceiverBalances[receiverKey] = (mockReceiverBalances[receiverKey] ?? SIGNUP_BONUS_COINS) + receiverAmount;
+    mockPlatformBalance -= giftAmount;
+    mockReceiverGiftBalances[receiverKey] = (mockReceiverGiftBalances[receiverKey] ?? 0) + receiverAmount;
 
     notifications.unshift({
       id: `n-gift-${Date.now()}`,
       type: "gift",
-      text: `You received ${receiverAmount} coins from a ${giftAmount} coin gift (80%).`,
+      text: `You received ${receiverAmount} gift coins from a ${giftAmount} coin gift (80%).`,
       time: "now",
       read: false,
     });
@@ -323,8 +349,8 @@ export const mockApi = {
       amount: giftAmount,
       receiverAmount,
       platformFee,
-      senderBalance: mockWalletBalance,
-      receiverBalance: mockReceiverBalances[receiverKey],
+      senderBalance: mockPlatformBalance,
+      receiverGiftBalance: mockReceiverGiftBalances[receiverKey],
     };
   },
   async getCreatorAnalytics(days = 28) {

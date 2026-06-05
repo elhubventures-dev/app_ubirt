@@ -1,5 +1,6 @@
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
+import { getApiUrl } from "@/lib/apiBase";
 import { getSupabase } from "@/lib/supabaseClient";
 import { COIN_PACKAGES, PAYMENT_CURRENCY } from "@/lib/coinPackages";
 
@@ -34,7 +35,7 @@ export async function startFincraCheckout(pack) {
     throw new Error("You must be signed in to purchase coins.");
   }
 
-  const res = await fetch("/api/payments/checkout", {
+  const res = await fetch(getApiUrl("/api/payments/checkout"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -56,7 +57,7 @@ export async function startFincraCheckout(pack) {
     throw new Error(
       res.ok
         ? "Invalid checkout response from server"
-        : "Payment API unavailable. Run npm run dev:api locally or deploy to Vercel."
+        : "Payment API unavailable. Check your connection or try again on the website."
     );
   }
 
