@@ -12,54 +12,87 @@ function base64url(input) {
     .replace(/\//g, "_");
 }
 
+function cleanEnv(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+}
+
 function formatPrivateKey(raw) {
-  return String(raw || "").replace(/\\n/g, "\n");
+  let key = cleanEnv(raw).replace(/\\n/g, "\n");
+  if (!key) return "";
+
+  if (!key.includes("BEGIN PRIVATE KEY")) {
+    const bodyMatch = key.match(/(MII[A-Za-z0-9+/=\s\n]+-----END PRIVATE KEY-----)/);
+    if (bodyMatch) {
+      key = `-----BEGIN PRIVATE KEY-----\n${bodyMatch[1].trim()}`;
+    }
+  }
+
+  return key;
 }
 
 function createSignedJwt({ header, payload, privateKey, algorithm }) {
   const encodedHeader = base64url(JSON.stringify(header));
   const encodedPayload = base64url(JSON.stringify(payload));
   const data = `${encodedHeader}.${encodedPayload}`;
-  const signature = crypto.sign(algorithm, Buffer.from(data), privateKey);
-  return `${data}.${base64url(signature)}`;
+
+  try {
+    if (header.alg === "ES256") {
+      const sign = crypto.createSign("SHA256");
+      sign.update(data);
+      sign.end();
+      const signature = sign.sign({ key: privateKey, dsaEncoding: "ieee-p1363" });
+      return `${data}.${base64url(signature)}`;
+    }
+
+    const signature = crypto.sign(algorithm, Buffer.from(data), privateKey);
+    return `${data}.${base64url(signature)}`;
+  } catch (error) {
+    throw new Error(`Invalid private key for ${header.alg}: ${error.message}`);
+  }
 }
 
 async function getFcmAccessToken() {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const projectId = cleanEnv(process.env.FIREBASE_PROJECT_ID);
+  const clientEmail = cleanEnv(process.env.FIREBASE_CLIENT_EMAIL);
   const privateKey = formatPrivateKey(process.env.FIREBASE_PRIVATE_KEY);
   if (!projectId || !clientEmail || !privateKey) {
     return { error: "FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY are required for FCM v1." };
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const assertion = createSignedJwt({
-    header: { alg: "RS256", typ: "JWT" },
-    payload: {
-      iss: clientEmail,
-      sub: clientEmail,
-      aud: "https://oauth2.googleapis.com/token",
-      scope: "https://www.googleapis.com/auth/firebase.messaging",
-      iat: now,
-      exp: now + 3600,
-    },
-    privateKey,
-    algorithm: "RSA-SHA256",
-  });
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const assertion = createSignedJwt({
+      header: { alg: "RS256", typ: "JWT" },
+      payload: {
+        iss: clientEmail,
+        sub: clientEmail,
+        aud: "https://oauth2.googleapis.com/token",
+        scope: "https://www.googleapis.com/auth/firebase.messaging",
+        iat: now,
+        exp: now + 3600,
+      },
+      privateKey,
+      algorithm: "RSA-SHA256",
+    });
 
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion,
-    }),
-  });
-  const tokenJson = await tokenRes.json().catch(() => ({}));
-  if (!tokenRes.ok || !tokenJson.access_token) {
-    return { error: tokenJson.error_description || tokenJson.error || "Failed to fetch FCM access token." };
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion,
+      }),
+    });
+    const tokenJson = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok || !tokenJson.access_token) {
+      return { error: tokenJson.error_description || tokenJson.error || "Failed to fetch FCM access token." };
+    }
+    return { accessToken: tokenJson.access_token, projectId };
+  } catch (error) {
+    return { error: error.message || "FCM auth failed." };
   }
-  return { accessToken: tokenJson.access_token, projectId };
 }
 
 async function sendFcmV1({ accessToken, projectId, token, title, body, data }) {
@@ -78,12 +111,14 @@ async function sendFcmV1({ accessToken, projectId, token, title, body, data }) {
         ),
         android: {
           priority: "high",
+          collapse_key: data?.notificationId || data?.type || "ubirt",
           notification: {
             channel_id: PUSH_CHANNEL_ID,
             sound: "default",
             default_sound: true,
             notification_priority: "PRIORITY_HIGH",
             visibility: "PUBLIC",
+            tag: data?.notificationId || undefined,
           },
         },
         apns: {
@@ -106,20 +141,25 @@ async function sendFcmV1({ accessToken, projectId, token, title, body, data }) {
 }
 
 function createApnsJwt() {
-  const teamId = process.env.APNS_TEAM_ID;
-  const keyId = process.env.APNS_KEY_ID;
+  const teamId = cleanEnv(process.env.APNS_TEAM_ID);
+  const keyId = cleanEnv(process.env.APNS_KEY_ID);
   const privateKey = formatPrivateKey(process.env.APNS_PRIVATE_KEY);
   if (!teamId || !keyId || !privateKey) {
     return { error: "APNS_TEAM_ID / APNS_KEY_ID / APNS_PRIVATE_KEY are required for APNs token auth." };
   }
-  const now = Math.floor(Date.now() / 1000);
-  const token = createSignedJwt({
-    header: { alg: "ES256", kid: keyId },
-    payload: { iss: teamId, iat: now },
-    privateKey,
-    algorithm: "sha256",
-  });
-  return { token };
+
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const token = createSignedJwt({
+      header: { alg: "ES256", kid: keyId },
+      payload: { iss: teamId, iat: now },
+      privateKey,
+      algorithm: "ES256",
+    });
+    return { token };
+  } catch (error) {
+    return { error: error.message || "APNs auth failed." };
+  }
 }
 
 async function sendApns({ token, title, body, data }) {
@@ -234,6 +274,9 @@ export async function dispatchPushToUser({ userId, title, body, type, notificati
 
   const payloadData = buildPushPayloadData({ type, notificationId, data });
   const fcmAuth = await getFcmAccessToken();
+  if (!fcmAuth.accessToken && tokens.some((t) => t.provider === "fcm" || t.platform === "android")) {
+    console.error("FCM auth failed:", fcmAuth.error);
+  }
   const sendResults = await Promise.all(
     tokens.map(async ({ token, provider, platform }) => {
       if ((provider === "fcm" || platform === "android") && fcmAuth.accessToken) {
@@ -277,6 +320,7 @@ export async function dispatchPushToUser({ userId, title, body, type, notificati
     failed: sendResults.filter((r) => !r.ok).length,
     providerAuth: {
       fcmConfigured: Boolean(fcmAuth.accessToken),
+      fcmError: fcmAuth.error || undefined,
       apnsConfigured: Boolean(process.env.APNS_TEAM_ID && process.env.APNS_KEY_ID && process.env.APNS_PRIVATE_KEY),
     },
     results: sendResults,

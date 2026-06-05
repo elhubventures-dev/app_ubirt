@@ -7,10 +7,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
 import { useToast } from "@/components/ui/use-toast";
 import NewConversationSheet from "@/components/messages/NewConversationSheet";
+import NewGroupSheet from "@/components/messages/NewGroupSheet";
 
 export default function Messages() {
   const { data: chats = [], isLoading } = useConversations();
   const [showNewChat, setShowNewChat] = useState(false);
+  const [showNewGroup, setShowNewGroup] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -27,11 +29,31 @@ export default function Messages() {
     },
   });
 
+  const createGroupMutation = useMutation({
+    mutationFn: ({ title, memberIds }) => dataProvider.createGroupConversation(title, memberIds),
+    onSuccess: (conv) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      setShowNewGroup(false);
+      navigate(`/group/${conv.id}`);
+    },
+    onError: (error) => {
+      toast({ title: "Could not create group", description: error.message, variant: "destructive" });
+    },
+  });
+
   return (
     <div className="flex flex-col min-h-full pb-20 pt-4 px-2 sm:px-4">
       <div className="flex items-center justify-between px-2 mb-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">Messages</h1>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setShowNewGroup(true)}
+            aria-label="Create new group"
+            className="text-[#3b82f6] p-2 hover:bg-[#3b82f6]/10 rounded-full transition-colors"
+          >
+            <span className="material-symbols-outlined text-[24px]">group_add</span>
+          </button>
           <button
             type="button"
             onClick={() => setShowNewChat(true)}
@@ -72,16 +94,20 @@ export default function Messages() {
                 transition={{ delay: i * 0.05 }}
               >
                 <Link
-                  to={`/chat/${chat.id}`}
+                  to={chat.type === "group" ? `/group/${chat.id}` : `/chat/${chat.id}`}
                   className="flex items-center gap-4 p-3 rounded-2xl hover:bg-white/5 transition-colors group relative"
                 >
                   <div className="relative shrink-0">
-                    <div className="w-14 h-14 rounded-full bg-slate-800 overflow-hidden shadow-md flex items-center justify-center">
-                      <img
-                        src={chat.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${chat.name}`}
-                        alt={chat.name}
-                        className="w-full h-full object-cover"
-                      />
+                    <div className={`w-14 h-14 ${chat.type === "group" ? "rounded-2xl" : "rounded-full"} bg-slate-800 overflow-hidden shadow-md flex items-center justify-center`}>
+                      {chat.type === "group" && !chat.avatar ? (
+                        <span className="material-symbols-outlined text-[28px] text-[#3b82f6]">groups</span>
+                      ) : (
+                        <img
+                          src={chat.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${chat.name}`}
+                          alt={chat.name}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
                     </div>
                   </div>
 
@@ -89,6 +115,9 @@ export default function Messages() {
                     <div className="flex justify-between items-baseline mb-0.5 gap-2">
                       <p className={`font-semibold text-[15px] truncate ${chat.unread > 0 ? "text-white" : "text-slate-200"}`}>
                         {chat.name}
+                        {chat.type === "group" && chat.memberCount ? (
+                          <span className="text-slate-500 font-normal text-xs ml-1">({chat.memberCount})</span>
+                        ) : null}
                       </p>
                       <span className={`text-xs shrink-0 ${chat.unread > 0 ? "text-[#3b82f6] font-semibold" : "text-slate-500"}`}>
                         {chat.updatedAt || ""}
@@ -125,6 +154,13 @@ export default function Messages() {
             onClose={() => setShowNewChat(false)}
             onSelectUser={(user) => startChatMutation.mutate(user.id)}
             isStarting={startChatMutation.isPending}
+          />
+        )}
+        {showNewGroup && (
+          <NewGroupSheet
+            onClose={() => setShowNewGroup(false)}
+            onCreateGroup={(payload) => createGroupMutation.mutate(payload)}
+            isCreating={createGroupMutation.isPending}
           />
         )}
       </AnimatePresence>

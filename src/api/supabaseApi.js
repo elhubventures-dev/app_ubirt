@@ -4,6 +4,7 @@ import { getApiUrl } from "@/lib/apiBase";
 import { processImageUpload } from "@/lib/videoPipeline";
 import { inferMediaType } from "@/lib/media";
 import { getNotificationPath } from "@/lib/notificationLinks";
+import { sendPushNotification } from "@/lib/sendPush";
 
 async function getUserId() {
   const supabase = getSupabase();
@@ -43,6 +44,24 @@ async function notifyUser(recipientId, type, text, options = {}) {
     p_conversation_id: options.conversationId ?? options.chatId ?? null,
   });
   if (error) throw error;
+
+  const pushData = {
+    ...(options.data || {}),
+    ...(options.chatId ? { chatId: options.chatId } : {}),
+    ...(options.url ? { url: options.url } : {}),
+  };
+
+  if (notificationId) {
+    await sendPushNotification({
+      userId: recipientId,
+      notificationId,
+      type,
+      title: options.title || (type === "message" ? "New message" : "UBIRT"),
+      body: text,
+      data: Object.keys(pushData).length ? pushData : undefined,
+    });
+  }
+
   return notificationId;
 }
 
@@ -50,10 +69,61 @@ async function getActorDisplayName(userId) {
   const supabase = getSupabase();
   const { data } = await supabase
     .from("profiles")
-    .select("display_name")
+    .select("display_name, username")
     .eq("id", userId)
     .maybeSingle();
-  return data?.display_name ?? "Someone";
+  return data?.display_name ?? data?.username ?? "Someone";
+}
+
+function mapMessageRow(m, userId, profileMap = {}) {
+  const profile = profileMap[m.sender_id];
+  const senderName = profile?.display_name ?? profile?.username ?? "Member";
+  return {
+    id: m.id,
+    role: m.sender_id === userId ? "me" : "other",
+    senderId: m.sender_id,
+    senderName,
+    senderAvatar: profile?.avatar_url ?? null,
+    text: m.content,
+    status: m.status,
+    mediaUrl: m.media_url,
+    mediaType: m.media_type,
+    mediaDuration: m.media_duration ?? null,
+    createdAt: m.created_at,
+  };
+}
+
+async function fetchProfilesForSenders(supabase, senderIds) {
+  const uniqueIds = [...new Set(senderIds.filter(Boolean))];
+  if (!uniqueIds.length) return {};
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, display_name, username, avatar_url")
+    .in("id", uniqueIds);
+  return Object.fromEntries((data ?? []).map((p) => [p.id, p]));
+}
+
+async function callGroupApi(body) {
+  const supabase = getSupabase();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(getApiUrl("/api/conversations/group"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json.error || "Group operation failed");
+  }
+  return json;
 }
 
 function mapPost(row, profile, liked, bookmarked) {
@@ -157,6 +227,16 @@ export const supabaseApi = {
     if (!targetProfile) return false;
     const { data, error } = await supabase.rpc("toggle_follow", { p_following_id: targetProfile.id });
     if (error) throw error;
+    if (data) {
+      const actorId = await getUserId();
+      const actorName = await getActorDisplayName(actorId);
+      await sendPushNotification({
+        userId: targetProfile.id,
+        type: "follow",
+        title: "New follower",
+        body: `${actorName} started following you`,
+      });
+    }
     return data;
   },
   async isFollowing(username) {
@@ -517,6 +597,15 @@ export const supabaseApi = {
 
     const result = typeof data === "string" ? JSON.parse(data) : data;
 
+    if (result?.receiver_id) {
+      await sendPushNotification({
+        userId: result.receiver_id,
+        type: "gift",
+        title: "Gift received!",
+        body: `You received ${result.receiver_amount} coins from a gift.`,
+      });
+    }
+
     return {
       success: true,
       amount: result.amount ?? giftAmount,
@@ -700,19 +789,53 @@ export const supabaseApi = {
   async getConversation(chatId) {
     const userId = await getUserId();
     const supabase = getSupabase();
+    const { data: conv, error: convError } = await supabase
+      .from("conversations")
+      .select("id, title, type, invite_code, avatar_url, created_by")
+      .eq("id", chatId)
+      .single();
+    if (convError) throw convError;
+
     const { data: members, error } = await supabase
       .from("conversation_members")
-      .select("user_id, profiles:user_id (display_name, username, avatar_url, last_seen_at)")
+      .select("user_id, role, joined_at, profiles:user_id (display_name, username, avatar_url, last_seen_at)")
       .eq("conversation_id", chatId);
     if (error) throw error;
 
-    const otherMember = (members ?? []).find((m) => m.user_id !== userId);
+    const memberRows = members ?? [];
+    const myMembership = memberRows.find((m) => m.user_id === userId);
+    const isGroup = conv.type === "group";
+
+    if (isGroup) {
+      const canManage = myMembership?.role === "owner" || myMembership?.role === "admin";
+      return {
+        id: chatId,
+        type: "group",
+        name: conv.title ?? "Group",
+        avatar: conv.avatar_url ?? null,
+        memberCount: memberRows.length,
+        myRole: myMembership?.role ?? "member",
+        canManage,
+        inviteCode: canManage ? conv.invite_code : null,
+        members: memberRows.map((m) => ({
+          id: m.user_id,
+          name: m.profiles?.display_name ?? m.profiles?.username ?? "Member",
+          username: m.profiles?.username ?? null,
+          avatar: m.profiles?.avatar_url ?? null,
+          role: m.role,
+          joinedAt: m.joined_at,
+        })),
+      };
+    }
+
+    const otherMember = memberRows.find((m) => m.user_id !== userId);
     const otherProfile = otherMember?.profiles;
 
     return {
       id: chatId,
+      type: "direct",
       peerId: otherMember?.user_id ?? null,
-      name: otherProfile?.display_name ?? otherProfile?.username ?? "Chat",
+      name: otherProfile?.display_name ?? otherProfile?.username ?? conv.title ?? "Chat",
       username: otherProfile?.username ?? null,
       avatar: otherProfile?.avatar_url ?? null,
       lastSeenAt: otherProfile?.last_seen_at ?? null,
@@ -751,7 +874,9 @@ export const supabaseApi = {
         .select("user_id, profiles:user_id (display_name, username, avatar_url, last_seen_at)")
         .eq("conversation_id", conv.id);
 
-      const otherMember = (members ?? []).find((m) => m.user_id !== userId);
+      const memberRows = members ?? [];
+      const isGroup = conv.type === "group";
+      const otherMember = memberRows.find((m) => m.user_id !== userId);
       const otherProfile = otherMember?.profiles;
 
       let lastMsgQuery = supabase
@@ -777,14 +902,23 @@ export const supabaseApi = {
 
       const sortAt = lastMsg?.created_at ?? conv.updated_at ?? conv.created_at;
 
+      let lastMessagePreview =
+        lastMsg?.media_type === "audio" ? "Voice message" : lastMsg?.content ?? "No messages yet";
+      if (isGroup && lastMsg && lastMsg.sender_id !== userId) {
+        const senderProfile = memberRows.find((m) => m.user_id === lastMsg.sender_id)?.profiles;
+        const senderName = senderProfile?.display_name ?? senderProfile?.username ?? "Member";
+        lastMessagePreview = `${senderName}: ${lastMessagePreview}`;
+      }
+
       results.push({
         id: conv.id,
-        name: otherProfile?.display_name ?? otherProfile?.username ?? conv.title ?? "Conversation",
-        avatar: otherProfile?.avatar_url ?? null,
-        lastMessage:
-          lastMsg?.media_type === "audio"
-            ? "Voice message"
-            : lastMsg?.content ?? "No messages yet",
+        type: isGroup ? "group" : "direct",
+        name: isGroup
+          ? conv.title ?? "Group"
+          : otherProfile?.display_name ?? otherProfile?.username ?? conv.title ?? "Conversation",
+        avatar: isGroup ? conv.avatar_url ?? null : otherProfile?.avatar_url ?? null,
+        memberCount: isGroup ? memberRows.length : undefined,
+        lastMessage: lastMessagePreview,
         updatedAt: formatRelative(sortAt),
         sortAt,
         unread: unreadCount ?? 0,
@@ -854,6 +988,98 @@ export const supabaseApi = {
     return json;
   },
 
+  async createGroupConversation(title, memberIds = []) {
+    const supabase = getSupabase();
+    const { data: convId, error: rpcError } = await supabase.rpc("create_group_conversation", {
+      p_title: title,
+      p_member_ids: memberIds,
+    });
+
+    if (!rpcError && convId) {
+      return this.getConversation(convId);
+    }
+
+    const json = await callGroupApi({ action: "create", title, memberIds });
+    return {
+      id: json.id,
+      type: "group",
+      name: json.name,
+      avatar: null,
+      memberCount: 1 + memberIds.length,
+      myRole: "owner",
+      canManage: true,
+      inviteCode: json.inviteCode,
+      members: [],
+    };
+  },
+
+  async joinGroupViaInvite(inviteCode) {
+    const supabase = getSupabase();
+    const { data: convId, error: rpcError } = await supabase.rpc("join_group_via_invite", {
+      p_invite_code: inviteCode,
+    });
+
+    if (!rpcError && convId) {
+      return this.getConversation(convId);
+    }
+
+    const json = await callGroupApi({ action: "join", inviteCode });
+    return {
+      id: json.id,
+      type: "group",
+      name: json.name,
+      avatar: null,
+      memberCount: undefined,
+      myRole: "member",
+      canManage: false,
+      inviteCode: null,
+      members: [],
+    };
+  },
+
+  async addGroupMembers(conversationId, memberIds) {
+    const supabase = getSupabase();
+    const { error: rpcError } = await supabase.rpc("add_group_members", {
+      p_conversation_id: conversationId,
+      p_member_ids: memberIds,
+    });
+    if (!rpcError) return true;
+    await callGroupApi({ action: "addMembers", conversationId, memberIds });
+    return true;
+  },
+
+  async updateGroupMemberRole(conversationId, userId, role) {
+    const supabase = getSupabase();
+    const { error: rpcError } = await supabase.rpc("update_group_member_role", {
+      p_conversation_id: conversationId,
+      p_user_id: userId,
+      p_role: role,
+    });
+    if (!rpcError) return true;
+    await callGroupApi({ action: "updateRole", conversationId, userId, role });
+    return true;
+  },
+
+  async removeGroupMember(conversationId, userId) {
+    const supabase = getSupabase();
+    const { error: rpcError } = await supabase.rpc("remove_group_member", {
+      p_conversation_id: conversationId,
+      p_user_id: userId,
+    });
+    if (!rpcError) return true;
+    await callGroupApi({ action: "removeMember", conversationId, userId });
+    return true;
+  },
+
+  async regenerateGroupInvite(conversationId) {
+    const supabase = getSupabase();
+    const { data: inviteCode, error } = await supabase.rpc("regenerate_group_invite", {
+      p_conversation_id: conversationId,
+    });
+    if (!error && inviteCode) return inviteCode;
+    throw new Error(error?.message || "Failed to regenerate invite link");
+  },
+
   async getMessages(chatId) {
     const userId = await getUserId();
     const supabase = getSupabase();
@@ -866,15 +1092,12 @@ export const supabaseApi = {
     query = applyHiddenMessageFilter(query, hiddenIds);
     const { data, error } = await query;
     if (error) throw error;
-    return (data ?? []).map((m) => ({
-      id: m.id,
-      role: m.sender_id === userId ? "me" : "other",
-      text: m.content,
-      status: m.status,
-      mediaUrl: m.media_url,
-      mediaType: m.media_type,
-      mediaDuration: m.media_duration ?? null,
-    }));
+    const rows = data ?? [];
+    const profileMap = await fetchProfilesForSenders(
+      supabase,
+      rows.map((m) => m.sender_id)
+    );
+    return rows.map((m) => mapMessageRow(m, userId, profileMap));
   },
 
   async getChatTyping(chatId) {
@@ -900,15 +1123,8 @@ export const supabaseApi = {
         async (payload) => {
           const userId = await userIdPromise;
           const m = payload.new;
-          onInsert({
-            id: m.id,
-            role: m.sender_id === userId ? "me" : "other",
-            text: m.content,
-            status: m.status,
-            mediaUrl: m.media_url,
-            mediaType: m.media_type,
-            mediaDuration: m.media_duration ?? null,
-          });
+          const profileMap = await fetchProfilesForSenders(supabase, [m.sender_id]);
+          onInsert(mapMessageRow(m, userId, profileMap));
         }
       );
     }
@@ -1053,6 +1269,13 @@ export const supabaseApi = {
         : content.length > 80
           ? `${content.slice(0, 77)}...`
           : content;
+    const { data: convMeta } = await supabase
+      .from("conversations")
+      .select("type")
+      .eq("id", chatId)
+      .maybeSingle();
+    const chatPath = convMeta?.type === "group" ? `/group/${chatId}` : `/chat/${chatId}`;
+
     const { data: members } = await supabase
       .from("conversation_members")
       .select("user_id")
@@ -1064,22 +1287,15 @@ export const supabaseApi = {
         await notifyUser(member.user_id, "message", `${actorName}: ${preview}`, {
           chatId,
           conversationId: chatId,
-          url: `/chat/${chatId}`,
+          url: chatPath,
         });
       } catch (notifyError) {
         console.warn("Failed to notify message recipient:", notifyError);
       }
     }
 
-    return {
-      id: data.id,
-      role: "me",
-      text: data.content,
-      status: data.status,
-      mediaUrl: data.media_url,
-      mediaType: data.media_type,
-      mediaDuration: data.media_duration ?? null,
-    };
+    const profileMap = await fetchProfilesForSenders(supabase, [userId]);
+    return mapMessageRow(data, userId, profileMap);
   },
 
   async getAiMessages() {
@@ -1165,6 +1381,7 @@ export const supabaseApi = {
           token,
           platform,
           provider,
+          enabled: true,
           last_seen_at: new Date().toISOString(),
         },
         { onConflict: "token" }
@@ -1436,10 +1653,21 @@ export const supabaseApi = {
   },
 
   async resolveNotificationLink(item) {
+    const type = String(item?.type || "").toLowerCase();
+    if (type === "message" && item.conversationId) {
+      const supabase = getSupabase();
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("type")
+        .eq("id", item.conversationId)
+        .maybeSingle();
+      if (conv?.type === "group") return `/group/${item.conversationId}`;
+      return `/chat/${item.conversationId}`;
+    }
+
     const directPath = getNotificationPath(item);
     if (directPath) return directPath;
 
-    const type = String(item?.type || "").toLowerCase();
     const supabase = getSupabase();
 
     const lookupUsername = async (name) => {

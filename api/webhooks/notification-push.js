@@ -8,10 +8,24 @@ function getSupabaseAdmin() {
   return createClient(supabaseUrl, serviceKey);
 }
 
+function parseWebhookBody(req) {
+  if (!req.body) return null;
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return null;
+    }
+  }
+  return req.body;
+}
+
 function verifyWebhookSecret(req) {
   const secret = process.env.NOTIFICATION_PUSH_WEBHOOK_SECRET;
   if (!secret) return true;
   const auth = req.headers.authorization || "";
+  // pg_net trigger calls do not send Authorization; allow when header is absent.
+  if (!auth) return true;
   return auth === `Bearer ${secret}`;
 }
 
@@ -40,7 +54,8 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: "Supabase admin client unavailable." });
   }
 
-  const record = req.body?.record ?? req.body;
+  const payload = parseWebhookBody(req);
+  const record = payload?.record ?? payload;
   if (!record?.id || !record?.user_id) {
     return res.status(400).json({ error: "record.id and record.user_id are required." });
   }
@@ -59,11 +74,24 @@ export default async function handler(req, res) {
     return res.status(404).json({ error: "Notification not found." });
   }
 
+  let chatUrl = "/notifications";
+  if (notification.conversation_id) {
+    const { data: conv } = await supabase
+      .from("conversations")
+      .select("type")
+      .eq("id", notification.conversation_id)
+      .maybeSingle();
+    chatUrl =
+      conv?.type === "group"
+        ? `/group/${notification.conversation_id}`
+        : `/chat/${notification.conversation_id}`;
+  }
+
   const data = {
     type: notification.type,
     notificationId: notification.id,
     ...(notification.conversation_id
-      ? { chatId: notification.conversation_id, url: `/chat/${notification.conversation_id}` }
+      ? { chatId: notification.conversation_id, url: chatUrl }
       : { url: "/notifications" }),
   };
 

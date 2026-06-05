@@ -410,8 +410,22 @@ export const mockApi = {
   async getConversation(chatId) {
     await wait(80);
     const chat = conversations.find((c) => c.id === chatId);
+    if (chat?.type === "group") {
+      return {
+        id: chatId,
+        type: "group",
+        name: chat.name ?? "Group",
+        avatar: chat.avatar ?? null,
+        memberCount: chat.memberCount ?? 1,
+        myRole: "owner",
+        canManage: true,
+        inviteCode: "mockinvite",
+        members: [],
+      };
+    }
     return {
       id: chatId,
+      type: "direct",
       peerId: chat?.peerId ?? null,
       name: chat?.name ?? "Chat",
       username: chat?.username ?? null,
@@ -448,6 +462,55 @@ export const mockApi = {
     messagesByChat = { ...messagesByChat, [chatId]: [] };
     persistState();
     return { id: chatId, name: chat.name };
+  },
+  async createGroupConversation(title, memberIds = []) {
+    await wait();
+    const chatId = `g-${Date.now()}`;
+    const inviteCode = `mock${Date.now().toString(36).slice(-8)}`;
+    const chat = {
+      id: chatId,
+      type: "group",
+      name: title,
+      memberCount: 1 + memberIds.length,
+      lastMessage: "Group created",
+      updatedAt: "now",
+      sortAt: new Date().toISOString(),
+      unread: 0,
+    };
+    conversations = [chat, ...conversations];
+    messagesByChat = { ...messagesByChat, [chatId]: [] };
+    persistState();
+    return {
+      id: chatId,
+      type: "group",
+      name: title,
+      avatar: null,
+      memberCount: chat.memberCount,
+      myRole: "owner",
+      canManage: true,
+      inviteCode,
+      members: [],
+    };
+  },
+  async joinGroupViaInvite(inviteCode) {
+    await wait();
+    throw new Error("Group invites require Supabase (live mode).");
+  },
+  async addGroupMembers() {
+    await wait();
+    return true;
+  },
+  async updateGroupMemberRole() {
+    await wait();
+    return true;
+  },
+  async removeGroupMember() {
+    await wait();
+    return true;
+  },
+  async regenerateGroupInvite() {
+    await wait();
+    return `mock${Date.now().toString(36).slice(-8)}`;
   },
   async getMessages(chatId) {
     await wait();

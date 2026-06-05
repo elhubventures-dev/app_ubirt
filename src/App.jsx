@@ -35,19 +35,20 @@ import FollowList from "./pages/FollowList";
 import HashtagFeed from "./pages/HashtagFeed";
 import Analytics from "./pages/Analytics";
 import CommunityChat from "./pages/CommunityChat";
+import JoinGroup from "./pages/JoinGroup";
 
 const LOGO_URL = "/pwa-192x192.png";
 
-/** Always mounted so OAuth deep links work from /login (not only inside AuthenticatedApp). */
+/** Always mounted so OAuth deep links and push registration work from /login. */
 function NativeBootstrap() {
   useNativeShell();
+  usePushNotifications();
   return null;
 }
 
 const AuthenticatedApp = () => {
   const { user, isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth, retryAuth } = useAuth();
 
-  usePushNotifications();
   useLastSeenHeartbeat();
   useRealtimeNotifications();
 
@@ -123,6 +124,8 @@ const AuthenticatedApp = () => {
       </Route>
 
       <Route path="/chat/:id" element={<ChatDetail />} />
+      <Route path="/group/:id" element={<CommunityChat />} />
+      <Route path="/group/join/:code" element={<JoinGroup />} />
       <Route path="/community/:id" element={<CommunityChat />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/upload" element={<Upload />} />

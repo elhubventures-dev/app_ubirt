@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useChatMessages, useConversation } from "@/hooks/useMessages";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import VoiceMessageBubble from "@/components/messages/VoiceMessageBubble";
@@ -11,6 +11,7 @@ const QUICK_EMOJIS = ["😀", "😂", "❤️", "🔥", "👍", "🎉", "😮", 
 
 export default function ChatDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const draftKey = `ubirt.draft.${id}`;
   const [text, setText] = useState(() => localStorage.getItem(draftKey) || "");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -57,6 +58,12 @@ export default function ChatDetail() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   };
+
+  useEffect(() => {
+    if (conversation?.type === "group") {
+      navigate(`/group/${id}`, { replace: true });
+    }
+  }, [conversation, id, navigate]);
 
   useEffect(() => {
     scrollToBottom();

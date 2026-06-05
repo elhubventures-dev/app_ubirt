@@ -32,7 +32,8 @@ export function useRealtimeNotifications() {
           const inThisChat =
             type === "message" &&
             conversationId &&
-            location.pathname === `/chat/${conversationId}`;
+            (location.pathname === `/chat/${conversationId}` ||
+              location.pathname === `/group/${conversationId}`);
 
           queryClient.invalidateQueries({ queryKey: ["notifications"] });
           if (type === "message") {

@@ -39,6 +39,8 @@ export function useChatMessages(chatId) {
 
   const [peerPresent, setPeerPresent] = React.useState(false);
   const [realtimeTyping, setRealtimeTyping] = React.useState(false);
+  const [typingUsers, setTypingUsers] = React.useState([]);
+  const [onlineUsers, setOnlineUsers] = React.useState([]);
 
   useEffect(() => {
     if (!chatId || !dataProvider.markConversationRead) return undefined;
@@ -87,17 +89,28 @@ export function useChatMessages(chatId) {
       unsubscribePresence = dataProvider.subscribeToPresence(chatId, (state) => {
         let present = false;
         let peerTyping = false;
+        const online = [];
+        const typers = [];
         for (const key in state) {
           state[key].forEach((presence) => {
             if (presence.user_id === user?.id) return;
             present = true;
+            online.push({
+              id: presence.user_id,
+              name: presence.profile?.display_name ?? presence.profile?.username ?? "Member",
+            });
             if (presence.typing) {
               peerTyping = true;
+              typers.push(
+                presence.profile?.display_name ?? presence.profile?.username ?? "Someone"
+              );
             }
           });
         }
         setPeerPresent(present);
         setRealtimeTyping(peerTyping);
+        setOnlineUsers(online);
+        setTypingUsers(typers);
       }) || (() => {});
     } catch (e) {
       console.warn("Failed to subscribe to presence:", e);
@@ -134,7 +147,9 @@ export function useChatMessages(chatId) {
   return {
     ...messagesQuery,
     isTyping: isSupabaseConfigured() ? realtimeTyping : (typingQuery.data ?? false),
+    typingUsers,
     peerPresent,
+    onlineUsers,
     sendMessage: sendMutation.mutateAsync,
     isSending: sendMutation.isPending,
     deleteMessage: deleteMutation.mutateAsync,

@@ -83,7 +83,11 @@ export default async function handler(req, res) {
 
       const { data: conv, error: convError } = await admin
         .from("conversations")
-        .insert({ title: profile.display_name || profile.username || "Chat" })
+        .insert({
+          title: profile.display_name || profile.username || "Chat",
+          type: "direct",
+          created_by: user.id,
+        })
         .select("id")
         .single();
       if (convError) throw convError;
@@ -91,8 +95,8 @@ export default async function handler(req, res) {
       convId = conv.id;
 
       const { error: memberError } = await admin.from("conversation_members").insert([
-        { conversation_id: convId, user_id: user.id },
-        { conversation_id: convId, user_id: targetUserId },
+        { conversation_id: convId, user_id: user.id, role: "member" },
+        { conversation_id: convId, user_id: targetUserId, role: "member" },
       ]);
       if (memberError) throw memberError;
 
