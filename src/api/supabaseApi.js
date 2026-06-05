@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabaseClient";
 import { uploadMediaFile } from "@/api/storage";
 import { processImageUpload } from "@/lib/videoPipeline";
+import { inferMediaType } from "@/lib/media";
 
 async function getUserId() {
   const supabase = getSupabase();
@@ -50,14 +51,6 @@ async function getActorDisplayName(userId) {
   return data?.display_name ?? "Someone";
 }
 
-function inferMediaType(mediaUrl, muxPlaybackId) {
-  if (muxPlaybackId) return "video";
-  if (!mediaUrl) return "image";
-  if (/\.(mp4|webm|ogg|mov|m3u8)(\?|$)/i.test(mediaUrl)) return "video";
-  if (/stream\.mux\.com/i.test(mediaUrl)) return "video";
-  return "image";
-}
-
 function mapPost(row, profile, liked, bookmarked) {
   const hashtags = row.caption?.match(/#[\w]+/g) || [];
   const tags = new Set(hashtags);
@@ -74,8 +67,10 @@ function mapPost(row, profile, liked, bookmarked) {
     likes: row.likes_count ?? 0,
     comments: row.comments_count ?? 0,
     views: row.views_count ?? 0,
+    liked: Boolean(liked),
     bookmarked: Boolean(bookmarked),
     media_url: row.media_url,
+    media_type: row.media_type ?? inferMediaType(row.media_url, row.mux_playback_id),
     mux_playback_id: row.mux_playback_id,
   };
 }

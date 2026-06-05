@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { motion, AnimatePresence } from "framer-motion";
 import { getPreference } from "@/lib/preferences";
+import { isImagePost } from "@/lib/media";
 
 function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId, setGiftPostId }) {
   const videoRef = useRef(null);
@@ -72,12 +73,13 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
   };
 
   const hasMedia = !!post.media_url;
+  const showAsImage = isImagePost(post);
 
   return (
     <div className="relative w-full h-[100dvh] bg-black snap-start flex justify-center items-center overflow-hidden">
       {/* Media Background */}
       {hasMedia ? (
-        post.media_type === "image" ? (
+        showAsImage ? (
           <img src={post.media_url} alt="Post media" className="w-full h-full object-cover" onClick={handleTap} />
         ) : post.mux_playback_id ? (
           <div onClick={handleTap} className="w-full h-full overflow-hidden relative">

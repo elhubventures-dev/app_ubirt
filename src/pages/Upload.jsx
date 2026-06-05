@@ -294,7 +294,7 @@ export default function Upload() {
                       });
                       await publishUpload(result.id);
                       toast({ title: "Published!", description: "Your post is now live." });
-                      navigate("/creator-studio");
+                      navigate("/feed");
                     } catch (error) {
                       toast({ title: "Publish failed", description: error.message, variant: "destructive" });
                     }
