@@ -8,11 +8,27 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { formatCount } from "@/lib/formatStats";
 import { dataProvider } from "@/api/dataProvider";
+import { useToast } from "@/components/ui/use-toast";
+import PostManageSheet from "@/components/profile/PostManageSheet";
 
 export default function Profile() {
   const { user } = useAuth();
-  const { data: stats, uploads = [], isLoadingUploads } = useCreatorStudio();
-  const [activeTab, setActiveTab] = useState("grid"); // 'grid' | 'analytics'
+  const {
+    data: stats,
+    uploads = [],
+    isLoadingUploads,
+    updateUpload,
+    deleteUpload,
+    publishUpload,
+    isUpdatingUpload,
+    isDeletingUpload,
+    isPublishingUpload,
+  } = useCreatorStudio();
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("grid");
+  const [selectedUpload, setSelectedUpload] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
   const { data: achievements } = useQuery({
     queryKey: ["achievements"],
     queryFn: () => dataProvider.getAchievements(),
@@ -23,6 +39,60 @@ export default function Profile() {
     enabled: activeTab === "analytics",
   });
   const bannerUrl = `https://images.unsplash.com/photo-1557683311-eac922347aa1?w=800&h=300&fit=crop&q=80`;
+
+  const openUpload = (upload) => {
+    setSelectedUpload(upload);
+    setEditTitle(upload.title || "");
+    setEditDescription(upload.description || "");
+  };
+
+  const closeUpload = () => {
+    setSelectedUpload(null);
+    setEditTitle("");
+    setEditDescription("");
+  };
+
+  const handleSaveUpload = async () => {
+    if (!selectedUpload || !editTitle.trim()) return;
+    try {
+      await updateUpload({
+        uploadId: selectedUpload.id,
+        patch: { title: editTitle.trim(), description: editDescription.trim() },
+      });
+      toast({ title: "Post updated", description: "Your changes have been saved." });
+      closeUpload();
+    } catch (error) {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteUpload = async () => {
+    if (!selectedUpload) return;
+    const confirmed = window.confirm("Delete this post permanently? This removes it from your profile and feed.");
+    if (!confirmed) return;
+    try {
+      await deleteUpload(selectedUpload.id);
+      toast({ title: "Post deleted" });
+      closeUpload();
+    } catch (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handlePublishUpload = async () => {
+    if (!selectedUpload) return;
+    try {
+      await updateUpload({
+        uploadId: selectedUpload.id,
+        patch: { title: editTitle.trim(), description: editDescription.trim() },
+      });
+      await publishUpload(selectedUpload.id);
+      toast({ title: "Published!", description: "Your post is now on the feed." });
+      closeUpload();
+    } catch (error) {
+      toast({ title: "Publish failed", description: error.message, variant: "destructive" });
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-full pb-6">
@@ -46,8 +116,44 @@ export default function Profile() {
           <h1 className="text-2xl font-bold tracking-tight text-white">{user?.name || "Creator"}</h1>
           <p className="text-sm font-medium text-[#3b82f6]">@{user?.username || "creator"}</p>
           <p className="mt-2 text-sm text-slate-300 max-w-sm mx-auto sm:mx-0">
-            Digital creator & tech enthusiast. Building the future of content on UBIRT. 🚀
+            {user?.bio || "Add a bio to tell people about yourself."}
           </p>
+          {(user?.location || user?.website) && (
+            <div className="mt-2 flex flex-wrap gap-3 justify-center sm:justify-start text-xs text-slate-400">
+              {user?.location ? (
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">location_on</span>
+                  {user.location}
+                </span>
+              ) : null}
+              {user?.website ? (
+                <a
+                  href={user.website.startsWith("http") ? user.website : `https://${user.website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[#3b82f6] hover:underline"
+                >
+                  <span className="material-symbols-outlined text-[14px]">link</span>
+                  {user.website.replace(/^https?:\/\//, "")}
+                </a>
+              ) : null}
+            </div>
+          )}
+
+          <div className="mt-4 flex gap-6 justify-center sm:justify-start">
+            {user?.username && (
+              <>
+                <Link to={`/user/${user.username}/followers`} className="text-center hover:opacity-80 transition-opacity">
+                  <p className="text-white font-bold text-lg">{formatCount(stats?.followers ?? 0)}</p>
+                  <p className="text-slate-400 text-xs font-semibold uppercase">Followers</p>
+                </Link>
+                <Link to={`/user/${user.username}/following`} className="text-center hover:opacity-80 transition-opacity">
+                  <p className="text-white font-bold text-lg">{formatCount(stats?.following ?? 0)}</p>
+                  <p className="text-slate-400 text-xs font-semibold uppercase">Following</p>
+                </Link>
+              </>
+            )}
+          </div>
           
           <div className="mt-4 flex gap-3 justify-center sm:justify-start">
             <Link to="/settings" className={getButtonClasses("secondary", "sm", "rounded-full px-6")}>
@@ -138,21 +244,35 @@ export default function Profile() {
               ) : (
                 <div className="grid grid-cols-3 gap-1 md:gap-2">
                   {uploads.map((upload) => (
-                    <div key={upload.id} className="aspect-[3/4] bg-slate-800 rounded-md sm:rounded-xl overflow-hidden relative group cursor-pointer">
-                      {/* Fake thumbnail if no media, else we'd render the media */}
-                      <img 
-                        src={upload.media_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${upload.id}`} 
-                        alt={upload.title || "Upload"} 
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80" 
-                      />
+                    <button
+                      key={upload.id}
+                      type="button"
+                      onClick={() => openUpload(upload)}
+                      className="aspect-[3/4] bg-slate-800 rounded-md sm:rounded-xl overflow-hidden relative group text-left"
+                    >
+                      {upload.media_url ? (
+                        <img
+                          src={upload.media_url}
+                          alt={upload.title || "Post"}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80"
+                          onError={(e) => {
+                            e.currentTarget.src = `https://api.dicebear.com/9.x/shapes/svg?seed=${upload.id}`;
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-500">
+                          <span className="material-symbols-outlined text-[32px]">image</span>
+                          <span className="text-[10px] font-medium px-2 text-center truncate w-full">{upload.title || "Draft"}</span>
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 sm:p-3">
                          <p className="text-white text-[10px] sm:text-xs font-semibold truncate">{upload.title}</p>
-                         <div className="flex items-center gap-1 mt-1 text-slate-300">
-                           <span className="material-symbols-outlined text-[14px]">image</span>
-                           <span className="text-[10px] font-medium capitalize">{upload.status ?? "draft"}</span>
+                         <div className="flex items-center justify-between mt-1">
+                           <span className="text-[10px] font-medium capitalize text-slate-300">{upload.status ?? "draft"}</span>
+                           <span className="material-symbols-outlined text-white text-[16px]">edit</span>
                          </div>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -210,6 +330,25 @@ export default function Profile() {
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {selectedUpload && (
+          <PostManageSheet
+            upload={selectedUpload}
+            title={editTitle}
+            description={editDescription}
+            onTitleChange={setEditTitle}
+            onDescriptionChange={setEditDescription}
+            onClose={closeUpload}
+            onSave={handleSaveUpload}
+            onDelete={handleDeleteUpload}
+            onPublish={handlePublishUpload}
+            isSaving={isUpdatingUpload}
+            isDeleting={isDeletingUpload}
+            isPublishing={isPublishingUpload}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

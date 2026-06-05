@@ -1,11 +1,48 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import AppHeader from "@/components/layout/AppHeader";
 import BottomNav from "@/components/layout/BottomNav";
+import { useAuth } from "@/lib/AuthContext";
+import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function MainLayout() {
   const location = useLocation();
   const isFeed = location.pathname === "/feed";
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured()) return undefined;
+
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel(`user-notifications:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          toast({
+            title: "New notification",
+            description: payload.new.text || "Someone interacted with you.",
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, queryClient, toast]);
 
   return (
     <div className="min-h-screen bg-[#101822] text-white overflow-hidden relative">

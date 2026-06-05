@@ -21,9 +21,21 @@ export function useCreatorStudio() {
     queryFn: dataProvider.getUploads,
   });
 
+  const deleteUploadMutation = useMutation({
+    mutationFn: (uploadId) => dataProvider.deleteUpload(uploadId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["uploads"] });
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["creator-stats"] });
+    },
+  });
+
   const updateUploadMutation = useMutation({
     mutationFn: ({ uploadId, patch }) => dataProvider.updateUpload(uploadId, patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["uploads"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["uploads"] });
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+    },
   });
   const publishUploadMutation = useMutation({
     mutationFn: async (uploadId) => {
@@ -45,9 +57,11 @@ export function useCreatorStudio() {
     isLoadingUploads: uploadsQuery.isLoading,
     saveUpload: uploadMutation.mutateAsync,
     updateUpload: updateUploadMutation.mutateAsync,
+    deleteUpload: deleteUploadMutation.mutateAsync,
     publishUpload: publishUploadMutation.mutateAsync,
     isSavingUpload: uploadMutation.isPending,
     isUpdatingUpload: updateUploadMutation.isPending,
+    isDeletingUpload: deleteUploadMutation.isPending,
     isPublishingUpload: publishUploadMutation.isPending,
   };
 }

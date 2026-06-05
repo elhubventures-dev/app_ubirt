@@ -3,7 +3,7 @@
 
 -- 1. Wallet + push on profiles
 alter table public.profiles
-  add column if not exists coins int not null default 1000;
+  add column if not exists coins int not null default 100;
 
 alter table public.profiles
   add column if not exists device_token text;

@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { getButtonClasses } from "@/components/ui/PrimaryButton";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 const routeTitles = {
   "/": "Home",
@@ -22,17 +23,18 @@ export default function AppHeader() {
           <h1 className="text-white text-lg font-semibold">{title}</h1>
         </div>
         <div className="flex items-center gap-2">
+          <NotificationBell />
           <Link
             to="/upload"
             aria-label="Open upload draft page"
-            className={getButtonClasses("secondary", "sm")}
+            className={`${getButtonClasses("secondary", "sm")} hidden sm:inline-flex`}
           >
             Upload
           </Link>
           <Link
             to="/creator-studio"
             aria-label="Open creator studio"
-            className={getButtonClasses("primary", "sm")}
+            className={`${getButtonClasses("primary", "sm")} hidden sm:inline-flex`}
           >
             Studio
           </Link>

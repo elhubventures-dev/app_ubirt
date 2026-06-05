@@ -4,6 +4,7 @@ import { ensureUserProfile, getAuthAvatarUrl, getAuthDisplayName, getOAuthRedire
 import { isNativePlatform } from "@/lib/platform";
 import { resetAnalyticsUser } from "@/lib/monitoring";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { SIGNUP_BONUS_COINS } from "@/lib/wallet";
 
 const AuthContext = createContext(null);
 
@@ -11,7 +12,12 @@ const demoUser = {
   id: "user-demo-1",
   name: "Alex Demo",
   username: "alexdemo",
-  coins: 1000,
+  email: "demo@ubirt.ai",
+  coins: SIGNUP_BONUS_COINS,
+  bio: "",
+  phone: "",
+  website: "",
+  location: "",
   avatar:
     "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&h=120&fit=crop",
 };
@@ -23,10 +29,14 @@ function mapProfile(user, profile) {
   return {
     id: user.id,
     email: user.email,
+    phone: profile?.phone ?? user.phone ?? "",
     name: profile?.display_name ?? getAuthDisplayName(user),
     username: profile?.username ?? user.user_metadata?.username ?? "user",
-    coins: profile?.coins ?? 1000,
+    coins: profile?.coins ?? SIGNUP_BONUS_COINS,
     avatar: profile?.avatar_url ?? getAuthAvatarUrl(user) ?? defaultAvatar,
+    bio: profile?.bio ?? "",
+    website: profile?.website ?? "",
+    location: profile?.location ?? "",
   };
 }
 
@@ -269,6 +279,32 @@ export function AuthProvider({ children }) {
     navigate("/login", { replace: true });
   }, [navigate]);
 
+  const changeEmail = useCallback(async (newEmail) => {
+    const supabase = getSupabase();
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
+    if (error) throw error;
+  }, []);
+
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    const supabase = getSupabase();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+    if (!authUser) throw new Error("Not authenticated");
+
+    const hasEmailIdentity = authUser.identities?.some((i) => i.provider === "email");
+    if (hasEmailIdentity && authUser.email) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: authUser.email,
+        password: currentPassword,
+      });
+      if (signInError) throw new Error("Current password is incorrect");
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  }, []);
+
   const signOut = useCallback(async () => {
     if (useLiveAuth) {
       await getSupabase().auth.signOut();
@@ -316,6 +352,8 @@ export function AuthProvider({ children }) {
       signInWithApple,
       resetPassword,
       updatePassword,
+      changeEmail,
+      changePassword,
       signOut,
       deleteAccount,
       updateUserSession,
@@ -334,6 +372,8 @@ export function AuthProvider({ children }) {
       signInWithApple,
       resetPassword,
       updatePassword,
+      changeEmail,
+      changePassword,
       signOut,
       deleteAccount,
       updateUserSession,

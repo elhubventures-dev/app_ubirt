@@ -11,8 +11,10 @@ import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { motion, AnimatePresence } from "framer-motion";
 import { getPreference } from "@/lib/preferences";
 import { isImagePost } from "@/lib/media";
+import NotificationBell from "@/components/layout/NotificationBell";
+import { calculateGiftSplit } from "@/lib/giftSplit";
 
-function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId, setGiftPostId }) {
+function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId, setGiftPostId }) {
   const videoRef = useRef(null);
   const viewedRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -49,7 +51,7 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
       clickTimeout.current = null;
       // Double tap
       if (!post.liked) {
-        toggleLike(post.id);
+        onLike(post.id);
       }
       setShowHeart(true);
       setTimeout(() => setShowHeart(false), 800);
@@ -167,7 +169,7 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
         </Link>
 
         {/* Like */}
-        <button onClick={() => toggleLike(post.id)} disabled={isMutating} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
+        <button type="button" onClick={() => onLike(post.id)} disabled={isMutating} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
           <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white/20">
             <span className={`material-symbols-outlined ${post.liked ? 'fill-1 text-red-500' : ''}`}>favorite</span>
           </div>
@@ -175,7 +177,7 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
         </button>
 
         {/* Comment */}
-        <button onClick={() => setExpandedPostId(post.id)} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
+        <button type="button" onClick={() => setExpandedPostId(post.id)} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
           <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white/20">
             <span className="material-symbols-outlined fill-1">chat_bubble</span>
           </div>
@@ -183,7 +185,7 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
         </button>
 
         {/* Bookmark */}
-        <button onClick={() => toggleBookmark(post.id)} disabled={isMutating} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
+        <button type="button" onClick={() => onBookmark(post.id)} disabled={isMutating} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
           <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white/20">
             <span className={`material-symbols-outlined ${post.bookmarked ? 'fill-1 text-yellow-400' : ''}`}>bookmark</span>
           </div>
@@ -241,6 +243,27 @@ export default function VideoFeed() {
     }
   };
 
+  const handleLike = async (postId) => {
+    try {
+      await toggleLike(postId);
+    } catch (error) {
+      toast({ title: "Like failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleBookmark = async (postId) => {
+    const wasSaved = posts.find((p) => p.id === postId)?.bookmarked;
+    try {
+      await toggleBookmark(postId);
+      toast({
+        title: wasSaved ? "Removed from saved" : "Saved",
+        description: wasSaved ? "Post removed from your saves." : "Post saved to your collection.",
+      });
+    } catch (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+    }
+  };
+
   if (isLoading) return (
     <div className="w-full h-[100dvh] flex items-center justify-center bg-black">
       <div className="animate-spin-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-[#0d5bba]"></div>
@@ -256,7 +279,10 @@ export default function VideoFeed() {
   return (
     <div className="relative w-full h-[100dvh] bg-black">
       {/* Top Navigation Toggle */}
-      <div className="absolute top-0 left-0 right-0 z-10 pt-12 pb-4 flex justify-center gap-6 pointer-events-auto bg-gradient-to-b from-black/60 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-10 pt-12 pb-4 flex justify-center items-start gap-6 pointer-events-auto bg-gradient-to-b from-black/60 to-transparent">
+        <div className="absolute top-12 right-4 pointer-events-auto">
+          <NotificationBell variant="overlay" />
+        </div>
         <button 
           onClick={() => setFeedType("following")}
           className={`text-lg font-bold transition-colors ${feedType === "following" ? "text-white drop-shadow-md" : "text-white/50"}`}
@@ -284,8 +310,8 @@ export default function VideoFeed() {
             key={post.id}
             post={post}
             isVisible={index === activePostIndex}
-            toggleLike={toggleLike}
-            toggleBookmark={toggleBookmark}
+            onLike={handleLike}
+            onBookmark={handleBookmark}
             setExpandedPostId={setExpandedPostId}
             isMutating={isMutating}
             onAutoScroll={handleAutoScroll}
@@ -431,7 +457,10 @@ export default function VideoFeed() {
                 <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto my-3 shrink-0" />
                 <div className="p-6 pt-2 flex flex-col gap-4 h-full">
                   <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                    <h3 className="text-white font-bold text-lg">Send a Gift</h3>
+                    <div>
+                      <h3 className="text-white font-bold text-lg">Send a Gift</h3>
+                      <p className="text-[11px] text-slate-400 mt-1">Creators receive 80% · Platform fee 20%</p>
+                    </div>
                     <div className="flex items-center gap-1 text-amber-400 font-bold bg-amber-400/10 px-3 py-1 rounded-full">
                        <span className="material-symbols-outlined text-sm">monetization_on</span>
                        {user?.coins?.toLocaleString() || "0"}
@@ -441,22 +470,30 @@ export default function VideoFeed() {
                   <div className="grid grid-cols-3 gap-3 overflow-y-auto">
                     {[
                       { id: "rose", name: "Rose", cost: 10, icon: "🌹" },
+                      { id: "star", name: "Star", cost: 20, icon: "⭐" },
                       { id: "coffee", name: "Coffee", cost: 50, icon: "☕" },
                       { id: "heart", name: "Heart", cost: 100, icon: "💖" },
                       { id: "crown", name: "Crown", cost: 500, icon: "👑" },
                       { id: "rocket", name: "Rocket", cost: 1000, icon: "🚀" },
                       { id: "universe", name: "Universe", cost: 5000, icon: "🌌" },
-                    ].map(gift => (
+                    ].map(gift => {
+                      const { receiverAmount } = calculateGiftSplit(gift.cost);
+                      return (
                       <button 
                         key={gift.id}
                         disabled={isGifting}
                         onClick={async () => {
                           try {
-                            await sendGift({ postId: giftPostId, amount: gift.cost });
-                            if (updateUserSession) {
-                              updateUserSession({ coins: (user?.coins || 1000) - gift.cost });
+                            const result = await sendGift({ postId: giftPostId, amount: gift.cost });
+                            if (updateUserSession && result.senderBalance != null) {
+                              updateUserSession({ coins: result.senderBalance });
+                            } else if (updateUserSession) {
+                              updateUserSession({ coins: (user?.coins || 0) - gift.cost });
                             }
-                            toast({ title: "Gift Sent!", description: `You sent a ${gift.name}!` });
+                            toast({
+                              title: "Gift sent!",
+                              description: `${gift.name} sent · Creator receives ${result.receiverAmount ?? receiverAmount} coins`,
+                            });
                             setGiftPostId("");
                           } catch (err) {
                             toast({ title: "Failed", description: err.message, variant: "destructive" });
@@ -470,8 +507,10 @@ export default function VideoFeed() {
                            <span className="material-symbols-outlined text-[12px] mr-0.5">monetization_on</span>
                            {gift.cost}
                          </div>
+                         <p className="text-[9px] text-slate-500 mt-1">+{receiverAmount} to creator</p>
                       </button>
-                    ))}
+                    );
+                    })}
                   </div>
   
                 </div>

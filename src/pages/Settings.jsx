@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
@@ -7,40 +8,110 @@ import { InputField } from "@/components/ui/InputField";
 import { getDataMode, dataProvider } from "@/api/dataProvider";
 import { getPreference, setPreference } from "@/lib/preferences";
 import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
+import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { motion } from "framer-motion";
 
 function Toggle({ checked, onChange, label }) {
   return (
-    <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-colors cursor-pointer" onClick={() => onChange(!checked)}>
-       <span className="text-sm font-medium text-slate-200">{label}</span>
-       <div className={`w-12 h-6 rounded-full relative transition-colors ${checked ? 'bg-[#3b82f6]' : 'bg-slate-700'}`}>
-          <motion.div 
-             layout 
-             transition={{ type: "spring", stiffness: 700, damping: 30 }}
-             className="w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm"
-             style={{ left: checked ? 'calc(100% - 1.35rem)' : '0.15rem' }}
-          />
-       </div>
+    <div
+      className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-colors cursor-pointer"
+      onClick={() => onChange(!checked)}
+    >
+      <span className="text-sm font-medium text-slate-200">{label}</span>
+      <div className={`w-12 h-6 rounded-full relative transition-colors ${checked ? "bg-[#3b82f6]" : "bg-slate-700"}`}>
+        <motion.div
+          layout
+          transition={{ type: "spring", stiffness: 700, damping: 30 }}
+          className="w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm"
+          style={{ left: checked ? "calc(100% - 1.35rem)" : "0.15rem" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">{children}</h2>
+  );
+}
+
+function FieldLabel({ children, hint }) {
+  return (
+    <div className="mb-1.5 pl-1">
+      <label className="text-xs font-semibold text-slate-400 block">{children}</label>
+      {hint ? <p className="text-[10px] text-slate-500 mt-0.5">{hint}</p> : null}
     </div>
   );
 }
 
 export default function Settings() {
-  const { user, signOut, deleteAccount, isLiveAuth, updateUserSession } = useAuth();
+  const {
+    user,
+    signOut,
+    deleteAccount,
+    isLiveAuth,
+    updateUserSession,
+    changeEmail,
+    changePassword,
+  } = useAuth();
   const [autoplay, setAutoplay] = useState(() => getPreference("autoplay", true));
   const [notifications, setNotifications] = useState(() => getPreference("push", true));
-  
+
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
+  const [bio, setBio] = useState("");
+  const [phone, setPhone] = useState("");
+  const [website, setWebsite] = useState("");
+  const [location, setLocation] = useState("");
   const [avatarFile, setAvatarFile] = useState(null);
-  
+
+  const [email, setEmail] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [hasEmailAuth, setHasEmailAuth] = useState(false);
+
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const avatarInputRef = useRef(null);
+
+  const { data: ownProfile, isLoading: isLoadingProfile } = useQuery({
+    queryKey: ["own-profile", user?.id],
+    queryFn: () => dataProvider.getOwnProfile(),
+    enabled: Boolean(user?.id),
+  });
 
   useEffect(() => {
     if (!user) return;
     setName(user.name || "");
     setUsername(user.username || "");
+    setBio(user.bio || "");
+    setPhone(user.phone || "");
+    setWebsite(user.website || "");
+    setLocation(user.location || "");
+    setEmail(user.email || "");
   }, [user]);
+
+  useEffect(() => {
+    if (!ownProfile) return;
+    setName(ownProfile.name || "");
+    setUsername(ownProfile.username || "");
+    setBio(ownProfile.bio || "");
+    setPhone(ownProfile.phone || "");
+    setWebsite(ownProfile.website || "");
+    setLocation(ownProfile.location || "");
+  }, [ownProfile]);
+
+  useEffect(() => {
+    if (!isLiveAuth || !isSupabaseConfigured()) return;
+    getSupabase()
+      .auth.getUser()
+      .then(({ data: { user: authUser } }) => {
+        setHasEmailAuth(Boolean(authUser?.identities?.some((i) => i.provider === "email")));
+      })
+      .catch(() => setHasEmailAuth(false));
+  }, [isLiveAuth]);
 
   const toggleAutoplay = (next) => {
     setAutoplay(next);
@@ -60,6 +131,8 @@ export default function Settings() {
   };
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteAccount = async () => {
@@ -82,13 +155,28 @@ export default function Settings() {
     e.preventDefault();
     setIsSaving(true);
     try {
-      const updated = await dataProvider.updateProfile(name, username, avatarFile);
+      const updated = await dataProvider.updateProfile({
+        name,
+        username,
+        bio,
+        phone,
+        website,
+        location,
+        avatarFile,
+      });
       updateUserSession({
         name: updated.name ?? name,
         username: updated.username ?? username,
         avatar: updated.avatar ?? user?.avatar,
+        bio: updated.bio ?? bio,
+        phone: updated.phone ?? phone,
+        website: updated.website ?? website,
+        location: updated.location ?? location,
       });
       setAvatarFile(null);
+      queryClient.invalidateQueries({ queryKey: ["own-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["public-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["creator-stats"] });
       toast({ title: "Profile updated", description: "Your changes have been saved." });
     } catch (error) {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
@@ -97,105 +185,265 @@ export default function Settings() {
     }
   };
 
+  const handleSaveEmail = async (e) => {
+    e.preventDefault();
+    if (!isLiveAuth) {
+      toast({ title: "Demo mode", description: "Email changes require a live account." });
+      return;
+    }
+    if (!email.trim() || email.trim() === user?.email) {
+      toast({ title: "No change", description: "Enter a new email address." });
+      return;
+    }
+    setIsSavingEmail(true);
+    try {
+      await changeEmail(email);
+      toast({
+        title: "Confirmation sent",
+        description: "Check your inbox to confirm your new email address.",
+      });
+    } catch (error) {
+      toast({ title: "Email update failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
+
+  const handleSavePassword = async (e) => {
+    e.preventDefault();
+    if (!isLiveAuth) {
+      toast({ title: "Demo mode", description: "Password changes require a live account." });
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast({ title: "Password too short", description: "Use at least 8 characters.", variant: "destructive" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Passwords don't match", description: "Confirm your new password.", variant: "destructive" });
+      return;
+    }
+    if (hasEmailAuth && !currentPassword) {
+      toast({ title: "Current password required", variant: "destructive" });
+      return;
+    }
+    setIsSavingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast({ title: "Password updated", description: "Your password has been changed." });
+    } catch (error) {
+      toast({ title: "Password update failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
+
+  const avatarPreview = avatarFile
+    ? URL.createObjectURL(avatarFile)
+    : user?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${user?.username || "default"}`;
+
   return (
     <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
-      {/* Background aesthetics */}
       <div className="absolute top-[20%] left-[-10%] w-[50%] h-[40%] bg-[#8b5cf6]/10 blur-[120px] rounded-full pointer-events-none z-0" />
 
-      {/* Header */}
       <header className="shrink-0 px-4 py-4 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between z-10 shadow-sm">
-        <Link to="/profile" className="text-[#3b82f6] flex items-center gap-1 hover:bg-white/5 rounded-full p-1.5 -ml-1.5 transition-colors">
+        <Link
+          to="/profile"
+          className="text-[#3b82f6] flex items-center gap-1 hover:bg-white/5 rounded-full p-1.5 -ml-1.5 transition-colors"
+        >
           <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
         </Link>
-        <h1 className="text-base font-bold tracking-wide absolute left-1/2 -translate-x-1/2">Settings</h1>
+        <h1 className="text-base font-bold tracking-wide absolute left-1/2 -translate-x-1/2">Edit Profile</h1>
         <div className="w-8" />
       </header>
 
-      {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto hide-scrollbar relative z-10">
         <div className="px-4 py-6 max-w-2xl mx-auto space-y-8">
-          
-          {/* Profile Section */}
-          <section>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Profile Customization</h2>
-            <form onSubmit={handleSaveProfile} className="bg-white/5 border border-white/10 p-5 rounded-3xl backdrop-blur-sm space-y-4">
-               <div className="flex items-center gap-4 mb-2">
-                 <label className="w-16 h-16 rounded-full bg-slate-800 border-2 border-white/10 overflow-hidden relative group cursor-pointer block">
-                    <img src={avatarFile ? URL.createObjectURL(avatarFile) : (user?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${user?.username || "default"}`)} alt="Avatar" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                       <span className="material-symbols-outlined text-[20px] text-white">edit</span>
-                    </div>
-                    <input
-                      type="file"
-                      accept={ALLOWED_IMAGE_ACCEPT}
-                      className="hidden"
-                      onChange={(e) => {
-                        const selected = e.target.files?.[0];
-                        if (!selected) return;
-                        try {
-                          validateImageFile(selected);
-                          setAvatarFile(selected);
-                        } catch (error) {
-                          toast({ title: "Invalid file", description: error.message, variant: "destructive" });
-                        }
-                      }}
-                    />
-                 </label>
-                 <div>
-                    <label className="cursor-pointer block">
-                      <PrimaryButton type="button" variant="secondary" size="sm" onClick={() => document.querySelector('input[type="file"]').click()}>Change Avatar</PrimaryButton>
-                    </label>
-                 </div>
-               </div>
-               
-               <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1.5 pl-1">Username</label>
-                  <InputField value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-[#0a0f16]/50 border-white/5" placeholder="username" />
-               </div>
-               
-               <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1.5 pl-1">Display Name</label>
-                  <InputField value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-[#0a0f16]/50 border-white/5" placeholder="Your Name" />
-               </div>
+          {isLoadingProfile && isLiveAuth ? (
+            <p className="text-center text-slate-400 text-sm py-4">Loading profile...</p>
+          ) : null}
 
-               <div className="pt-2">
-                 <PrimaryButton type="submit" className="w-full" disabled={isSaving}>
-                   {isSaving ? "Saving..." : "Save Changes"}
-                 </PrimaryButton>
-               </div>
+          {/* Profile photo & about */}
+          <section>
+            <SectionTitle>Profile</SectionTitle>
+            <form onSubmit={handleSaveProfile} className="bg-white/5 border border-white/10 p-5 rounded-3xl backdrop-blur-sm space-y-4">
+              <div className="flex items-center gap-4">
+                <label className="w-20 h-20 rounded-full bg-slate-800 border-2 border-white/10 overflow-hidden relative group cursor-pointer block shrink-0">
+                  <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="material-symbols-outlined text-[20px] text-white">edit</span>
+                  </div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept={ALLOWED_IMAGE_ACCEPT}
+                    className="hidden"
+                    onChange={(e) => {
+                      const selected = e.target.files?.[0];
+                      if (!selected) return;
+                      try {
+                        validateImageFile(selected);
+                        setAvatarFile(selected);
+                      } catch (error) {
+                        toast({ title: "Invalid file", description: error.message, variant: "destructive" });
+                      }
+                    }}
+                  />
+                </label>
+                <div>
+                  <PrimaryButton type="button" variant="secondary" size="sm" onClick={() => avatarInputRef.current?.click()}>
+                    Change photo
+                  </PrimaryButton>
+                  <p className="text-[10px] text-slate-500 mt-2">JPG or PNG only</p>
+                </div>
+              </div>
+
+              <div>
+                <FieldLabel hint={`${bio.length}/160 characters`}>Bio</FieldLabel>
+                <textarea
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value.slice(0, 160))}
+                  rows={3}
+                  placeholder="Tell people about yourself..."
+                  className="w-full rounded-xl px-3 py-2.5 bg-[#0a0f16]/50 border border-white/10 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-[#3b82f6]/50"
+                />
+              </div>
+
+              <div>
+                <FieldLabel>Display name</FieldLabel>
+                <InputField value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-[#0a0f16]/50 border-white/5" placeholder="Your name" />
+              </div>
+
+              <div>
+                <FieldLabel hint="Letters, numbers, and underscores only">Username</FieldLabel>
+                <InputField value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-[#0a0f16]/50 border-white/5" placeholder="username" />
+              </div>
+
+              <div>
+                <FieldLabel>Location</FieldLabel>
+                <InputField value={location} onChange={(e) => setLocation(e.target.value)} className="w-full bg-[#0a0f16]/50 border-white/5" placeholder="City, Country" />
+              </div>
+
+              <div>
+                <FieldLabel>Website</FieldLabel>
+                <InputField value={website} onChange={(e) => setWebsite(e.target.value)} className="w-full bg-[#0a0f16]/50 border-white/5" placeholder="https://yoursite.com" />
+              </div>
+
+              <div>
+                <FieldLabel>Phone number</FieldLabel>
+                <InputField
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full bg-[#0a0f16]/50 border-white/5"
+                  placeholder="+1 555 000 0000"
+                />
+              </div>
+
+              <PrimaryButton type="submit" className="w-full" disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save profile"}
+              </PrimaryButton>
             </form>
           </section>
 
-          {/* Preferences Section */}
+          {/* Account security */}
           <section>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">App Preferences</h2>
-            <div className="space-y-2">
-               <Toggle checked={autoplay} onChange={toggleAutoplay} label="Autoplay feed posts" />
-               <Toggle checked={notifications} onChange={togglePush} label="Push Notifications" />
+            <SectionTitle>Account & security</SectionTitle>
+            <div className="space-y-4">
+              <form onSubmit={handleSaveEmail} className="bg-white/5 border border-white/10 p-5 rounded-3xl space-y-3">
+                <FieldLabel hint="We'll send a confirmation link to your new address">Email</FieldLabel>
+                <InputField
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-[#0a0f16]/50 border-white/5"
+                  placeholder="you@example.com"
+                  disabled={!isLiveAuth}
+                />
+                <PrimaryButton type="submit" variant="secondary" className="w-full" disabled={isSavingEmail || !isLiveAuth}>
+                  {isSavingEmail ? "Sending..." : "Update email"}
+                </PrimaryButton>
+              </form>
+
+              <form onSubmit={handleSavePassword} className="bg-white/5 border border-white/10 p-5 rounded-3xl space-y-3">
+                <FieldLabel>
+                  {hasEmailAuth ? "Change password" : "Set password"}
+                </FieldLabel>
+                {hasEmailAuth ? (
+                  <InputField
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="w-full bg-[#0a0f16]/50 border-white/5"
+                    placeholder="Current password"
+                    autoComplete="current-password"
+                    disabled={!isLiveAuth}
+                  />
+                ) : (
+                  <p className="text-xs text-slate-500 pl-1">
+                    You signed in with Google or Apple. Set a password to also sign in with email.
+                  </p>
+                )}
+                <InputField
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-[#0a0f16]/50 border-white/5"
+                  placeholder="New password (min. 8 characters)"
+                  autoComplete="new-password"
+                  disabled={!isLiveAuth}
+                />
+                <InputField
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-[#0a0f16]/50 border-white/5"
+                  placeholder="Confirm new password"
+                  autoComplete="new-password"
+                  disabled={!isLiveAuth}
+                />
+                <PrimaryButton type="submit" variant="secondary" className="w-full" disabled={isSavingPassword || !isLiveAuth}>
+                  {isSavingPassword ? "Updating..." : hasEmailAuth ? "Change password" : "Set password"}
+                </PrimaryButton>
+              </form>
             </div>
           </section>
 
-          {/* Danger Zone */}
+          {/* Preferences */}
           <section>
-            <h2 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3 px-1">Danger Zone</h2>
-            <div className="bg-red-500/5 border border-red-500/10 p-5 rounded-3xl space-y-3">
-               <p className="text-sm text-slate-300">Data mode: <span className="font-mono text-xs">{getDataMode()}</span></p>
-               {isLiveAuth && (
-                 <PrimaryButton variant="danger" className="w-full" onClick={() => signOut()}>
-                   Sign Out
-                 </PrimaryButton>
-               )}
-               <button
-                 type="button"
-                 onClick={handleDeleteAccount}
-                 disabled={isDeleting}
-                 className="w-full py-3 text-sm font-semibold text-red-400 hover:bg-red-500/10 rounded-xl transition-colors border border-transparent hover:border-red-500/20 disabled:opacity-60"
-               >
-                 {isDeleting ? "Deleting..." : "Delete Account"}
-               </button>
+            <SectionTitle>App preferences</SectionTitle>
+            <div className="space-y-2">
+              <Toggle checked={autoplay} onChange={toggleAutoplay} label="Autoplay feed posts" />
+              <Toggle checked={notifications} onChange={togglePush} label="Push notifications" />
             </div>
           </section>
-          
+
+          {/* Danger zone */}
+          <section>
+            <SectionTitle>Danger zone</SectionTitle>
+            <div className="bg-red-500/5 border border-red-500/10 p-5 rounded-3xl space-y-3">
+              <p className="text-sm text-slate-300">
+                Data mode: <span className="font-mono text-xs">{getDataMode()}</span>
+              </p>
+              {isLiveAuth && (
+                <PrimaryButton variant="danger" className="w-full" onClick={() => signOut()}>
+                  Sign out
+                </PrimaryButton>
+              )}
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting}
+                className="w-full py-3 text-sm font-semibold text-red-400 hover:bg-red-500/10 rounded-xl transition-colors border border-transparent hover:border-red-500/20 disabled:opacity-60"
+              >
+                {isDeleting ? "Deleting..." : "Delete account"}
+              </button>
+            </div>
+          </section>
+
           <div className="h-10" />
         </div>
       </div>

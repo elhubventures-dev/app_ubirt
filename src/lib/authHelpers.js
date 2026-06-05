@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabaseClient";
+import { SIGNUP_BONUS_COINS } from "@/lib/wallet";
 
 function sanitizeUsername(value) {
   const cleaned = String(value ?? "user")
@@ -50,6 +51,7 @@ export async function ensureUserProfile(authUser) {
     username,
     display_name: getAuthDisplayName(authUser),
     avatar_url: getAuthAvatarUrl(authUser),
+    coins: SIGNUP_BONUS_COINS,
   });
 
   if (error && error.code !== "23505") {

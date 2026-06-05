@@ -30,6 +30,22 @@ export default function UserProfile() {
     },
   });
 
+  const messageMutation = useMutation({
+    mutationFn: (targetUserId) => dataProvider.startConversation(targetUserId),
+    onSuccess: (conv) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      navigate(`/chat/${conv.id}`, { replace: true });
+    },
+    onError: (error) => {
+      toast({ title: "Could not start chat", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleMessage = () => {
+    if (!profile?.id || messageMutation.isPending) return;
+    messageMutation.mutate(profile.id);
+  };
+
   const isSelf = currentUser?.username?.toLowerCase() === username?.toLowerCase();
   const bannerUrl = "https://images.unsplash.com/photo-1557683311-eac922347aa1?w=800&h=300&fit=crop&q=80";
 
@@ -83,15 +99,40 @@ export default function UserProfile() {
           <h1 className="text-2xl font-bold tracking-tight text-white">{profile.name}</h1>
           <p className="text-sm font-medium text-[#3b82f6]">@{profile.username}</p>
 
+          {profile.bio ? (
+            <p className="mt-2 text-sm text-slate-300 max-w-sm mx-auto sm:mx-0 text-center sm:text-left">{profile.bio}</p>
+          ) : null}
+          {(profile.location || profile.website) && (
+            <div className="mt-2 flex flex-wrap gap-3 justify-center sm:justify-start text-xs text-slate-400">
+              {profile.location ? (
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">location_on</span>
+                  {profile.location}
+                </span>
+              ) : null}
+              {profile.website ? (
+                <a
+                  href={profile.website.startsWith("http") ? profile.website : `https://${profile.website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[#3b82f6] hover:underline"
+                >
+                  <span className="material-symbols-outlined text-[14px]">link</span>
+                  {profile.website.replace(/^https?:\/\//, "")}
+                </a>
+              ) : null}
+            </div>
+          )}
+
           <div className="mt-4 flex gap-6 justify-center sm:justify-start">
-            <div className="text-center">
+            <Link to={`/user/${profile.username}/followers`} className="text-center hover:opacity-80 transition-opacity">
               <p className="text-white font-bold text-lg">{profile.followers.toLocaleString()}</p>
               <p className="text-slate-400 text-xs font-semibold uppercase">Followers</p>
-            </div>
-            <div className="text-center">
+            </Link>
+            <Link to={`/user/${profile.username}/following`} className="text-center hover:opacity-80 transition-opacity">
               <p className="text-white font-bold text-lg">{profile.following.toLocaleString()}</p>
               <p className="text-slate-400 text-xs font-semibold uppercase">Following</p>
-            </div>
+            </Link>
             <div className="text-center">
               <p className="text-white font-bold text-lg">{profile.totalLikes.toLocaleString()}</p>
               <p className="text-slate-400 text-xs font-semibold uppercase">Likes</p>
@@ -112,12 +153,19 @@ export default function UserProfile() {
               >
                 {profile.isFollowing ? "Following" : "Follow"}
               </button>
-              <Link
-                to="/messages"
-                className="w-10 h-10 rounded-full border border-white/20 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+              <button
+                type="button"
+                disabled={messageMutation.isPending || !profile.id}
+                onClick={handleMessage}
+                className="w-10 h-10 rounded-full border border-white/20 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors disabled:opacity-60"
+                aria-label="Send message"
               >
-                <span className="material-symbols-outlined text-[20px] text-white">mail</span>
-              </Link>
+                {messageMutation.isPending ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <span className="material-symbols-outlined text-[20px] text-white">mail</span>
+                )}
+              </button>
             </div>
           )}
           {isSelf && (

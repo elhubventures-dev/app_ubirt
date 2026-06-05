@@ -29,6 +29,7 @@ import Camera from "./pages/Camera";
 import Achievements from "./pages/Achievements";
 import Wallet from "./pages/Wallet";
 import UserProfile from "./pages/UserProfile";
+import FollowList from "./pages/FollowList";
 import HashtagFeed from "./pages/HashtagFeed";
 import Analytics from "./pages/Analytics";
 import CommunityChat from "./pages/CommunityChat";
@@ -121,6 +122,8 @@ const AuthenticatedApp = () => {
       <Route path="/achievements" element={<Achievements />} />
       <Route path="/wallet" element={<Wallet />} />
       <Route path="/analytics" element={<Analytics />} />
+      <Route path="/user/:username/followers" element={<FollowList />} />
+      <Route path="/user/:username/following" element={<FollowList />} />
       <Route path="/user/:username" element={<UserProfile />} />
       <Route path="/tag/:tag" element={<HashtagFeed />} />
 

@@ -4,6 +4,7 @@ import { useFeed } from "@/hooks/useFeed";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
 import { formatCount } from "@/lib/formatStats";
 import { motion } from "framer-motion";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 export default function Home() {
   const { user } = useAuth();
@@ -29,9 +30,12 @@ export default function Home() {
               {user?.name || "Creator"}
             </motion.h1>
           </div>
-          <Link to="/profile" className="w-12 h-12 rounded-full bg-slate-800 border-2 border-white/10 overflow-hidden hover:border-[#3b82f6]/50 transition-colors shadow-lg">
-             <img src={user?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${user?.username || "default"}`} alt="Profile" className="w-full h-full object-cover" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <Link to="/profile" className="w-12 h-12 rounded-full bg-slate-800 border-2 border-white/10 overflow-hidden hover:border-[#3b82f6]/50 transition-colors shadow-lg">
+              <img src={user?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${user?.username || "default"}`} alt="Profile" className="w-full h-full object-cover" />
+            </Link>
+          </div>
         </header>
 
         {/* Mini Analytics Overview */}

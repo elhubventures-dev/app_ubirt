@@ -10,6 +10,8 @@ import {
 } from "@/api/mockData";
 
 import { validateImageFile } from "@/lib/uploadPolicy";
+import { calculateGiftSplit } from "@/lib/giftSplit";
+import { SIGNUP_BONUS_COINS } from "@/lib/wallet";
 
 const wait = (ms = 150) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -25,7 +27,14 @@ let uploads = structuredClone(mockUploads).map((upload) => ({
 }));
 let typingByChat = {};
 let aiConversationMeta = { title: "UBIRT Assistant" };
-let follows = ["creator", "tech_guru"]; // mock list of followed usernames
+let mockProfileExtras = {
+  bio: "Digital creator & tech enthusiast. Building the future of content on UBIRT. 🚀",
+  phone: "",
+  website: "",
+  location: "",
+};
+let mockWalletBalance = SIGNUP_BONUS_COINS;
+let mockReceiverBalances = {};
 let notifications = structuredClone(mockNotifications);
 
 const storageKey = "ubirt.mock.state.v1";
@@ -50,6 +59,9 @@ function hydrateState() {
     typingByChat = parsed.typingByChat ?? typingByChat;
     aiConversationMeta = parsed.aiConversationMeta ?? aiConversationMeta;
     follows = parsed.follows ?? follows;
+    mockProfileExtras = parsed.mockProfileExtras ?? mockProfileExtras;
+    mockWalletBalance = parsed.mockWalletBalance ?? mockWalletBalance;
+    mockReceiverBalances = parsed.mockReceiverBalances ?? mockReceiverBalances;
   } catch {
     window.localStorage.removeItem(storageKey);
   }
@@ -70,6 +82,9 @@ function persistState() {
       typingByChat,
       aiConversationMeta,
       follows,
+      mockProfileExtras,
+      mockWalletBalance,
+      mockReceiverBalances,
     })
   );
 }
@@ -115,6 +130,56 @@ export const mockApi = {
     await wait();
     return follows.includes(username.toLowerCase());
   },
+  _mockUsersFromPosts() {
+    const seen = new Map();
+    for (const post of feedPosts) {
+      const username = (post.handle?.replace("@", "") || post.author?.toLowerCase().replace(/\s+/g, "_") || "user").toLowerCase();
+      if (!seen.has(username)) {
+        seen.set(username, {
+          id: `user-${username}`,
+          username,
+          name: post.author ?? username,
+          avatar: null,
+        });
+      }
+    }
+    return [...seen.values()];
+  },
+  async getFollowers(username) {
+    await wait();
+    const uname = username.toLowerCase();
+    return this._mockUsersFromPosts()
+      .filter((u) => u.username !== uname)
+      .slice(0, 5)
+      .map((u) => ({
+        ...u,
+        isFollowing: follows.includes(u.username),
+        isSelf: false,
+      }));
+  },
+  async getFollowing(username) {
+    await wait();
+    const uname = username.toLowerCase();
+    const all = this._mockUsersFromPosts();
+    const followingUsers = follows
+      .map((followedUsername) => all.find((u) => u.username === followedUsername))
+      .filter(Boolean);
+    if (followingUsers.length) {
+      return followingUsers.map((u) => ({
+        ...u,
+        isFollowing: follows.includes(u.username),
+        isSelf: u.username === uname,
+      }));
+    }
+    return all
+      .filter((u) => u.username !== uname)
+      .slice(0, 3)
+      .map((u) => ({
+        ...u,
+        isFollowing: follows.includes(u.username),
+        isSelf: false,
+      }));
+  },
   async getPublicProfile(username) {
     await wait();
     const uname = username.toLowerCase();
@@ -129,6 +194,9 @@ export const mockApi = {
       username: uname,
       name: posts[0]?.author ?? username,
       avatar: null,
+      bio: mockProfileExtras.bio,
+      website: mockProfileExtras.website,
+      location: mockProfileExtras.location,
       followers: 12400,
       following: 240,
       totalLikes: posts.reduce((s, p) => s + (p.likes ?? 0), 0),
@@ -139,13 +207,13 @@ export const mockApi = {
   async getTransactions() {
     await wait();
     return [
-      { id: "tx1", label: "Signup Bonus", coins: 1000, time: "Yesterday", type: "credit" },
+      { id: "tx1", label: "Signup Bonus", coins: SIGNUP_BONUS_COINS, time: "Yesterday", type: "credit" },
       { id: "tx2", label: "Gift to @creator", coins: -50, time: "Today", type: "debit" },
     ];
   },
   async getWalletBalance() {
     await wait(100);
-    return 1000;
+    return mockWalletBalance;
   },
   async getTrendingTags() {
     await wait();
@@ -198,9 +266,42 @@ export const mockApi = {
   },
   async sendGift(postId, amount) {
     await wait();
-    // In mock mode, we assume the user has enough coins. We'd usually deduct and record the transaction.
-    // Let's just simulate success for now.
-    return { success: true, amount };
+    const giftAmount = Math.floor(Number(amount) || 0);
+    if (giftAmount <= 0) {
+      throw new Error("Invalid gift amount.");
+    }
+    if (mockWalletBalance < giftAmount) {
+      throw new Error("Insufficient coins.");
+    }
+
+    const post = feedPosts.find((p) => p.id === postId);
+    if (!post) {
+      throw new Error("Post not found.");
+    }
+
+    const { receiverAmount, platformFee } = calculateGiftSplit(giftAmount);
+    const receiverKey = post.handle?.replace("@", "") || post.author?.toLowerCase().replace(/\s+/g, "_") || "creator";
+
+    mockWalletBalance -= giftAmount;
+    mockReceiverBalances[receiverKey] = (mockReceiverBalances[receiverKey] ?? SIGNUP_BONUS_COINS) + receiverAmount;
+
+    notifications.unshift({
+      id: `n-gift-${Date.now()}`,
+      type: "gift",
+      text: `You received ${receiverAmount} coins from a ${giftAmount} coin gift (80%).`,
+      time: "now",
+      read: false,
+    });
+    persistState();
+
+    return {
+      success: true,
+      amount: giftAmount,
+      receiverAmount,
+      platformFee,
+      senderBalance: mockWalletBalance,
+      receiverBalance: mockReceiverBalances[receiverKey],
+    };
   },
   async getCreatorAnalytics(days = 28) {
     await wait(500);
@@ -243,6 +344,32 @@ export const mockApi = {
   async getConversations() {
     await wait();
     return conversations;
+  },
+  async startConversation(targetUserId) {
+    await wait();
+    const existing = conversations.find((c) => c.peerId === targetUserId);
+    if (existing) return { id: existing.id, name: existing.name };
+
+    const suggested = await this.getSuggestedCreators();
+    const user = suggested.find((u) => u.id === targetUserId) ?? {
+      id: targetUserId,
+      name: "User",
+      username: "user",
+    };
+
+    const chatId = `c-${Date.now()}`;
+    const chat = {
+      id: chatId,
+      peerId: targetUserId,
+      name: user.name,
+      lastMessage: "Say hello!",
+      updatedAt: "now",
+      unread: 0,
+    };
+    conversations = [chat, ...conversations];
+    messagesByChat = { ...messagesByChat, [chatId]: [] };
+    persistState();
+    return { id: chatId, name: chat.name };
   },
   async getMessages(chatId) {
     await wait();
@@ -360,7 +487,7 @@ export const mockApi = {
     return aiMessages;
   },
   async getCreatorStats() {
-    return { views: 45000, followers: 1200, completionRate: 78 };
+    return { views: 45000, followers: 1200, following: follows.length, completionRate: 78 };
   },
 
   async getAchievements() {
@@ -396,9 +523,28 @@ export const mockApi = {
   },
   async updateUpload(uploadId, patch) {
     await wait();
+    const existing = uploads.find((upload) => upload.id === uploadId);
     uploads = uploads.map((upload) => (upload.id === uploadId ? { ...upload, ...patch } : upload));
+    const updated = uploads.find((upload) => upload.id === uploadId) ?? null;
+    if (existing?.media_url && updated?.status === "published") {
+      const caption = updated.description || updated.title || "";
+      feedPosts = feedPosts.map((post) =>
+        post.media_url === existing.media_url ? { ...post, caption } : post
+      );
+    }
     persistState();
-    return uploads.find((upload) => upload.id === uploadId) ?? null;
+    return updated;
+  },
+  async deleteUpload(uploadId) {
+    await wait();
+    const upload = uploads.find((u) => u.id === uploadId);
+    if (!upload) throw new Error("Upload not found");
+    if (upload.media_url) {
+      feedPosts = feedPosts.filter((post) => post.media_url !== upload.media_url);
+    }
+    uploads = uploads.filter((u) => u.id !== uploadId);
+    persistState();
+    return true;
   },
   async publishUpload(uploadId) {
     await wait();
@@ -444,12 +590,39 @@ export const mockApi = {
     persistState();
     return true;
   },
-  async updateProfile(name, username, avatarFile) {
+  async getOwnProfile() {
+    await wait();
+    return {
+      name: "Alex Demo",
+      username: "alexdemo",
+      avatar: null,
+      bio: mockProfileExtras.bio,
+      phone: mockProfileExtras.phone,
+      website: mockProfileExtras.website,
+      location: mockProfileExtras.location,
+    };
+  },
+  async updateProfile({ name, username, bio, phone, website, location, avatarFile }) {
     await wait();
     let avatarUrl = undefined;
     if (avatarFile) {
-       avatarUrl = URL.createObjectURL(avatarFile);
+      avatarUrl = URL.createObjectURL(avatarFile);
     }
-    return { name, username, avatar: avatarUrl };
+    mockProfileExtras = {
+      bio: bio ?? mockProfileExtras.bio,
+      phone: phone ?? mockProfileExtras.phone,
+      website: website ?? mockProfileExtras.website,
+      location: location ?? mockProfileExtras.location,
+    };
+    persistState();
+    return {
+      name,
+      username,
+      avatar: avatarUrl,
+      bio: mockProfileExtras.bio,
+      phone: mockProfileExtras.phone,
+      website: mockProfileExtras.website,
+      location: mockProfileExtras.location,
+    };
   },
 };
