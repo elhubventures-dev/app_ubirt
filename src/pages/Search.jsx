@@ -4,6 +4,7 @@ import { dataProvider } from "@/api/dataProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { feedPostPath } from "@/lib/feedLinks";
+import { searchSounds, SOUND_LIBRARY } from "@/lib/soundLibrary";
 
 const DATE_FILTERS = {
   any: null,
@@ -54,7 +55,7 @@ export default function Search() {
   });
 
   const results = useMemo(() => {
-    if (!debouncedTerm) return { top: [], users: [], videos: [], sounds: [] };
+    if (!debouncedTerm) return { top: [], users: [], videos: [], sounds: [], tags: [] };
     const users = searchResults?.users ?? [];
     const videos = (searchResults?.posts ?? []).map((p) => ({
       id: p.id,
@@ -63,18 +64,26 @@ export default function Search() {
       subtitle: p.caption,
       ...p,
     }));
-    const sounds = (searchResults?.tags ?? []).map((tag, i) => ({
-      id: `tag-${i}`,
+    const sounds = searchSounds(debouncedTerm).map((track) => ({
+      id: track.id,
       type: "sound",
+      title: track.name,
+      subtitle: track.author,
+      duration: track.duration,
+    }));
+    const tags = (searchResults?.tags ?? []).map((tag, i) => ({
+      id: `tag-${i}`,
+      type: "tag",
       title: tag,
-      subtitle: debouncedTerm,
+      subtitle: "Hashtag",
     }));
 
     return {
-      top: [...users.slice(0, 2), ...videos.slice(0, 3), ...sounds.slice(0, 1)],
+      top: [...users.slice(0, 2), ...videos.slice(0, 2), ...sounds.slice(0, 1), ...tags.slice(0, 1)],
       users,
       videos,
       sounds,
+      tags,
     };
   }, [debouncedTerm, searchResults]);
 
@@ -95,7 +104,7 @@ export default function Search() {
             type="text"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            placeholder="Search creators, posts, tags..."
+            placeholder="Search creators, posts, sounds, tags..."
             className="w-full bg-[#1a2332]/80 backdrop-blur-md border border-white/10 rounded-full py-3.5 pl-12 pr-4 text-white placeholder-slate-400 focus:outline-none focus:border-[#3b82f6]/50 focus:ring-1 focus:ring-[#3b82f6]/50 transition-all shadow-inner"
           />
           {term && (
@@ -163,6 +172,30 @@ export default function Search() {
             </div>
 
             <div className="mt-8">
+              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Popular Sounds</h2>
+              <div className="space-y-2">
+                {SOUND_LIBRARY.filter((track) => track.id !== "original")
+                  .slice(0, 4)
+                  .map((track) => (
+                    <Link
+                      key={track.id}
+                      to={`/upload?sound=${track.id}`}
+                      className="bg-white/5 border border-white/10 p-3 rounded-2xl flex items-center gap-3 hover:bg-white/10 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#3b82f6] to-purple-500 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-white text-[20px]">music_note</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-white truncate">{track.name}</p>
+                        <p className="text-xs text-slate-400 truncate">{track.author}</p>
+                      </div>
+                      <span className="text-xs font-mono text-slate-500 shrink-0">{track.duration}</span>
+                    </Link>
+                  ))}
+              </div>
+            </div>
+
+            <div className="mt-8">
                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Suggested Creators</h2>
                <div className="grid grid-cols-2 gap-3">
                  {suggested.map((creator) => (
@@ -184,15 +217,21 @@ export default function Search() {
         {debouncedTerm && (
           <div className="mt-6">
             <div className="flex gap-4 border-b border-white/10 mb-4 pb-0.5 overflow-x-auto hide-scrollbar">
-              {["top", "users", "videos", "sounds"].map((tab) => (
+              {[
+                { id: "top", label: "Top" },
+                { id: "users", label: "Users" },
+                { id: "videos", label: "Posts" },
+                { id: "sounds", label: "Sounds" },
+                { id: "tags", label: "Tags" },
+              ].map((tab) => (
                 <button
-                  key={tab}
+                  key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={`py-2 text-sm font-semibold capitalize relative transition-colors whitespace-nowrap ${activeTab === tab ? "text-[#3b82f6]" : "text-slate-400 hover:text-slate-200"}`}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`py-2 text-sm font-semibold relative transition-colors whitespace-nowrap ${activeTab === tab.id ? "text-[#3b82f6]" : "text-slate-400 hover:text-slate-200"}`}
                 >
-                  {tab}
-                  {activeTab === tab && (
+                  {tab.label}
+                  {activeTab === tab.id && (
                     <motion.div layoutId="searchTabIndicator" className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#3b82f6]" />
                   )}
                 </button>
@@ -229,14 +268,33 @@ export default function Search() {
                             </div>
                           </Link>
                         ) : result.type === "sound" ? (
-                          <Link to={`/tag/${String(result.title).replace("#", "")}`} className="bg-white/5 border border-white/5 p-3 rounded-2xl flex items-center gap-3 group hover:bg-white/10 transition-colors">
-                             <div className="w-12 h-12 bg-gradient-to-br from-[#3b82f6] to-purple-500 rounded-lg flex items-center justify-center shrink-0 shadow-inner">
-                               <span className="material-symbols-outlined text-white">tag</span>
-                             </div>
-                             <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-white text-sm truncate">{result.title}</p>
-                                <p className="text-[10px] text-slate-400 font-medium truncate">Tag match</p>
-                             </div>
+                          <Link
+                            to={`/upload?sound=${result.id}`}
+                            className="bg-white/5 border border-white/5 p-3 rounded-2xl flex items-center gap-3 group hover:bg-white/10 transition-colors"
+                          >
+                            <div className="w-12 h-12 bg-gradient-to-br from-[#3b82f6] to-purple-500 rounded-lg flex items-center justify-center shrink-0 shadow-inner">
+                              <span className="material-symbols-outlined text-white">music_note</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-white text-sm truncate">{result.title}</p>
+                              <p className="text-[10px] text-slate-400 font-medium truncate">{result.subtitle}</p>
+                            </div>
+                            {result.duration ? (
+                              <span className="text-xs font-mono text-slate-500 shrink-0">{result.duration}</span>
+                            ) : null}
+                          </Link>
+                        ) : result.type === "tag" ? (
+                          <Link
+                            to={`/tag/${String(result.title).replace("#", "")}`}
+                            className="bg-white/5 border border-white/5 p-3 rounded-2xl flex items-center gap-3 group hover:bg-white/10 transition-colors"
+                          >
+                            <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-[#3b82f6]">tag</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-white text-sm truncate">{result.title}</p>
+                              <p className="text-[10px] text-slate-400 font-medium truncate">Hashtag</p>
+                            </div>
                           </Link>
                         ) : (
                           <Link to={feedPostPath(result.id)} className="bg-white/5 border border-white/5 p-3 rounded-2xl flex gap-3 group">

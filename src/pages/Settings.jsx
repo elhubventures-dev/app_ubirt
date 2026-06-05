@@ -9,6 +9,7 @@ import { getDataMode, dataProvider } from "@/api/dataProvider";
 import { getPreference, setPreference } from "@/lib/preferences";
 import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { Capacitor } from "@capacitor/core";
 import { getProfileCoverUrl } from "@/lib/profileDefaults";
 import { motion } from "framer-motion";
 
@@ -125,11 +126,12 @@ export default function Settings() {
   const togglePush = (next) => {
     setNotifications(next);
     setPreference("push", next);
+    const enabledDescription = Capacitor.isNativePlatform()
+      ? "Native push will register on this device."
+      : "On web, notifications appear in-app while the tab is open. Native push works in the mobile app.";
     toast({
       title: "Push preference saved",
-      description: next
-        ? "Native push will register when you use the mobile app."
-        : "Push notifications disabled in preferences.",
+      description: next ? enabledDescription : "Push notifications disabled in preferences.",
     });
   };
 

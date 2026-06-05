@@ -27,6 +27,7 @@ let uploads = structuredClone(mockUploads).map((upload) => ({
 }));
 let typingByChat = {};
 let hiddenMessageIds = new Set();
+let follows = [];
 let aiConversationMeta = { title: "UBIRT Assistant" };
 let mockProfileExtras = {
   bio: "Digital creator & tech enthusiast. Building the future of content on UBIRT. 🚀",
@@ -257,7 +258,7 @@ export const mockApi = {
   },
   async addComment(postId, text) {
     await wait();
-    const comment = { id: `c-${Date.now()}`, author: "You", text };
+    const comment = { id: `c-${Date.now()}`, author: "You", text, isMine: true };
     commentsByPost = {
       ...commentsByPost,
       [postId]: [...(commentsByPost[postId] ?? []), comment],
@@ -267,6 +268,19 @@ export const mockApi = {
     );
     persistState();
     return comment;
+  },
+  async deleteComment(postId, commentId) {
+    await wait(80);
+    const list = commentsByPost[postId] ?? [];
+    const next = list.filter((comment) => comment.id !== commentId);
+    if (next.length === list.length) return;
+    commentsByPost = { ...commentsByPost, [postId]: next };
+    feedPosts = feedPosts.map((post) =>
+      post.id === postId
+        ? { ...post, comments: Math.max(0, (post.comments ?? 0) - 1) }
+        : post
+    );
+    persistState();
   },
   async deletePost(postId) {
     await wait();
@@ -594,7 +608,7 @@ export const mockApi = {
       xpProgress: 68,
       badges: ["1", "2", "3"],
       quests: [
-        { id: "upload", title: "Upload a Video", progress: 1, total: 1, reward: 100, completed: true },
+        { id: "upload", title: "Publish a Post", progress: 1, total: 1, reward: 100, completed: true },
         { id: "comments", title: "Leave 3 Comments", progress: 1, total: 3, reward: 30, completed: false },
         { id: "views", title: "Reach 1,000 Views", progress: 450, total: 1000, reward: 50, completed: false },
       ],

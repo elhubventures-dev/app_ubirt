@@ -25,7 +25,7 @@ Uses in-browser mock data. No login required.
 | [OpenAI](https://platform.openai.com) | Recommended | `OPENAI_API_KEY`, `OPENAI_MODEL` |
 | [Resend](https://resend.com) | Recommended | `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME` |
 | [Mux](https://mux.com) | Optional | `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET` |
-| [Stripe](https://stripe.com) | Optional | `VITE_STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
+| [Paystack](https://paystack.com) | For wallet purchases | `VITE_PAYSTACK_PUBLIC_KEY`, `PAYSTACK_SECRET_KEY` |
 | [Sentry](https://sentry.io) | Optional | `VITE_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` |
 | [PostHog](https://posthog.com) | Optional | `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` |
 
@@ -60,7 +60,8 @@ Also set `VITE_APP_URL` (local or production URL) and optionally `SUPABASE_SERVI
 7. Run `supabase/migrations/004_wallet_mux_push_notifications.sql` (coins, Paystack ledger, push tokens, Mux on posts, live notifications).
 8. Run `supabase/migrations/005_achievement_unlock.sql` (badge unlock RPC).
 9. Run `supabase/migrations/006_push_delivery_tokens.sql` (multi-device push token registry for FCM v1 + APNs).
-10. Copy **Project URL** and **anon public key** from **Settings → API**.
+10. Run migrations `007` through `023` in order — see [docs/ACCOUNTS.md](docs/ACCOUNTS.md#supabase-migrations) for the full list (engagement counts, DMs, gifts, voice messages, notification links, unread badges, message hides, comment delete).
+11. Copy **Project URL** and **anon public key** from **Settings → API**.
 
 ## 2. Local live mode
 
@@ -100,7 +101,7 @@ Ensure `.env.local` includes server keys (`OPENAI_API_KEY`, `MUX_*`, `PAYSTACK_S
 ## 4. Storage
 
 - Buckets `uploads` and `avatars` are created by the migration.
-- Upload page accepts image/video files in live mode → Supabase Storage.
+- Upload page accepts **JPG/PNG images** in live mode → Supabase Storage (Mux video ingest is optional via API).
 
 ## 5. AI proxy
 

@@ -677,6 +677,7 @@ export const supabaseApi = {
   },
 
   async getComments(postId) {
+    const userId = await getUserId();
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from("comments")
@@ -688,6 +689,7 @@ export const supabaseApi = {
       id: c.id,
       author: c.profiles?.display_name ?? "User",
       text: c.text,
+      isMine: c.user_id === userId,
     }));
   },
 
@@ -711,7 +713,7 @@ export const supabaseApi = {
     await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 10 });
     const actorName = await getActorDisplayName(userId);
     await notifyUser(post?.user_id, "comment", `${actorName} commented on your post`, { postId });
-    return { id: data.id, author: actorName, text: data.text };
+    return { id: data.id, author: actorName, text: data.text, isMine: true };
   },
 
   async getConversation(chatId) {
@@ -1133,8 +1135,14 @@ export const supabaseApi = {
   },
 
   async deleteComment(postId, commentId) {
+    const userId = await getUserId();
     const supabase = getSupabase();
-    const { error } = await supabase.from("comments").delete().eq("id", commentId);
+    const { error } = await supabase
+      .from("comments")
+      .delete()
+      .eq("id", commentId)
+      .eq("post_id", postId)
+      .eq("user_id", userId);
     if (error) throw error;
   },
 
@@ -1551,11 +1559,13 @@ export const supabaseApi = {
       { count: commentCount },
       { count: uploadCount },
       { count: followers },
+      { count: giftCount },
       { data: posts },
     ] = await Promise.all([
       supabase.from("comments").select("*", { count: "exact", head: true }).eq("user_id", userId),
       supabase.from("uploads").select("*", { count: "exact", head: true }).eq("user_id", userId).eq("status", "published"),
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", userId),
+      supabase.from("gifts").select("*", { count: "exact", head: true }).eq("receiver_id", userId),
       supabase.from("posts").select("views_count").eq("user_id", userId),
     ]);
 
@@ -1564,6 +1574,7 @@ export const supabaseApi = {
       uploadCount: uploadCount ?? 0,
       commentCount: commentCount ?? 0,
       followers: followers ?? 0,
+      giftCount: giftCount ?? 0,
       views,
     });
 
@@ -1571,7 +1582,7 @@ export const supabaseApi = {
     const quests = [
       {
         id: "upload",
-        title: "Upload a Video",
+        title: "Publish a Post",
         progress: Math.min(uploadCount ?? 0, 1),
         total: 1,
         reward: 100,
@@ -1694,6 +1705,8 @@ async function syncAchievementBadges(supabase, stats) {
   if (stats.views >= 100000) toUnlock.push("2");
   if (stats.commentCount >= 50) toUnlock.push("3");
   if (stats.followers >= 100) toUnlock.push("4");
+  if ((stats.giftCount ?? 0) >= 10) toUnlock.push("5");
+  if ((stats.giftCount ?? 0) >= 100) toUnlock.push("6");
 
   for (const badgeId of toUnlock) {
     await supabase.rpc("unlock_badge", { p_badge_id: badgeId });

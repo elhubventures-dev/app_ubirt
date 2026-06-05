@@ -11,6 +11,7 @@ import { dataProvider } from "@/api/dataProvider";
 import { useToast } from "@/components/ui/use-toast";
 import { getProfileCoverUrl } from "@/lib/profileDefaults";
 import PostManageSheet from "@/components/profile/PostManageSheet";
+import { ACHIEVEMENT_BADGES } from "@/lib/achievementBadges";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -186,22 +187,26 @@ export default function Profile() {
           <span className="material-symbols-outlined text-[16px] text-slate-500 group-hover:text-[#3b82f6] transition-colors">chevron_right</span>
         </Link>
         <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
-           <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-purple-500 to-indigo-500 shadow-lg relative shrink-0">
-             <div className="absolute inset-0 bg-white/20 rounded-xl" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 30%, 0 70%)' }} />
-             <span className="material-symbols-outlined text-white text-[24px] drop-shadow-md">rocket_launch</span>
-           </div>
-           <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-orange-500 to-red-500 shadow-lg relative shrink-0">
-             <div className="absolute inset-0 bg-white/20 rounded-xl" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 30%, 0 70%)' }} />
-             <span className="material-symbols-outlined text-white text-[24px] drop-shadow-md">local_fire_department</span>
-           </div>
-           <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-400 to-blue-600 shadow-lg relative shrink-0">
-             <div className="absolute inset-0 bg-white/20 rounded-xl" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 30%, 0 70%)' }} />
-             <span className="material-symbols-outlined text-white text-[24px] drop-shadow-md">forum</span>
-           </div>
-           
-           <Link to="/achievements" className="w-12 h-12 rounded-xl border border-dashed border-white/20 flex items-center justify-center shrink-0 hover:bg-white/5 transition-colors">
-             <span className="material-symbols-outlined text-slate-500 text-[20px]">add</span>
-           </Link>
+          {ACHIEVEMENT_BADGES.filter((badge) => (achievements?.badges ?? []).includes(badge.id))
+            .slice(0, 3)
+            .map((badge) => (
+              <div
+                key={badge.id}
+                className={`w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br ${badge.color} shadow-lg relative shrink-0`}
+              >
+                <div
+                  className="absolute inset-0 bg-white/20 rounded-xl"
+                  style={{ clipPath: "polygon(0 0, 100% 0, 100% 30%, 0 70%)" }}
+                />
+                <span className="material-symbols-outlined text-white text-[24px] drop-shadow-md">{badge.icon}</span>
+              </div>
+            ))}
+          <Link
+            to="/achievements"
+            className="w-12 h-12 rounded-xl border border-dashed border-white/20 flex items-center justify-center shrink-0 hover:bg-white/5 transition-colors"
+          >
+            <span className="material-symbols-outlined text-slate-500 text-[20px]">add</span>
+          </Link>
         </div>
       </div>
 

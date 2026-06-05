@@ -226,7 +226,20 @@ export default function VideoFeed() {
   const scrolledToPostRef = useRef(null);
   const postRefs = useRef({});
 
-  const { data: posts = [], isLoading, toggleLike, toggleBookmark, addComment, deletePost, sendGift, isMutating, isCommenting, isGifting } = useFeed(feedType);
+  const {
+    data: posts = [],
+    isLoading,
+    toggleLike,
+    toggleBookmark,
+    addComment,
+    deleteComment,
+    deletePost,
+    sendGift,
+    isMutating,
+    isCommenting,
+    isDeletingComment,
+    isGifting,
+  } = useFeed(feedType);
   const { data: targetPost, isLoading: isLoadingTarget } = useQuery({
     queryKey: ["feed-post", targetPostId],
     queryFn: () => dataProvider.getFeedPost(targetPostId),
@@ -392,7 +405,15 @@ export default function VideoFeed() {
             commentDraft={commentDraft}
             onCommentDraftChange={setCommentDraft}
             isSubmitting={isCommenting}
+            isDeleting={isDeletingComment}
             onClose={() => setExpandedPostId("")}
+            onDeleteComment={async (commentId) => {
+              try {
+                await deleteComment({ postId: expandedPostId, commentId });
+              } catch (error) {
+                toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+              }
+            }}
             onSubmit={async (e) => {
               e.preventDefault();
               const text = commentDraft.trim();

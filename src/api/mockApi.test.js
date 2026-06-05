@@ -17,6 +17,14 @@ describe("mockApi", () => {
     expect(after.at(-1)?.text).toBe("Test comment");
   });
 
+  it("deletes the user's own comment", async () => {
+    const postId = "post-1";
+    const comment = await mockApi.addComment(postId, "Delete me");
+    await mockApi.deleteComment(postId, comment.id);
+    const comments = await mockApi.getComments(postId);
+    expect(comments.some((item) => item.id === comment.id)).toBe(false);
+  });
+
   it("saves uploads as draft status", async () => {
     const upload = await mockApi.saveUpload({
       title: "Unit test upload",

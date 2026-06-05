@@ -8,7 +8,7 @@ Use this list so nothing is missed. Match each row to a variable in `.env.local`
 |---------|---------|---------------|---------|
 | **Supabase** | [supabase.com](https://supabase.com) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Auth, database, storage, realtime |
 
-Run all SQL migrations in order in the Supabase SQL Editor: `001` → `002` → `003` → `004` → `005` → `006`. Migration `006` adds multi-device push token storage for production push delivery.
+Run all SQL migrations in order in the Supabase SQL Editor: `001` → `022`. See [Supabase migrations](#supabase-migrations) below.
 
 | **GitHub** | [github.com](https://github.com) | — | Source code |
 | **Vercel** | [vercel.com](https://vercel.com) | (paste all env vars from `.env.local`) | Host SPA + `/api/*` serverless |
@@ -47,18 +47,33 @@ No extra env vars in the app — configure in Supabase + Google Cloud.
    - Redirect URLs: `http://localhost:5173/**`, `https://your-domain.com/**`
 5. Set `VITE_APP_URL` in `.env.local` to match (used after Google redirect).
 
-The login page **Continue with Google** / **Continue with Apple** buttons use `signInWithOAuth` and create a profile from OAuth metadata.
+The login page **Continue with Google** button uses `signInWithOAuth` and creates a profile from OAuth metadata.
 
-### Apple sign-in (OAuth)
+### Apple sign-in (OAuth) — optional / hidden in UI for now
 
-Required for iOS App Store if you offer other social login (e.g. Google).
+Apple Sign In is supported in code (`signInWithApple`) but the login button is currently hidden. Enable when you need it for App Store review (required if you offer other social login).
 
 1. [Apple Developer](https://developer.apple.com/) → Certificates, Identifiers & Profiles → **Services ID** for Sign in with Apple.
 2. Configure redirect URL from Supabase **Authentication → Providers → Apple** (same pattern as Google callback).
 3. Paste **Services ID**, **Team ID**, **Key ID**, and private key into Supabase Apple provider → Enable.
 4. Add the same redirect URLs in Supabase **URL Configuration** as Google.
 
-Web flow works like Google; native iOS/Android now use deep-link callback `com.elhubventures.ubirt://login` (see `docs/MOBILE.md`).
+Native iOS/Android OAuth uses deep-link callback `com.elhubventures.ubirt://login` (see `docs/MOBILE.md`).
+
+### Paystack (wallet coin purchases)
+
+| Variable | Where | Purpose |
+|----------|--------|---------|
+| `VITE_PAYSTACK_PUBLIC_KEY` | Browser (Vercel + `.env.local`) | Paystack inline checkout on `/wallet` |
+| `PAYSTACK_SECRET_KEY` | Server only | Webhook signature verification at `POST /api/webhooks/paystack` |
+
+1. [Paystack Dashboard](https://dashboard.paystack.com/) → **Settings → API Keys & Webhooks**
+2. Copy **Public Key** → `VITE_PAYSTACK_PUBLIC_KEY`
+3. Copy **Secret Key** → `PAYSTACK_SECRET_KEY` (never prefix with `VITE_`)
+4. Add webhook URL: `https://your-domain.com/api/webhooks/paystack` (events: `charge.success`)
+5. Redeploy Vercel after setting env vars. Test purchases with Paystack test keys first.
+
+Used by `src/pages/Wallet.jsx` and `api/webhooks/paystack.js`.
 
 ### Error monitoring & analytics (optional)
 
@@ -76,7 +91,7 @@ Implementation: `src/lib/monitoring.js`, `src/components/PageTracker.jsx`.
 | Service | Env variables | When you need it |
 |---------|-----------------|------------------|
 | **Mux** | `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET` | Adaptive video streaming |
-| **Stripe** | `VITE_STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Paid features |
+| **Paystack** | `VITE_PAYSTACK_PUBLIC_KEY`, `PAYSTACK_SECRET_KEY` | Wallet coin purchases |
 | **Sentry** | `VITE_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` | Error tracking |
 | **PostHog** | `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` | Product analytics |
 | **Custom domain** | — | Brand URL on Vercel |
@@ -85,8 +100,8 @@ Implementation: `src/lib/monitoring.js`, `src/components/PageTracker.jsx`.
 
 | Prefix | Safe in browser? | Examples |
 |--------|------------------|----------|
-| `VITE_` | Yes (bundled into client) | Supabase anon key, app URL, Stripe publishable |
-| No prefix | **No** — server / Vercel only | OpenAI, Resend, Mux, Stripe secret, service role |
+| `VITE_` | Yes (bundled into client) | Supabase anon key, app URL, Paystack public key |
+| No prefix | **No** — server / Vercel only | OpenAI, Resend, Mux, Paystack secret, service role |
 
 Never put `OPENAI_API_KEY`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, or `MUX_TOKEN_SECRET` in a `VITE_` variable.
 
@@ -96,4 +111,36 @@ Never put `OPENAI_API_KEY`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, or `M
 |----------|--------|
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → `service_role` |
 
-Use only in serverless functions (bypasses RLS). Not required for basic app usage.
+Use only in serverless functions (bypasses RLS). Required for push delivery, account deletion, and Paystack webhook coin credit.
+
+## Supabase migrations
+
+Run every file in `supabase/migrations/` in numeric order in the **SQL Editor** (or via Supabase CLI). Each migration is idempotent where possible (`if not exists`, `drop policy if exists`).
+
+| # | File | Purpose |
+|---|------|---------|
+| 001 | `001_initial_schema.sql` | Core tables: profiles, posts, messaging, uploads, notifications, AI |
+| 002 | `002_profiles_auth_fix.sql` | Profile insert policy + signup trigger fix |
+| 003 | `003_analytics_gamification.sql` | Views, XP, follows, achievements |
+| 004 | `004_wallet_mux_push_notifications.sql` | Coins, wallet ledger, Mux fields, push tokens, notifications |
+| 005 | `005_achievement_unlock.sql` | Badge unlock RPC |
+| 006 | `006_push_delivery_tokens.sql` | Multi-device push token registry (FCM + APNs) |
+| 007 | `007_post_engagement_counts.sql` | Like/comment count triggers |
+| 008 | `008_posts_delete_policy.sql` | Authors can delete own feed posts |
+| 009 | `009_direct_conversations.sql` | `create_direct_conversation` RPC for DMs |
+| 010 | `010_profile_fields.sql` | Bio, phone, website, location on profiles |
+| 011 | `011_gift_transfers.sql` | Gift sends with 80/20 creator/platform split |
+| 012 | `012_signup_bonus_coins.sql` | New users start with 100 coins |
+| 013 | `013_fix_conversation_members_rls.sql` | **Critical** — fixes DM RLS recursion |
+| 014 | `014_profile_cover.sql` | Profile `cover_url` |
+| 015 | `015_realtime_messages.sql` | Supabase Realtime on `messages` |
+| 016 | `016_profile_last_seen.sql` | `last_seen_at` for presence |
+| 017 | `017_notification_links.sql` | Notification actor/post/conversation links + `create_notification` RPC |
+| 018 | `018_conversation_unread.sql` | `last_read_at` + unread message counts |
+| 019 | `019_message_voice.sql` | Voice message `media_url` / `media_type` |
+| 020 | `020_messages_delete_policy.sql` | Message delete policy (superseded by 022) |
+| 021 | `021_message_media_duration.sql` | Voice message duration metadata |
+| 022 | `022_message_hides.sql` | Delete-for-me hides + sender delete-for-everyone |
+| 023 | `023_comments_delete_policy.sql` | Users delete own comments + comment count decrement |
+
+**Minimum for current app features:** through `023`. Skipping `013` breaks DMs; skipping `015`–`022` degrades live chat, voice, deletes, and notification deep links.

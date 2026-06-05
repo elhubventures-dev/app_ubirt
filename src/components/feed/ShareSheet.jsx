@@ -1,12 +1,15 @@
 import { motion } from "framer-motion";
+import { Capacitor } from "@capacitor/core";
 import { useToast } from "@/components/ui/use-toast";
+import { getAppBaseUrl, shareContent } from "@/lib/nativeShare";
 
 export default function ShareSheet({ post, onClose }) {
   const { toast } = useToast();
-  const shareUrl = `${window.location.origin}/feed?post=${post?.id ?? ""}`;
+  const shareUrl = `${getAppBaseUrl()}/feed?post=${post?.id ?? ""}`;
   const shareText = post?.caption
     ? `Check out this post on UBIRT: ${post.caption.slice(0, 80)}`
     : "Check out this post on UBIRT";
+  const isNative = Capacitor.isNativePlatform();
 
   const copyLink = async () => {
     try {
@@ -19,12 +22,11 @@ export default function ShareSheet({ post, onClose }) {
   };
 
   const nativeShare = async () => {
-    if (!navigator.share) {
-      await copyLink();
-      return;
-    }
     try {
-      await navigator.share({ title: "UBIRT", text: shareText, url: shareUrl });
+      const result = await shareContent({ title: "UBIRT", text: shareText, url: shareUrl });
+      if (result?.copied) {
+        toast({ title: "Link copied", description: "Share it anywhere you like." });
+      }
       onClose();
     } catch (error) {
       if (error?.name !== "AbortError") {
@@ -58,7 +60,7 @@ export default function ShareSheet({ post, onClose }) {
             className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
           >
             <span className="material-symbols-outlined text-[28px] text-[#3b82f6]">share</span>
-            <span className="text-sm font-semibold text-white">Share</span>
+            <span className="text-sm font-semibold text-white">{isNative ? "Share to…" : "Share"}</span>
           </button>
           <button
             type="button"

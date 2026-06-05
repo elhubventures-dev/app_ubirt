@@ -7,8 +7,10 @@ export default function CommentsSheet({
   commentDraft,
   onCommentDraftChange,
   onSubmit,
+  onDeleteComment,
   onClose,
   isSubmitting = false,
+  isDeleting = false,
   isLoading = false,
 }) {
   const content = (
@@ -48,7 +50,7 @@ export default function CommentsSheet({
             <p className="text-center text-slate-400 mt-6">No comments yet. Be the first to comment!</p>
           ) : (
             comments.map((comment) => (
-              <div key={comment.id} className="flex gap-3">
+              <div key={comment.id} className="flex gap-3 group">
                 <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden shrink-0 mt-1">
                   <img
                     src={`https://api.dicebear.com/9.x/notionists/svg?seed=${comment.author}`}
@@ -57,7 +59,20 @@ export default function CommentsSheet({
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="font-semibold text-sm text-slate-200">{comment.author}</span>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-semibold text-sm text-slate-200">{comment.author}</span>
+                    {comment.isMine && onDeleteComment ? (
+                      <button
+                        type="button"
+                        disabled={isDeleting}
+                        onClick={() => onDeleteComment(comment.id)}
+                        className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-40 shrink-0 p-1"
+                        aria-label="Delete comment"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    ) : null}
+                  </div>
                   <p className="text-slate-100 text-sm mt-0.5 break-words">{comment.text}</p>
                 </div>
               </div>

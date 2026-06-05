@@ -90,6 +90,7 @@ export function useFeed(feedType = "foryou") {
           id: `pending-${Date.now()}`,
           author: user?.name ?? "You",
           text,
+          isMine: true,
         },
       ]);
 
@@ -117,6 +118,42 @@ export function useFeed(feedType = "foryou") {
     },
   });
 
+  const deleteCommentMutation = useMutation({
+    mutationFn: ({ postId, commentId }) => dataProvider.deleteComment(postId, commentId),
+    onMutate: async ({ postId, commentId }) => {
+      await queryClient.cancelQueries({ queryKey: ["feed", feedType] });
+      await queryClient.cancelQueries({ queryKey: ["feed-comments", postId] });
+
+      const previous = queryClient.getQueryData(["feed", feedType]);
+      const previousComments = queryClient.getQueryData(["feed-comments", postId]);
+      const current = Array.isArray(previous) ? previous.find((p) => p.id === postId) : null;
+
+      if (current) {
+        patchFeedPosts(queryClient, feedType, postId, {
+          comments: Math.max(0, (current.comments ?? 0) - 1),
+        });
+      }
+
+      queryClient.setQueryData(["feed-comments", postId], (old = []) =>
+        (Array.isArray(old) ? old : []).filter((comment) => comment.id !== commentId)
+      );
+
+      return { previous, previousComments, postId };
+    },
+    onError: (_err, vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["feed", feedType], context.previous);
+      }
+      if (context?.previousComments !== undefined) {
+        queryClient.setQueryData(["feed-comments", vars.postId], context.previousComments);
+      }
+    },
+    onSettled: (_result, _err, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["feed-comments", vars.postId] });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: dataProvider.deletePost,
     onSuccess: () => {
@@ -137,10 +174,12 @@ export function useFeed(feedType = "foryou") {
     toggleLike: likeMutation.mutateAsync,
     toggleBookmark: bookmarkMutation.mutateAsync,
     addComment: commentMutation.mutateAsync,
+    deleteComment: deleteCommentMutation.mutateAsync,
     deletePost: deleteMutation.mutateAsync,
     sendGift: giftMutation.mutateAsync,
     isMutating: likeMutation.isPending || bookmarkMutation.isPending || deleteMutation.isPending,
     isCommenting: commentMutation.isPending,
+    isDeletingComment: deleteCommentMutation.isPending,
     isGifting: giftMutation.isPending,
   };
 }

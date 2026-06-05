@@ -9,6 +9,7 @@ import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoFilters, getFilterClass } from "@/components/studio/VideoFilters";
+import { getSoundById } from "@/lib/soundLibrary";
 
 const selectClass = "w-full rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white focus:bg-white/10 transition-colors outline-none";
 
@@ -30,6 +31,13 @@ export default function Upload() {
   const navigate = useNavigate();
   const location = useLocation();
   const canUploadFiles = isSupabaseConfigured();
+
+  useEffect(() => {
+    const soundId = new URLSearchParams(location.search).get("sound");
+    if (soundId && getSoundById(soundId)) {
+      setAudio(soundId);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     const recorded = location.state?.recordedFile;
