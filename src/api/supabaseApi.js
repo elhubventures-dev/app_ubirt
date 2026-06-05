@@ -1259,13 +1259,18 @@ export const supabaseApi = {
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", userId),
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", userId),
     ]);
-    const { data: posts } = await supabase.from("posts").select("views_count").eq("user_id", userId);
+    const { data: posts } = await supabase
+      .from("posts")
+      .select("views_count, likes_count")
+      .eq("user_id", userId);
     const views = (posts ?? []).reduce((sum, p) => sum + (p.views_count ?? 0), 0);
+    const totalLikes = (posts ?? []).reduce((sum, p) => sum + (p.likes_count ?? 0), 0);
     const { data: uploads } = await supabase.from("uploads").select("id").eq("user_id", userId);
     return {
       views,
       followers: followers ?? 0,
       following: following ?? 0,
+      totalLikes,
       completionRate: Math.min(100, 40 + (uploads?.length ?? 0) * 5),
     };
   },

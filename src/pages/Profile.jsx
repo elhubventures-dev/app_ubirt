@@ -152,6 +152,10 @@ export default function Profile() {
                   <p className="text-white font-bold text-lg">{formatCount(stats?.following ?? 0)}</p>
                   <p className="text-slate-400 text-xs font-semibold uppercase">Following</p>
                 </Link>
+                <div className="text-center">
+                  <p className="text-white font-bold text-lg">{formatCount(stats?.totalLikes ?? 0)}</p>
+                  <p className="text-slate-400 text-xs font-semibold uppercase">Likes</p>
+                </div>
               </>
             )}
           </div>

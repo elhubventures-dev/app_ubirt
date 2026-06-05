@@ -576,7 +576,14 @@ export const mockApi = {
     return aiMessages;
   },
   async getCreatorStats() {
-    return { views: 45000, followers: 1200, following: follows.length, completionRate: 78 };
+    const totalLikes = feedPosts.reduce((sum, post) => sum + (post.likes ?? 0), 0);
+    return {
+      views: 45000,
+      followers: 1200,
+      following: follows.length,
+      totalLikes,
+      completionRate: 78,
+    };
   },
 
   async getAchievements() {
