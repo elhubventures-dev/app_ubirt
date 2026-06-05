@@ -3,6 +3,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useFeed } from "@/hooks/useFeed";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
 import { formatCount } from "@/lib/formatStats";
+import { motion } from "framer-motion";
 
 export default function Home() {
   const { user } = useAuth();
