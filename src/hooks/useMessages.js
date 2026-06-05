@@ -59,17 +59,24 @@ export function useChatMessages(chatId) {
 
     try {
       // Subscribe to messages
-      unsubscribeMessages = dataProvider.subscribeToMessages(chatId, (newMsg) => {
-        queryClient.setQueryData(["messages", chatId], (old) => {
-          if (!old) return [newMsg];
-          // prevent duplicate
-          if (old.some(m => m.id === newMsg.id)) return old;
-          return [...old, newMsg];
-        });
-        if (newMsg.role === "other") {
-          playNotificationSound("message");
-        }
-        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      unsubscribeMessages = dataProvider.subscribeToMessages(chatId, {
+        onInsert: (newMsg) => {
+          queryClient.setQueryData(["messages", chatId], (old) => {
+            if (!old) return [newMsg];
+            if (old.some((m) => m.id === newMsg.id)) return old;
+            return [...old, newMsg];
+          });
+          if (newMsg.role === "other") {
+            playNotificationSound("message");
+          }
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        },
+        onDelete: (messageId) => {
+          queryClient.setQueryData(["messages", chatId], (old) =>
+            (old ?? []).filter((m) => m.id !== messageId)
+          );
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        },
       }) || (() => {});
     } catch (e) {
       console.warn("Failed to subscribe to messages:", e);
@@ -114,12 +121,24 @@ export function useChatMessages(chatId) {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (messageId) => dataProvider.deleteMessage(messageId),
+    onSuccess: (_result, messageId) => {
+      queryClient.setQueryData(["messages", chatId], (old) =>
+        (old ?? []).filter((m) => m.id !== messageId)
+      );
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+
   return {
     ...messagesQuery,
     isTyping: isSupabaseConfigured() ? realtimeTyping : (typingQuery.data ?? false),
     peerPresent,
     sendMessage: sendMutation.mutateAsync,
     isSending: sendMutation.isPending,
+    deleteMessage: deleteMutation.mutateAsync,
+    isDeleting: deleteMutation.isPending,
     updateTyping: (isTyping) => dataProvider.updateTypingStatus(chatId, isTyping),
   };
 }

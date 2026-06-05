@@ -15,8 +15,19 @@ export default function ChatDetail() {
   const [text, setText] = useState(() => localStorage.getItem(draftKey) || "");
   const [showEmoji, setShowEmoji] = useState(false);
   const { data: conversation } = useConversation(id);
-  const { data: messages = [], isLoading, sendMessage, isSending, isTyping, peerPresent, updateTyping } = useChatMessages(id);
+  const {
+    data: messages = [],
+    isLoading,
+    sendMessage,
+    isSending,
+    deleteMessage,
+    isDeleting,
+    isTyping,
+    peerPresent,
+    updateTyping,
+  } = useChatMessages(id);
   const { toast } = useToast();
+  const [menuMessageId, setMenuMessageId] = useState(null);
   const presence = useMemo(
     () => formatPresenceStatus(conversation?.lastSeenAt, peerPresent),
     [conversation?.lastSeenAt, peerPresent]
@@ -49,6 +60,22 @@ export default function ChatDetail() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    if (!menuMessageId) return undefined;
+    const closeMenu = () => setMenuMessageId(null);
+    document.addEventListener("click", closeMenu);
+    return () => document.removeEventListener("click", closeMenu);
+  }, [menuMessageId]);
+
+  const handleDeleteMessage = async (messageId) => {
+    setMenuMessageId(null);
+    try {
+      await deleteMessage(messageId);
+    } catch (err) {
+      toast({ title: "Failed to delete", description: err.message, variant: "destructive" });
+    }
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -157,10 +184,22 @@ export default function ChatDetail() {
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   layout
-                  className={`flex flex-col max-w-[75%] ${isMe ? "self-end items-end" : "self-start items-start"} ${!isLastInGroup ? "mb-0.5" : "mb-3"}`}
+                  className={`relative flex flex-col max-w-[75%] ${isMe ? "self-end items-end" : "self-start items-start"} ${!isLastInGroup ? "mb-0.5" : "mb-3"}`}
                 >
                   <div
-                    className={`px-4 py-2.5 text-[15px] leading-relaxed shadow-sm relative ${
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuMessageId((current) => (current === message.id ? null : message.id));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setMenuMessageId((current) => (current === message.id ? null : message.id));
+                      }
+                    }}
+                    className={`px-4 py-2.5 text-[15px] leading-relaxed shadow-sm cursor-pointer ${
                       isMe ? "bg-[#3b82f6] text-white" : "bg-[#202938] text-slate-100 border border-white/5"
                     } ${
                       isMe
@@ -174,6 +213,27 @@ export default function ChatDetail() {
                       message.text
                     )}
                   </div>
+                  <AnimatePresence>
+                    {menuMessageId === message.id && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 4 }}
+                        className={`absolute z-20 top-full mt-1 ${isMe ? "right-0" : "left-0"}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={() => handleDeleteMessage(message.id)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#1a2332] border border-white/10 text-red-400 text-xs font-semibold hover:bg-red-500/10 disabled:opacity-50 shadow-lg"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                          Delete
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   {isMe && isLastInGroup && message.status && (
                     <span className="text-[10px] text-slate-500 mt-1 mr-1 font-medium">{message.status}</span>
                   )}

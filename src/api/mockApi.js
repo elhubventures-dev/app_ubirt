@@ -414,8 +414,30 @@ export const mockApi = {
     await wait(60);
     return Boolean(typingByChat[chatId]);
   },
-  subscribeToMessages(chatId, onMessage) {
+  subscribeToMessages(chatId, handlers) {
     return () => {};
+  },
+  async deleteMessage(messageId) {
+    await wait(80);
+    for (const chatId of Object.keys(messagesByChat)) {
+      const next = (messagesByChat[chatId] ?? []).filter((m) => m.id !== messageId);
+      if (next.length !== (messagesByChat[chatId] ?? []).length) {
+        messagesByChat = { ...messagesByChat, [chatId]: next };
+        const last = next[next.length - 1];
+        conversations = conversations.map((c) =>
+          c.id === chatId
+            ? {
+                ...c,
+                lastMessage: last?.text ?? "No messages yet",
+                updatedAt: last ? "now" : c.updatedAt,
+              }
+            : c
+        );
+        persistState();
+        return true;
+      }
+    }
+    return true;
   },
   subscribeToPresence(chatId, onPresenceChange) {
     return () => {};

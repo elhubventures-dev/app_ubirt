@@ -53,7 +53,7 @@ export default function VoiceMessageBubble({ url, isMe }) {
   const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0;
 
   return (
-    <div className="flex items-center gap-3 min-w-[180px]">
+    <div className="flex items-center gap-3 min-w-[180px]" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={togglePlay}

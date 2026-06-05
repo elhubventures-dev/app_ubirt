@@ -874,12 +874,15 @@ export const supabaseApi = {
     return false;
   },
 
-  subscribeToMessages(chatId, onMessage) {
+  subscribeToMessages(chatId, handlers) {
+    const onInsert = typeof handlers === "function" ? handlers : handlers?.onInsert;
+    const onDelete = typeof handlers === "function" ? undefined : handlers?.onDelete;
     const supabase = getSupabase();
     const userIdPromise = getUserId();
-    const channel = supabase
-      .channel(`messages:${chatId}`)
-      .on(
+    const channel = supabase.channel(`messages:${chatId}`);
+
+    if (onInsert) {
+      channel.on(
         "postgres_changes",
         {
           event: "INSERT",
@@ -890,7 +893,7 @@ export const supabaseApi = {
         async (payload) => {
           const userId = await userIdPromise;
           const m = payload.new;
-          onMessage({
+          onInsert({
             id: m.id,
             role: m.sender_id === userId ? "me" : "other",
             text: m.content,
@@ -899,13 +902,37 @@ export const supabaseApi = {
             mediaType: m.media_type,
           });
         }
-      )
-      .subscribe((status, err) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.error(`messages:${chatId} subscription ${status}`, err);
+      );
+    }
+
+    if (onDelete) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${chatId}`,
+        },
+        (payload) => {
+          if (payload.old?.id) onDelete(payload.old.id);
         }
-      });
+      );
+    }
+
+    channel.subscribe((status, err) => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.error(`messages:${chatId} subscription ${status}`, err);
+      }
+    });
     return () => supabase.removeChannel(channel);
+  },
+
+  async deleteMessage(messageId) {
+    const supabase = getSupabase();
+    const { error } = await supabase.from("messages").delete().eq("id", messageId);
+    if (error) throw error;
+    return true;
   },
 
   subscribeToPresence(chatId, onPresenceChange) {
