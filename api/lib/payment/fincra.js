@@ -9,12 +9,12 @@ function cleanEnv(value, fallback = "") {
 export function getFincraRedirectBase() {
   const configured = cleanEnv(
     process.env.FINCRA_REDIRECT_URL || process.env.VITE_APP_URL,
-    "https://app.ubirtai.site"
+    "https://www.app.ubirtai.site"
   ).replace(/\/$/, "");
 
   // Fincra sandbox rejects localhost redirect URLs — use HTTPS production URL instead.
   if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(configured)) {
-    return cleanEnv(process.env.FINCRA_REDIRECT_URL, "https://app.ubirtai.site").replace(/\/$/, "");
+    return cleanEnv(process.env.FINCRA_REDIRECT_URL, "https://www.app.ubirtai.site").replace(/\/$/, "");
   }
 
   return configured;

@@ -150,10 +150,13 @@ export function AuthProvider({ children }) {
 
         if (event === "SIGNED_IN") {
           const fromOAuth =
+            isNativePlatform() ||
             window.location.hash.includes("access_token") ||
             window.location.search.includes("code=");
           if (fromOAuth) {
-            window.history.replaceState(null, "", window.location.pathname || "/");
+            if (!isNativePlatform()) {
+              window.history.replaceState(null, "", window.location.pathname || "/");
+            }
             navigate("/", { replace: true });
           }
         }

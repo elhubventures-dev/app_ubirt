@@ -4,4 +4,5 @@
     <string name="title_activity_main">UBIRT</string>
     <string name="package_name">com.elhubventures.ubirt</string>
     <string name="custom_url_scheme">com.elhubventures.ubirt</string>
+    <string name="default_notification_channel_id">ubirt_default</string>
 </resources>

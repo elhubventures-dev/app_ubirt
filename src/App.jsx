@@ -38,10 +38,15 @@ import CommunityChat from "./pages/CommunityChat";
 
 const LOGO_URL = "/pwa-192x192.png";
 
+/** Always mounted so OAuth deep links work from /login (not only inside AuthenticatedApp). */
+function NativeBootstrap() {
+  useNativeShell();
+  return null;
+}
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth, retryAuth } = useAuth();
 
-  useNativeShell();
   usePushNotifications();
   useLastSeenHeartbeat();
   useRealtimeNotifications();
@@ -140,6 +145,7 @@ function App() {
   return (
     <Router>
       <AuthProvider>
+        <NativeBootstrap />
         <PageTracker />
         <ToastProvider>
           <QueryClientProvider client={queryClientInstance}>

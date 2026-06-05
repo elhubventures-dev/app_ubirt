@@ -1,4 +1,5 @@
 const ALLOWED_ORIGINS = new Set([
+  "https://www.app.ubirtai.site",
   "https://app.ubirtai.site",
   "http://localhost:5173",
   "https://localhost",

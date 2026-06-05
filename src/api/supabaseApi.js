@@ -43,30 +43,7 @@ async function notifyUser(recipientId, type, text, options = {}) {
     p_conversation_id: options.conversationId ?? options.chatId ?? null,
   });
   if (error) throw error;
-
-  const pushData = {
-    ...(options.data || {}),
-    ...(options.chatId ? { chatId: options.chatId } : {}),
-    ...(options.url ? { url: options.url } : {}),
-  };
-
-  // Best-effort push fanout after in-app notification is created.
-  try {
-    await fetch(getApiUrl("/api/push/send"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: recipientId,
-        notificationId,
-        type,
-        title: options.title || (type === "message" ? "New message" : "UBIRT"),
-        body: text,
-        data: Object.keys(pushData).length ? pushData : undefined,
-      }),
-    });
-  } catch (pushError) {
-    console.warn("Push send failed:", pushError);
-  }
+  return notificationId;
 }
 
 async function getActorDisplayName(userId) {
@@ -180,24 +157,6 @@ export const supabaseApi = {
     if (!targetProfile) return false;
     const { data, error } = await supabase.rpc("toggle_follow", { p_following_id: targetProfile.id });
     if (error) throw error;
-    if (data) {
-      try {
-        const actorId = await getUserId();
-        const actorName = await getActorDisplayName(actorId);
-        await fetch(getApiUrl("/api/push/send"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: targetProfile.id,
-            type: "follow",
-            title: "New follower",
-            body: `${actorName} started following you`,
-          }),
-        });
-      } catch (pushError) {
-        console.warn("Follow push failed:", pushError);
-      }
-    }
     return data;
   },
   async isFollowing(username) {
@@ -557,23 +516,6 @@ export const supabaseApi = {
     }
 
     const result = typeof data === "string" ? JSON.parse(data) : data;
-
-    if (result?.receiver_id) {
-      try {
-        await fetch(getApiUrl("/api/push/send"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: result.receiver_id,
-            type: "gift",
-            title: "Gift received!",
-            body: `You received ${result.receiver_amount} coins from a gift.`,
-          }),
-        });
-      } catch (pushError) {
-        console.warn("Gift push failed:", pushError);
-      }
-    }
 
     return {
       success: true,

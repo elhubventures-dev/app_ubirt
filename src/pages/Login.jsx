@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
@@ -15,6 +15,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { user, signIn, signUp, signInWithGoogle, resetPassword, isLiveAuth, isLoadingAuth } = useAuth();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (user) setLoading(false);
+  }, [user]);
 
   if (user && isLiveAuth && !isLoadingAuth) {
     return <Navigate to="/" replace />;

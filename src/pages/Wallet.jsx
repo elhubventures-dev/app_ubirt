@@ -179,7 +179,7 @@ export default function Wallet() {
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-[#0a111a] via-[#101822] to-[#152336] z-0" />
       <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#f59e0b]/20 blur-[120px] rounded-full z-0 pointer-events-none" />
 
-      <header className="relative z-10 px-4 py-4 flex items-center border-b border-white/5 bg-[#101822]/50 backdrop-blur-md">
+      <header className="relative z-10 px-4 pt-[calc(env(safe-area-inset-top)+0.25rem)] pb-2 flex items-center border-b border-white/5 bg-[#101822]/50 backdrop-blur-md">
         <button onClick={() => navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors mr-4">
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
