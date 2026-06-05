@@ -43,6 +43,8 @@ Android `AndroidManifest.xml` must include:
 
 iOS `Info.plist` must include `NSMicrophoneUsageDescription` (already set).
 
+`capacitor.config.json` enables `CapacitorHttp` so native `fetch()` calls reach `https://app.ubirtai.site/api/*` without browser CORS blocks.
+
 After pulling changes:
 
 ```bash

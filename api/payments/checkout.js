@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { applyCors, handleCorsPreflight } from "../lib/cors.js";
 import { authenticateRequest, getAdminSupabase } from "../lib/payment/auth.js";
 import {
   createFincraCheckout,
@@ -20,6 +21,9 @@ const FINCRA_PAYMENT_METHODS = {
 };
 
 export default async function handler(req, res) {
+  if (handleCorsPreflight(req, res)) return;
+  applyCors(req, res);
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }

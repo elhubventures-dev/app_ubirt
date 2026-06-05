@@ -2,7 +2,13 @@
   "appId": "com.elhubventures.ubirt",
   "appName": "UBIRT",
   "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
   "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
     "SplashScreen": {
       "launchShowDuration": 3000,
       "launchAutoHide": true,

@@ -35,19 +35,24 @@ export async function startFincraCheckout(pack) {
     throw new Error("You must be signed in to purchase coins.");
   }
 
-  const res = await fetch(getApiUrl("/api/payments/checkout"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      packId: pack.id,
-      coins: pack.coins,
-      amount: pack.amount,
-      currency: PAYMENT_CURRENCY,
-    }),
-  });
+  let res;
+  try {
+    res = await fetch(getApiUrl("/api/payments/checkout"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        packId: pack.id,
+        coins: pack.coins,
+        amount: pack.amount,
+        currency: PAYMENT_CURRENCY,
+      }),
+    });
+  } catch {
+    throw new Error("Could not reach the payment server. Check your internet connection and try again.");
+  }
 
   const raw = await res.text();
   let json = {};
