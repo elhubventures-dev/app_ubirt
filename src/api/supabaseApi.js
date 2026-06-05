@@ -867,6 +867,7 @@ export const supabaseApi = {
       status: m.status,
       mediaUrl: m.media_url,
       mediaType: m.media_type,
+      mediaDuration: m.media_duration ?? null,
     }));
   },
 
@@ -900,6 +901,7 @@ export const supabaseApi = {
             status: m.status,
             mediaUrl: m.media_url,
             mediaType: m.media_type,
+            mediaDuration: m.media_duration ?? null,
           });
         }
       );
@@ -990,10 +992,14 @@ export const supabaseApi = {
     let mediaUrl = null;
     let mediaType = null;
 
+    let mediaDuration = null;
     if (attachment?.type === "audio" && attachment.file) {
       const uploaded = await uploadVoiceFile(attachment.file, userId, chatId);
       mediaUrl = uploaded.publicUrl;
       mediaType = "audio";
+      if (attachment.durationMs > 0) {
+        mediaDuration = Math.max(1, Math.round(attachment.durationMs / 100) / 10);
+      }
       if (!content) content = "Voice message";
     } else if (attachment) {
       throw new Error("Only voice messages are supported as attachments right now.");
@@ -1011,6 +1017,7 @@ export const supabaseApi = {
         content,
         media_url: mediaUrl,
         media_type: mediaType,
+        media_duration: mediaDuration,
         status: "sent",
       })
       .select()
@@ -1050,6 +1057,7 @@ export const supabaseApi = {
       status: data.status,
       mediaUrl: data.media_url,
       mediaType: data.media_type,
+      mediaDuration: data.media_duration ?? null,
     };
   },
 

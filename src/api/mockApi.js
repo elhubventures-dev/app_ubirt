@@ -455,6 +455,10 @@ export const mockApi = {
       status: "sent",
       mediaUrl: isVoice ? URL.createObjectURL(attachment.file) : null,
       mediaType: isVoice ? "audio" : null,
+      mediaDuration:
+        isVoice && attachment.durationMs > 0
+          ? Math.max(1, Math.round(attachment.durationMs / 100) / 10)
+          : null,
     };
     messagesByChat = {
       ...messagesByChat,

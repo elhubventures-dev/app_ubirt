@@ -121,7 +121,10 @@ export default function ChatDetail() {
       return;
     }
     try {
-      await sendMessage({ text: "", attachment: { type: "audio", file: voice.blob } });
+      await sendMessage({
+        text: "",
+        attachment: { type: "audio", file: voice.blob, durationMs: voice.durationMs },
+      });
       voice.reset();
       requestAnimationFrame(() => scrollToBottom());
     } catch (err) {
@@ -208,7 +211,11 @@ export default function ChatDetail() {
                     }`}
                   >
                     {message.mediaType === "audio" && message.mediaUrl ? (
-                      <VoiceMessageBubble url={message.mediaUrl} isMe={isMe} />
+                      <VoiceMessageBubble
+                        url={message.mediaUrl}
+                        isMe={isMe}
+                        durationSeconds={message.mediaDuration ?? 0}
+                      />
                     ) : (
                       message.text
                     )}
