@@ -3,6 +3,7 @@ import { Capacitor } from "@capacitor/core";
 import { getSupabase } from "@/lib/supabaseClient";
 import { COIN_PACKAGES, PAYMENT_CURRENCY } from "@/lib/coinPackages";
 
+export { PAYMENT_CURRENCY };
 export const PAYMENT_GATEWAY = (import.meta.env.VITE_PAYMENT_GATEWAY || "fincra").toLowerCase();
 
 export function getActiveGatewayLabel() {
