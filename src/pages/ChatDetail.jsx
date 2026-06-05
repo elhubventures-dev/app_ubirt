@@ -68,10 +68,10 @@ export default function ChatDetail() {
     return () => document.removeEventListener("click", closeMenu);
   }, [menuMessageId]);
 
-  const handleDeleteMessage = async (messageId) => {
+  const handleDeleteMessage = async (messageId, scope) => {
     setMenuMessageId(null);
     try {
-      await deleteMessage(messageId);
+      await deleteMessage({ messageId, scope });
     } catch (err) {
       toast({ title: "Failed to delete", description: err.message, variant: "destructive" });
     }
@@ -229,15 +229,28 @@ export default function ChatDetail() {
                         className={`absolute z-20 top-full mt-1 ${isMe ? "right-0" : "left-0"}`}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <button
-                          type="button"
-                          disabled={isDeleting}
-                          onClick={() => handleDeleteMessage(message.id)}
-                          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#1a2332] border border-white/10 text-red-400 text-xs font-semibold hover:bg-red-500/10 disabled:opacity-50 shadow-lg"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">delete</span>
-                          Delete
-                        </button>
+                        <div className="flex flex-col gap-1 min-w-[180px]">
+                          <button
+                            type="button"
+                            disabled={isDeleting}
+                            onClick={() => handleDeleteMessage(message.id, "me")}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#1a2332] border border-white/10 text-slate-200 text-xs font-semibold hover:bg-white/5 disabled:opacity-50 shadow-lg"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                            Delete for me
+                          </button>
+                          {isMe && (
+                            <button
+                              type="button"
+                              disabled={isDeleting}
+                              onClick={() => handleDeleteMessage(message.id, "everyone")}
+                              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#1a2332] border border-white/10 text-red-400 text-xs font-semibold hover:bg-red-500/10 disabled:opacity-50 shadow-lg"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                              Delete for everyone
+                            </button>
+                          )}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>

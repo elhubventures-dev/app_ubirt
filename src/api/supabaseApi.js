@@ -14,6 +14,21 @@ async function getUserId() {
   return user.id;
 }
 
+async function getHiddenMessageIds(userId) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("message_hides")
+    .select("message_id")
+    .eq("user_id", userId);
+  if (error) throw error;
+  return new Set((data ?? []).map((row) => row.message_id));
+}
+
+function applyHiddenMessageFilter(query, hiddenIds) {
+  if (!hiddenIds.size) return query;
+  return query.not("id", "in", `(${[...hiddenIds].join(",")})`);
+}
+
 async function notifyUser(recipientId, type, text, options = {}) {
   if (!recipientId) return;
   const supabase = getSupabase();
@@ -742,6 +757,7 @@ export const supabaseApi = {
     if (error) throw error;
 
     const rows = memberships ?? [];
+    const hiddenIds = await getHiddenMessageIds(userId);
     const results = [];
     for (const row of rows) {
       const conv = row.conversations;
@@ -755,21 +771,25 @@ export const supabaseApi = {
       const otherMember = (members ?? []).find((m) => m.user_id !== userId);
       const otherProfile = otherMember?.profiles;
 
-      const { data: lastMsg } = await supabase
+      let lastMsgQuery = supabase
         .from("messages")
         .select("content, created_at, sender_id, media_type")
         .eq("conversation_id", conv.id)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(20);
+      lastMsgQuery = applyHiddenMessageFilter(lastMsgQuery, hiddenIds);
+      const { data: recentMsgs } = await lastMsgQuery;
+      const lastMsg = (recentMsgs ?? [])[0] ?? null;
 
       const readAfter = row.last_read_at ?? "1970-01-01T00:00:00.000Z";
-      const { count: unreadCount, error: unreadError } = await supabase
+      let unreadQuery = supabase
         .from("messages")
         .select("id", { count: "exact", head: true })
         .eq("conversation_id", conv.id)
         .neq("sender_id", userId)
         .gt("created_at", readAfter);
+      unreadQuery = applyHiddenMessageFilter(unreadQuery, hiddenIds);
+      const { count: unreadCount, error: unreadError } = await unreadQuery;
       if (unreadError) throw unreadError;
 
       const sortAt = lastMsg?.created_at ?? conv.updated_at ?? conv.created_at;
@@ -854,11 +874,14 @@ export const supabaseApi = {
   async getMessages(chatId) {
     const userId = await getUserId();
     const supabase = getSupabase();
-    const { data, error } = await supabase
+    const hiddenIds = await getHiddenMessageIds(userId);
+    let query = supabase
       .from("messages")
       .select("*")
       .eq("conversation_id", chatId)
       .order("created_at", { ascending: true });
+    query = applyHiddenMessageFilter(query, hiddenIds);
+    const { data, error } = await query;
     if (error) throw error;
     return (data ?? []).map((m) => ({
       id: m.id,
@@ -930,11 +953,26 @@ export const supabaseApi = {
     return () => supabase.removeChannel(channel);
   },
 
-  async deleteMessage(messageId) {
+  async deleteMessage(messageId, scope = "me") {
+    const userId = await getUserId();
     const supabase = getSupabase();
-    const { error } = await supabase.from("messages").delete().eq("id", messageId);
+
+    if (scope === "everyone") {
+      const { error } = await supabase
+        .from("messages")
+        .delete()
+        .eq("id", messageId)
+        .eq("sender_id", userId);
+      if (error) throw error;
+      return { scope: "everyone" };
+    }
+
+    const { error } = await supabase.from("message_hides").upsert(
+      { message_id: messageId, user_id: userId },
+      { onConflict: "message_id,user_id", ignoreDuplicates: true }
+    );
     if (error) throw error;
-    return true;
+    return { scope: "me" };
   },
 
   subscribeToPresence(chatId, onPresenceChange) {

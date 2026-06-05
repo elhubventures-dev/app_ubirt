@@ -122,8 +122,8 @@ export function useChatMessages(chatId) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (messageId) => dataProvider.deleteMessage(messageId),
-    onSuccess: (_result, messageId) => {
+    mutationFn: ({ messageId, scope }) => dataProvider.deleteMessage(messageId, scope),
+    onSuccess: (_result, { messageId }) => {
       queryClient.setQueryData(["messages", chatId], (old) =>
         (old ?? []).filter((m) => m.id !== messageId)
       );

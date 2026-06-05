@@ -26,6 +26,7 @@ let uploads = structuredClone(mockUploads).map((upload) => ({
   status: upload.status ?? "draft",
 }));
 let typingByChat = {};
+let hiddenMessageIds = new Set();
 let aiConversationMeta = { title: "UBIRT Assistant" };
 let mockProfileExtras = {
   bio: "Digital creator & tech enthusiast. Building the future of content on UBIRT. 🚀",
@@ -58,6 +59,7 @@ function hydrateState() {
     commentsByPost = parsed.commentsByPost ?? commentsByPost;
     uploads = parsed.uploads ?? uploads;
     typingByChat = parsed.typingByChat ?? typingByChat;
+    hiddenMessageIds = new Set(parsed.hiddenMessageIds ?? []);
     aiConversationMeta = parsed.aiConversationMeta ?? aiConversationMeta;
     follows = parsed.follows ?? follows;
     mockProfileExtras = parsed.mockProfileExtras ?? mockProfileExtras;
@@ -86,6 +88,7 @@ function persistState() {
       mockProfileExtras,
       mockWalletBalance,
       mockReceiverBalances,
+      hiddenMessageIds: [...hiddenMessageIds],
     })
   );
 }
@@ -408,7 +411,7 @@ export const mockApi = {
   },
   async getMessages(chatId) {
     await wait();
-    return messagesByChat[chatId] ?? [];
+    return (messagesByChat[chatId] ?? []).filter((message) => !hiddenMessageIds.has(message.id));
   },
   async getChatTyping(chatId) {
     await wait(60);
@@ -417,13 +420,21 @@ export const mockApi = {
   subscribeToMessages(chatId, handlers) {
     return () => {};
   },
-  async deleteMessage(messageId) {
+  async deleteMessage(messageId, scope = "me") {
     await wait(80);
+    if (scope === "me") {
+      hiddenMessageIds = new Set([...hiddenMessageIds, messageId]);
+      persistState();
+      return { scope: "me" };
+    }
+
     for (const chatId of Object.keys(messagesByChat)) {
       const next = (messagesByChat[chatId] ?? []).filter((m) => m.id !== messageId);
       if (next.length !== (messagesByChat[chatId] ?? []).length) {
         messagesByChat = { ...messagesByChat, [chatId]: next };
-        const last = next[next.length - 1];
+        hiddenMessageIds.delete(messageId);
+        const visible = next.filter((m) => !hiddenMessageIds.has(m.id));
+        const last = visible[visible.length - 1];
         conversations = conversations.map((c) =>
           c.id === chatId
             ? {
@@ -434,10 +445,10 @@ export const mockApi = {
             : c
         );
         persistState();
-        return true;
+        return { scope: "everyone" };
       }
     }
-    return true;
+    return { scope: "everyone" };
   },
   subscribeToPresence(chatId, onPresenceChange) {
     return () => {};
