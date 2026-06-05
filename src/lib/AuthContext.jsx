@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ensureUserProfile, getAuthAvatarUrl, getAuthDisplayName, getOAuthRedirectUrl } from "@/lib/authHelpers";
+import { isNativePlatform } from "@/lib/platform";
 import { resetAnalyticsUser } from "@/lib/monitoring";
 import { getSupabase, isLiveMode, isSupabaseConfigured } from "@/lib/supabaseClient";
 
@@ -211,31 +212,48 @@ export function AuthProvider({ children }) {
     [hydrateProfile, navigate, finishBootstrap]
   );
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithOAuthProvider = useCallback(async (provider) => {
     const supabase = getSupabase();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: getOAuthRedirectUrl(),
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
+    const redirectTo = getOAuthRedirectUrl();
+
+    if (isNativePlatform()) {
+      const { Browser } = await import("@capacitor/browser");
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          ...(provider === "google"
+            ? { queryParams: { access_type: "offline", prompt: "consent" } }
+            : {}),
         },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        await Browser.open({ url: data.url, presentationStyle: "popover" });
+      }
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo,
+        ...(provider === "google"
+          ? { queryParams: { access_type: "offline", prompt: "consent" } }
+          : {}),
       },
     });
     if (error) throw error;
   }, []);
 
+  const signInWithGoogle = useCallback(async () => {
+    await signInWithOAuthProvider("google");
+  }, [signInWithOAuthProvider]);
+
   const signInWithApple = useCallback(async () => {
-    const supabase = getSupabase();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "apple",
-      options: {
-        redirectTo: getOAuthRedirectUrl(),
-      },
-    });
-    if (error) throw error;
-  }, []);
+    await signInWithOAuthProvider("apple");
+  }, [signInWithOAuthProvider]);
 
   const resetPassword = useCallback(async (email) => {
     const supabase = getSupabase();
@@ -255,6 +273,21 @@ export function AuthProvider({ children }) {
     if (useLiveAuth) {
       await getSupabase().auth.signOut();
     }
+    resetAnalyticsUser();
+    setUser(null);
+    setAuthError({ type: "auth_required" });
+    navigate("/login", { replace: true });
+  }, [useLiveAuth, navigate]);
+
+  const deleteAccount = useCallback(async () => {
+    if (!useLiveAuth) {
+      setUser(null);
+      navigate("/login", { replace: true });
+      return;
+    }
+    const supabase = getSupabase();
+    const { error } = await supabase.auth.deleteUser();
+    if (error) throw error;
     resetAnalyticsUser();
     setUser(null);
     setAuthError({ type: "auth_required" });
@@ -284,6 +317,7 @@ export function AuthProvider({ children }) {
       resetPassword,
       updatePassword,
       signOut,
+      deleteAccount,
       updateUserSession,
       isLiveAuth: useLiveAuth,
     }),
@@ -301,6 +335,7 @@ export function AuthProvider({ children }) {
       resetPassword,
       updatePassword,
       signOut,
+      deleteAccount,
       updateUserSession,
       useLiveAuth,
     ]

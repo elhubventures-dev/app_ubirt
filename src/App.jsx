@@ -13,6 +13,7 @@ import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import PageTracker from "@/components/PageTracker";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useNativeShell } from "@/hooks/useNativeShell";
 
 import Home from "./pages/Home";
 import VideoFeed from "./pages/VideoFeed";
@@ -37,8 +38,8 @@ const LOGO_URL = "/pwa-192x192.png";
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth, retryAuth } = useAuth();
-  
-  // Initialize push notifications when user is authenticated
+
+  useNativeShell();
   usePushNotifications();
 
   if (isLoadingPublicSettings || isLoadingAuth) {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { Capacitor } from "@capacitor/core";
 import { dataProvider } from "@/api/dataProvider";
+import { getPreference } from "@/lib/preferences";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -12,9 +13,12 @@ export function usePushNotifications() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Only run on iOS/Android native platforms
     if (!Capacitor.isNativePlatform()) {
-      return;
+      return undefined;
+    }
+
+    if (!getPreference("push", true)) {
+      return undefined;
     }
 
     const initPush = async () => {
@@ -47,7 +51,11 @@ export function usePushNotifications() {
         console.log("Push registration success, token:", token.value);
         setPushToken(token.value);
         try {
-          await dataProvider.updateDeviceToken(token.value);
+          const platform = Capacitor.getPlatform();
+          await dataProvider.updateDeviceToken(token.value, {
+            platform,
+            provider: platform === "ios" ? "apns" : "fcm",
+          });
         } catch (e) {
           console.error("Failed to save device token to DB", e);
         }

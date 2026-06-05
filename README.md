@@ -14,6 +14,7 @@ Uses in-browser mock data. No login required.
 ## Accounts & env vars
 
 **Full checklist:** [docs/ACCOUNTS.md](docs/ACCOUNTS.md)  
+**Mobile setup:** [docs/MOBILE.md](docs/MOBILE.md)  
 **Template to fill in:** [`.env.local`](.env.local) (copy from [`.env.example`](.env.example))
 
 | Service | Required? | Env variables |
@@ -58,7 +59,8 @@ Also set `VITE_APP_URL` (local or production URL) and optionally `SUPABASE_SERVI
 6. Run `supabase/migrations/003_analytics_gamification.sql` (views, XP, follows, achievements).
 7. Run `supabase/migrations/004_wallet_mux_push_notifications.sql` (coins, Paystack ledger, push tokens, Mux on posts, live notifications).
 8. Run `supabase/migrations/005_achievement_unlock.sql` (badge unlock RPC).
-9. Copy **Project URL** and **anon public key** from **Settings → API**.
+9. Run `supabase/migrations/006_push_delivery_tokens.sql` (multi-device push token registry for FCM v1 + APNs).
+10. Copy **Project URL** and **anon public key** from **Settings → API**.
 
 ## 2. Local live mode
 
@@ -130,6 +132,10 @@ See [docs/ACCOUNTS.md](docs/ACCOUNTS.md#error-monitoring--analytics-optional).
 ```bash
 npm run dev      # Vite dev server
 npm run build    # Production build
+npm run build:mobile # Build + Capacitor sync
+npm run cap:sync # Sync native iOS/Android projects
+npm run cap:ios  # Open iOS project in Xcode
+npm run cap:android # Open Android project in Android Studio
 npm run preview  # Preview build
 npm run test     # Vitest
 ```

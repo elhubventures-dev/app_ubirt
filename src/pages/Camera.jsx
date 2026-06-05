@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { CameraSource } from "@capacitor/camera";
+import { captureNativePhoto, isNativeCameraAvailable } from "@/lib/nativeCamera";
 
 const DURATIONS = [
   { label: "15s", ms: 15_000 },
@@ -9,6 +11,7 @@ const DURATIONS = [
 ];
 
 export default function Camera() {
+  const isNative = isNativeCameraAvailable();
   const [isRecording, setIsRecording] = useState(false);
   const [progress, setProgress] = useState(0);
   const [durationMs, setDurationMs] = useState(DURATIONS[1].ms);
@@ -57,13 +60,28 @@ export default function Camera() {
   }, [facingMode, stopStream]);
 
   useEffect(() => {
+    if (isNative) return undefined;
     startCamera();
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (recorderRef.current?.state === "recording") recorderRef.current.stop();
       stopStream();
     };
-  }, [startCamera, stopStream]);
+  }, [isNative, startCamera, stopStream]);
+
+  const handleNativeCapture = useCallback(
+    async (source = CameraSource.Camera) => {
+      try {
+        const media = await captureNativePhoto(source);
+        navigate("/upload", {
+          state: { recordedFile: media.file, recordedPreview: media.preview, recordedType: media.mediaType },
+        });
+      } catch (error) {
+        setCameraError(error.message || "Could not capture image.");
+      }
+    },
+    [navigate]
+  );
 
   const finishRecording = useCallback(
     (blob) => {
@@ -136,6 +154,31 @@ export default function Camera() {
   return (
     <div className="flex flex-col h-[100dvh] bg-black text-white overflow-hidden relative">
       <div className="absolute inset-0 z-0 overflow-hidden bg-black">
+        {isNative ? (
+          <div className="absolute inset-0 bg-gradient-to-b from-[#111827] to-black flex flex-col items-center justify-center px-6 text-center gap-5">
+            <span className="material-symbols-outlined text-[56px] text-[#3b82f6]">photo_camera</span>
+            <h2 className="text-xl font-bold text-white">Native Camera</h2>
+            <p className="text-sm text-slate-300 max-w-xs">
+              Capture a photo with your device camera, or choose one from your gallery.
+            </p>
+            <div className="w-full max-w-xs flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => handleNativeCapture(CameraSource.Camera)}
+                className="w-full py-3 rounded-xl bg-[#3b82f6] text-white font-semibold hover:bg-[#2563eb] transition-colors"
+              >
+                Capture Photo
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNativeCapture(CameraSource.Photos)}
+                className="w-full py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors"
+              >
+                Choose from Gallery
+              </button>
+            </div>
+          </div>
+        ) : (
         <video
           ref={videoRef}
           playsInline
@@ -144,7 +187,8 @@ export default function Camera() {
             isRecording ? "scale-105" : "scale-100"
           } ${facingMode === "user" ? "-scale-x-100" : ""}`}
         />
-        {!cameraReady && !cameraError && (
+        )}
+        {!isNative && !cameraReady && !cameraError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-slate-300 text-sm">
             Starting camera...
           </div>
@@ -155,7 +199,7 @@ export default function Camera() {
             <p className="text-sm text-slate-300">{cameraError}</p>
             <button
               type="button"
-              onClick={startCamera}
+              onClick={isNative ? () => handleNativeCapture(CameraSource.Camera) : startCamera}
               className="px-4 py-2 rounded-full bg-white/10 text-sm font-semibold hover:bg-white/20"
             >
               Try again
@@ -196,10 +240,13 @@ export default function Camera() {
         <div className="w-10" />
       </header>
 
-      <div className="absolute right-3 top-24 flex flex-col gap-4 z-10 items-center">
-        <ToolButton icon="flip_camera_ios" label="Flip" onClick={flipCamera} disabled={isRecording} />
-      </div>
+      {!isNative && (
+        <div className="absolute right-3 top-24 flex flex-col gap-4 z-10 items-center">
+          <ToolButton icon="flip_camera_ios" label="Flip" onClick={flipCamera} disabled={isRecording} />
+        </div>
+      )}
 
+      {!isNative && (
       <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center justify-center z-10 gap-6">
         <div className="relative flex items-center justify-center">
           <svg className="absolute w-[88px] h-[88px] -rotate-90 pointer-events-none">
@@ -241,6 +288,7 @@ export default function Camera() {
           {isRecording ? "Tap to stop" : "Tap to record"}
         </p>
       </div>
+      )}
 
       <AnimatePresence>
         {!isRecording && (

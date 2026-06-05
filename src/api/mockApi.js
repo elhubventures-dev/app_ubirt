@@ -113,6 +113,59 @@ export const mockApi = {
     await wait();
     return follows.includes(username.toLowerCase());
   },
+  async getPublicProfile(username) {
+    await wait();
+    const uname = username.toLowerCase();
+    const posts = feedPosts.filter(
+      (p) =>
+        p.username?.toLowerCase() === uname ||
+        p.handle === `@${uname}` ||
+        p.author?.toLowerCase() === uname
+    );
+    return {
+      id: `user-${uname}`,
+      username: uname,
+      name: posts[0]?.author ?? username,
+      avatar: null,
+      followers: 12400,
+      following: 240,
+      totalLikes: posts.reduce((s, p) => s + (p.likes ?? 0), 0),
+      isFollowing: follows.includes(uname),
+      posts: posts.length ? posts : feedPosts.slice(0, 6),
+    };
+  },
+  async getTransactions() {
+    await wait();
+    return [
+      { id: "tx1", label: "Signup Bonus", coins: 1000, time: "Yesterday", type: "credit" },
+      { id: "tx2", label: "Gift to @creator", coins: -50, time: "Today", type: "debit" },
+    ];
+  },
+  async getWalletBalance() {
+    await wait(100);
+    return 1000;
+  },
+  async getTrendingTags() {
+    await wait();
+    const counts = {};
+    for (const post of feedPosts) {
+      for (const tag of post.tags ?? []) {
+        counts[tag] = (counts[tag] ?? 0) + 1;
+      }
+    }
+    const sorted = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([tag]) => tag);
+    return sorted.length ? sorted : ["#Tech", "#Vlog", "#Tutorial", "#Lifestyle", "#Comedy", "#Music"];
+  },
+  async recordVideoView(postId) {
+    await wait(50);
+    feedPosts = feedPosts.map((p) =>
+      p.id === postId ? { ...p, views: (p.views ?? 0) + 1 } : p
+    );
+    persistState();
+  },
   async getComments(postId) {
     await wait();
     return commentsByPost[postId] ?? [];
@@ -296,9 +349,9 @@ export const mockApi = {
     persistState();
     return true;
   },
-  async updateDeviceToken(token) {
+  async updateDeviceToken(token, meta = {}) {
     await wait(200);
-    console.log("Mock: Device token updated:", token);
+    console.log("Mock: Device token updated:", token, meta);
     return true;
   },
   async clearAiConversation() {

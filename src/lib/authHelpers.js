@@ -57,6 +57,4 @@ export async function ensureUserProfile(authUser) {
   }
 }
 
-export function getOAuthRedirectUrl() {
-  return `${import.meta.env.VITE_APP_URL || window.location.origin}/`;
-}
+export { getOAuthRedirectUrl } from "@/lib/platform";

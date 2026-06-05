@@ -25,7 +25,7 @@ function Toggle({ checked, onChange, label }) {
 }
 
 export default function Settings() {
-  const { user, signOut, isLiveAuth, updateUserSession } = useAuth();
+  const { user, signOut, deleteAccount, isLiveAuth, updateUserSession } = useAuth();
   const [autoplay, setAutoplay] = useState(() => getPreference("autoplay", true));
   const [aiAssist, setAiAssist] = useState(() => getPreference("aiAssist", true));
   const [notifications, setNotifications] = useState(() => getPreference("push", true));
@@ -66,6 +66,23 @@ export default function Settings() {
   };
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      "Delete your account permanently? This cannot be undone and removes your profile, posts, and wallet data."
+    );
+    if (!confirmed) return;
+    setIsDeleting(true);
+    try {
+      await deleteAccount();
+      toast({ title: "Account deleted", description: "Your account has been removed." });
+    } catch (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
@@ -161,8 +178,13 @@ export default function Settings() {
                    Sign Out
                  </PrimaryButton>
                )}
-               <button className="w-full py-3 text-sm font-semibold text-red-400 hover:bg-red-500/10 rounded-xl transition-colors border border-transparent hover:border-red-500/20">
-                 Delete Account
+               <button
+                 type="button"
+                 onClick={handleDeleteAccount}
+                 disabled={isDeleting}
+                 className="w-full py-3 text-sm font-semibold text-red-400 hover:bg-red-500/10 rounded-xl transition-colors border border-transparent hover:border-red-500/20 disabled:opacity-60"
+               >
+                 {isDeleting ? "Deleting..." : "Delete Account"}
                </button>
             </div>
           </section>

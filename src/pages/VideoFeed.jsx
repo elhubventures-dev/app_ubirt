@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useFeed, useFeedComments } from "@/hooks/useFeed";
 import CommentsSheet from "@/components/feed/CommentsSheet";
+import ShareSheet from "@/components/feed/ShareSheet";
+import { dataProvider } from "@/api/dataProvider";
 import { useAuth } from "@/lib/AuthContext";
 import MuxPlayer from "@mux/mux-player-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -9,10 +11,19 @@ import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { motion, AnimatePresence } from "framer-motion";
 import { getPreference } from "@/lib/preferences";
 
-function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId }) {
+function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId, setGiftPostId }) {
   const videoRef = useRef(null);
+  const viewedRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showPlayOverlay, setShowPlayOverlay] = useState(false);
+  const profileSlug = post.username || post.author;
+
+  useEffect(() => {
+    if (isVisible && post.id && !viewedRef.current) {
+      viewedRef.current = true;
+      dataProvider.recordVideoView(post.id).catch(() => {});
+    }
+  }, [isVisible, post.id]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -135,7 +146,7 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
 
       {/* Info Area (Bottom Left) */}
       <div className="absolute bottom-24 left-4 right-20 pb-4 pointer-events-auto">
-        <Link to={`/user/${post.author}`} className="text-white font-bold text-lg drop-shadow-md hover:underline">@{post.author}</Link>
+        <Link to={`/user/${profileSlug}`} className="text-white font-bold text-lg drop-shadow-md hover:underline">@{profileSlug}</Link>
         <p className="text-slate-200 text-sm mt-1 drop-shadow-md line-clamp-3">{post.caption}</p>
         {post.tags && post.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2">
@@ -149,8 +160,8 @@ function VideoPost({ post, isVisible, toggleLike, toggleBookmark, setExpandedPos
       {/* Action Bar (Bottom Right) */}
       <div className="absolute bottom-28 right-4 flex flex-col items-center gap-6 pointer-events-auto">
         {/* Avatar */}
-        <Link to={`/user/${post.author}`} className="w-12 h-12 rounded-full border-2 border-white overflow-hidden bg-slate-800 transition-transform active:scale-90">
-          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${post.author}`} alt="Avatar" className="w-full h-full object-cover" />
+        <Link to={`/user/${profileSlug}`} className="w-12 h-12 rounded-full border-2 border-white overflow-hidden bg-slate-800 transition-transform active:scale-90">
+          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${profileSlug}`} alt="Avatar" className="w-full h-full object-cover" />
         </Link>
 
         {/* Like */}
@@ -200,6 +211,7 @@ export default function VideoFeed() {
   const { user, updateUserSession } = useAuth();
   const [expandedPostId, setExpandedPostId] = useState("");
   const [optionsPostId, setOptionsPostId] = useState("");
+  const [sharePostId, setSharePostId] = useState("");
   const [giftPostId, setGiftPostId] = useState("");
   const [commentDraft, setCommentDraft] = useState("");
   const [activePostIndex, setActivePostIndex] = useState(0);
@@ -276,6 +288,7 @@ export default function VideoFeed() {
             isMutating={isMutating}
             onAutoScroll={handleAutoScroll}
             setOptionsPostId={setOptionsPostId}
+            setGiftPostId={setGiftPostId}
           />
         ))}
       </div>
@@ -327,38 +340,52 @@ export default function VideoFeed() {
                 <h3 className="text-white font-bold text-lg border-b border-white/10 pb-3">Post Options</h3>
                 
                 {(() => {
-                  const targetPost = posts.find(p => p.id === optionsPostId);
-                  const isAuthor = targetPost?.author === user?.username || targetPost?.author === user?.name;
-                  
-                  if (isAuthor) {
-                    return (
-                      <button 
-                        onClick={async () => {
-                          try {
-                             await deletePost(optionsPostId);
-                             toast({ title: "Post Deleted", description: "Your post has been removed." });
-                             setOptionsPostId("");
-                          } catch (err) {
-                             toast({ title: "Delete Failed", description: err.message, variant: "destructive" });
-                          }
-                        }}
-                        className="flex items-center gap-3 text-red-500 hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
-                      >
-                         <span className="material-symbols-outlined">delete</span> Delete Post
-                      </button>
-                    );
-                  }
-                  
+                  const targetPost = posts.find((p) => p.id === optionsPostId);
+                  const isAuthor =
+                    targetPost?.username === user?.username ||
+                    targetPost?.userId === user?.id;
+
                   return (
-                    <button 
-                      onClick={() => {
-                        toast({ title: "Post Reported", description: "Thanks for keeping the community safe." });
-                        setOptionsPostId("");
-                      }}
-                      className="flex items-center gap-3 text-red-500 hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
-                    >
-                       <span className="material-symbols-outlined">flag</span> Report Post
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOptionsPostId("");
+                          setSharePostId(optionsPostId);
+                        }}
+                        className="flex items-center gap-3 text-white hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
+                      >
+                        <span className="material-symbols-outlined">share</span> Share Post
+                      </button>
+                      {isAuthor ? (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await deletePost(optionsPostId);
+                              toast({ title: "Post Deleted", description: "Your post has been removed." });
+                              setOptionsPostId("");
+                            } catch (err) {
+                              toast({ title: "Delete Failed", description: err.message, variant: "destructive" });
+                            }
+                          }}
+                          className="flex items-center gap-3 text-red-500 hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
+                        >
+                          <span className="material-symbols-outlined">delete</span> Delete Post
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            toast({ title: "Post Reported", description: "Thanks for keeping the community safe." });
+                            setOptionsPostId("");
+                          }}
+                          className="flex items-center gap-3 text-red-500 hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
+                        >
+                          <span className="material-symbols-outlined">flag</span> Report Post
+                        </button>
+                      )}
+                    </>
                   );
                 })()}
 
@@ -370,7 +397,17 @@ export default function VideoFeed() {
             </>
           )}
         </AnimatePresence>
-  
+
+      {/* Share Sheet */}
+      <AnimatePresence>
+        {sharePostId && (
+          <ShareSheet
+            post={posts.find((p) => p.id === sharePostId)}
+            onClose={() => setSharePostId("")}
+          />
+        )}
+      </AnimatePresence>
+
         {/* Gift Sheet */}
         <AnimatePresence>
           {giftPostId && (

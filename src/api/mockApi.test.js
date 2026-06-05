@@ -26,4 +26,27 @@ describe("mockApi", () => {
     });
     expect(upload.status).toBe("draft");
   });
+
+  it("returns wallet balance and transactions", async () => {
+    const balance = await mockApi.getWalletBalance();
+    const transactions = await mockApi.getTransactions();
+
+    expect(typeof balance).toBe("number");
+    expect(balance).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray(transactions)).toBe(true);
+    expect(transactions.length).toBeGreaterThan(0);
+    expect(transactions[0]).toHaveProperty("coins");
+  });
+
+  it("returns trending tags and public profile", async () => {
+    const tags = await mockApi.getTrendingTags();
+    const profile = await mockApi.getPublicProfile("creator");
+
+    expect(Array.isArray(tags)).toBe(true);
+    expect(tags.length).toBeGreaterThan(0);
+    expect(tags[0].startsWith("#")).toBe(true);
+    expect(profile).toBeTruthy();
+    expect(profile.username).toBe("creator");
+    expect(Array.isArray(profile.posts)).toBe(true);
+  });
 });

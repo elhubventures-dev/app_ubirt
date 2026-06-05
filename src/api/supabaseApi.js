@@ -15,11 +15,29 @@ async function getUserId() {
 async function notifyUser(recipientId, type, text) {
   if (!recipientId) return;
   const supabase = getSupabase();
-  await supabase.rpc("create_notification", {
+  const { data: notificationId, error } = await supabase.rpc("create_notification", {
     p_recipient_id: recipientId,
     p_type: type,
     p_text: text,
   });
+  if (error) throw error;
+
+  // Best-effort push fanout after in-app notification is created.
+  try {
+    await fetch("/api/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: recipientId,
+        notificationId,
+        type,
+        title: "UBIRT",
+        body: text,
+      }),
+    });
+  } catch (pushError) {
+    console.warn("Push send failed:", pushError);
+  }
 }
 
 async function getActorDisplayName(userId) {
@@ -47,7 +65,9 @@ function mapPost(row, profile, liked, bookmarked) {
 
   return {
     id: row.id,
+    userId: row.user_id,
     author: profile?.display_name ?? "Creator",
+    username: profile?.username ?? "user",
     handle: `@${profile?.username ?? "user"}`,
     caption: row.caption,
     tags: Array.from(tags),
@@ -119,6 +139,24 @@ export const supabaseApi = {
     if (!targetProfile) return false;
     const { data, error } = await supabase.rpc("toggle_follow", { p_following_id: targetProfile.id });
     if (error) throw error;
+    if (data) {
+      try {
+        const actorId = await getUserId();
+        const actorName = await getActorDisplayName(actorId);
+        await fetch("/api/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: targetProfile.id,
+            type: "follow",
+            title: "New follower",
+            body: `${actorName} started following you`,
+          }),
+        });
+      } catch (pushError) {
+        console.warn("Follow push failed:", pushError);
+      }
+    }
     return data;
   },
   async isFollowing(username) {
@@ -128,6 +166,119 @@ export const supabaseApi = {
     if (!targetProfile) return false;
     const { data } = await supabase.from("follows").select("*").eq("follower_id", userId).eq("following_id", targetProfile.id).maybeSingle();
     return !!data;
+  },
+
+  async getPublicProfile(username) {
+    const supabase = getSupabase();
+    let viewerId = null;
+    try {
+      viewerId = await getUserId();
+    } catch {
+      viewerId = null;
+    }
+
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id, username, display_name, avatar_url")
+      .eq("username", username)
+      .maybeSingle();
+    if (error) throw error;
+    if (!profile) return null;
+
+    const [
+      { count: followersCount },
+      { count: followingCount },
+      { data: posts },
+      followRow,
+    ] = await Promise.all([
+      supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", profile.id),
+      supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", profile.id),
+      supabase
+        .from("posts")
+        .select("*")
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false }),
+      viewerId
+        ? supabase
+            .from("follows")
+            .select("*")
+            .eq("follower_id", viewerId)
+            .eq("following_id", profile.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const totalLikes = (posts ?? []).reduce((sum, p) => sum + (p.likes_count ?? 0), 0);
+
+    return {
+      id: profile.id,
+      username: profile.username,
+      name: profile.display_name ?? profile.username,
+      avatar: profile.avatar_url,
+      followers: followersCount ?? 0,
+      following: followingCount ?? 0,
+      totalLikes,
+      isFollowing: !!followRow?.data,
+      posts: (posts ?? []).map((p) => mapPost(p, profile, false, false)),
+    };
+  },
+
+  async getTransactions() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    return (data ?? []).map((tx) => ({
+      id: tx.id,
+      label: "Coin purchase",
+      coins: tx.coins_added,
+      amount: tx.amount,
+      reference: tx.reference,
+      time: formatRelative(tx.created_at),
+      type: "credit",
+    }));
+  },
+
+  async getWalletBalance() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from("profiles").select("coins").eq("id", userId).single();
+    if (error) throw error;
+    return data?.coins ?? 0;
+  },
+
+  async getTrendingTags(limit = 6) {
+    const supabase = getSupabase();
+    const { data: posts } = await supabase
+      .from("posts")
+      .select("caption, category")
+      .order("created_at", { ascending: false })
+      .limit(80);
+
+    const counts = {};
+    for (const post of posts ?? []) {
+      const hashtags = post.caption?.match(/#[\w]+/gi) || [];
+      for (const tag of hashtags) {
+        const normalized = tag.toLowerCase();
+        counts[normalized] = (counts[normalized] ?? 0) + 1;
+      }
+      if (post.category) {
+        const tag = `#${post.category.toLowerCase()}`;
+        counts[tag] = (counts[tag] ?? 0) + 1;
+      }
+    }
+
+    const sorted = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([tag]) => tag.charAt(0) === "#" ? tag : `#${tag}`);
+
+    return sorted.length ? sorted : ["#Tech", "#Vlog", "#Tutorial", "#Lifestyle", "#Comedy", "#Music"];
   },
 
   async toggleLike(postId) {
@@ -614,17 +765,29 @@ export const supabaseApi = {
     return true;
   },
 
-  async updateDeviceToken(token) {
+  async updateDeviceToken(token, meta = {}) {
     const userId = await getUserId();
     const supabase = getSupabase();
-    // In a real app, you might have a push_tokens table or an array on the profile.
-    // Assuming there's a device_token string or string array on profiles.
-    const { error } = await supabase
-      .from("profiles")
-      .update({ device_token: token })
-      .eq("id", userId);
-    if (error) throw error;
-    console.log("Device token updated in Supabase:", token);
+    const platform = meta.platform ?? "unknown";
+    const provider = meta.provider ?? (platform === "ios" ? "apns" : "fcm");
+
+    const [{ error: upsertError }, { error: profileError }] = await Promise.all([
+      supabase.from("push_tokens").upsert(
+        {
+          user_id: userId,
+          token,
+          platform,
+          provider,
+          last_seen_at: new Date().toISOString(),
+        },
+        { onConflict: "token" }
+      ),
+      // Legacy fallback for older sender paths.
+      supabase.from("profiles").update({ device_token: token }).eq("id", userId),
+    ]);
+    if (upsertError) throw upsertError;
+    if (profileError) throw profileError;
+    console.log("Device token updated in Supabase:", token, platform, provider);
     return true;
   },
 

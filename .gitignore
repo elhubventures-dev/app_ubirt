@@ -5,3 +5,9 @@ dist/
 .env.*.local
 .vite/
 .DS_Store
+.idea/
+
+# Firebase service account (never commit)
+firebase-service-account.json
+*-firebase-adminsdk-*.json
+android/app/google-services.json

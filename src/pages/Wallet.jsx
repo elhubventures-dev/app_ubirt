@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
+import { dataProvider } from "@/api/dataProvider";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { useToast } from "@/components/ui/use-toast";
 import { usePaystackPayment } from "react-paystack";
@@ -14,10 +16,23 @@ const COIN_PACKAGES = [
 ];
 
 export default function Wallet() {
-  const { user } = useAuth();
+  const { user, updateUserSession } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isPurchasing, setIsPurchasing] = useState(false);
+
+  const { data: balance } = useQuery({
+    queryKey: ["wallet-balance"],
+    queryFn: () => dataProvider.getWalletBalance(),
+  });
+
+  const { data: transactions = [], isLoading: isLoadingTx } = useQuery({
+    queryKey: ["wallet-transactions"],
+    queryFn: () => dataProvider.getTransactions(),
+  });
+
+  const displayBalance = balance ?? user?.coins ?? 0;
 
   // Paystack configuration base
   const paystackConfig = {
@@ -28,13 +43,22 @@ export default function Wallet() {
 
   const initializePayment = usePaystackPayment(paystackConfig);
 
-  const onSuccess = (reference) => {
+  const onSuccess = async (reference) => {
     setIsPurchasing(false);
     toast({
       title: "Payment Successful!",
-      description: `Reference: ${reference.reference}. Your coins will be updated shortly!`,
+      description: `Reference: ${reference.reference}. Updating your balance...`,
     });
-    // The backend webhook will securely add the coins to the database.
+    setTimeout(async () => {
+      try {
+        const coins = await dataProvider.getWalletBalance();
+        updateUserSession?.({ coins });
+        queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
+        queryClient.invalidateQueries({ queryKey: ["wallet-transactions"] });
+      } catch {
+        // Webhook may still be processing
+      }
+    }, 3000);
   };
 
   const onClose = () => {
@@ -94,7 +118,7 @@ export default function Wallet() {
           <p className="text-white/80 font-semibold mb-1 relative z-10">Total Balance</p>
           <div className="flex items-center justify-center gap-2 relative z-10">
             <span className="material-symbols-outlined text-4xl text-amber-100">monetization_on</span>
-            <span className="text-5xl font-black text-white tracking-tight">{user?.coins?.toLocaleString() || "0"}</span>
+            <span className="text-5xl font-black text-white tracking-tight">{displayBalance.toLocaleString()}</span>
           </div>
         </motion.div>
 
@@ -134,40 +158,47 @@ export default function Wallet() {
           </div>
         </motion.div>
 
-        {/* Transaction History Mock */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
           className="mt-4 pb-10"
         >
           <h2 className="text-lg font-bold mb-4">Recent Transactions</h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[16px]">card_giftcard</span>
-                </div>
-                <div>
-                  <p className="font-semibold">Gift to @creator</p>
-                  <p className="text-xs text-slate-400">Today, 2:30 PM</p>
-                </div>
-              </div>
-              <span className="font-bold text-red-400">-50</span>
+          {isLoadingTx ? (
+            <p className="text-slate-400 text-sm">Loading transactions...</p>
+          ) : transactions.length === 0 ? (
+            <p className="text-slate-400 text-sm">No transactions yet. Buy coins to get started.</p>
+          ) : (
+            <div className="space-y-4">
+              {transactions.map((tx) => {
+                const isCredit = tx.coins > 0;
+                return (
+                  <div key={tx.id} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                          isCredit ? "bg-green-500/20 text-green-400" : "bg-blue-500/20 text-blue-400"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          {isCredit ? "add_circle" : "card_giftcard"}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-semibold">{tx.label}</p>
+                        <p className="text-xs text-slate-400">{tx.time}</p>
+                      </div>
+                    </div>
+                    <span className={`font-bold ${isCredit ? "text-green-400" : "text-red-400"}`}>
+                      {isCredit ? "+" : ""}
+                      {tx.coins}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[16px]">add_circle</span>
-                </div>
-                <div>
-                  <p className="font-semibold">Signup Bonus</p>
-                  <p className="text-xs text-slate-400">Yesterday</p>
-                </div>
-              </div>
-              <span className="font-bold text-green-400">+1000</span>
-            </div>
-          </div>
+          )}
         </motion.div>
 
       </main>

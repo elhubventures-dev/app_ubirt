@@ -8,7 +8,7 @@ Use this list so nothing is missed. Match each row to a variable in `.env.local`
 |---------|---------|---------------|---------|
 | **Supabase** | [supabase.com](https://supabase.com) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Auth, database, storage, realtime |
 
-Run all SQL migrations in order in the Supabase SQL Editor: `001` → `002` → `003` → `004`. Migration `004` adds wallet coins, Paystack transactions, push device tokens, Mux columns on posts, and live notification creation.
+Run all SQL migrations in order in the Supabase SQL Editor: `001` → `002` → `003` → `004` → `005` → `006`. Migration `006` adds multi-device push token storage for production push delivery.
 
 | **GitHub** | [github.com](https://github.com) | — | Source code |
 | **Vercel** | [vercel.com](https://vercel.com) | (paste all env vars from `.env.local`) | Host SPA + `/api/*` serverless |
@@ -58,7 +58,7 @@ Required for iOS App Store if you offer other social login (e.g. Google).
 3. Paste **Services ID**, **Team ID**, **Key ID**, and private key into Supabase Apple provider → Enable.
 4. Add the same redirect URLs in Supabase **URL Configuration** as Google.
 
-Web flow works like Google; native iOS requires additional Capacitor/deep-link setup.
+Web flow works like Google; native iOS/Android now use deep-link callback `com.elhubventures.ubirt://login` (see `docs/MOBILE.md`).
 
 ### Error monitoring & analytics (optional)
 

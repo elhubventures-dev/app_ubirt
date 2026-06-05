@@ -4,7 +4,6 @@ import { dataProvider } from "@/api/dataProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 
-const TRENDING_TAGS = ["#Tech", "#Vlog", "#Tutorial", "#Lifestyle", "#Comedy", "#Music"];
 const DATE_FILTERS = {
   any: null,
   today: 1,
@@ -44,6 +43,12 @@ export default function Search() {
   const { data: suggested = [] } = useQuery({
     queryKey: ["suggested-creators"],
     queryFn: () => dataProvider.getSuggestedCreators(),
+    enabled: !debouncedTerm,
+  });
+
+  const { data: trendingTags = [] } = useQuery({
+    queryKey: ["trending-tags"],
+    queryFn: () => dataProvider.getTrendingTags(),
     enabled: !debouncedTerm,
   });
 
@@ -149,7 +154,7 @@ export default function Search() {
           <div className="mt-6">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Trending Tags</h2>
             <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2 -mx-4 px-4">
-              {TRENDING_TAGS.map((tag) => (
+              {trendingTags.map((tag) => (
                 <Link key={tag} to={`/tag/${tag.replace("#", "")}`} className="shrink-0 bg-white/5 hover:bg-[#3b82f6]/20 border border-white/10 hover:border-[#3b82f6]/30 px-4 py-2 rounded-full text-sm font-medium text-slate-300 hover:text-[#3b82f6] transition-colors whitespace-nowrap flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-[16px]">trending_up</span> {tag}
                 </Link>

@@ -24,6 +24,27 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.elhubventures.ubirt</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.elhubventures.ubirt</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>UBIRT uses your camera so you can create posts.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>UBIRT uses your microphone when recording videos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>UBIRT needs photo library access so you can upload media.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>UBIRT can save created media to your photo library.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
