@@ -13,23 +13,19 @@ function formatRelative(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function formatPresenceStatus(lastSeenAt, peerOnlineAt) {
-  const now = Date.now();
-
-  if (peerOnlineAt) {
-    const onlineMs = now - new Date(peerOnlineAt).getTime();
-    if (onlineMs < ACTIVE_THRESHOLD_MS) {
-      return { label: "Active now", isActive: true };
-    }
+export function formatPresenceStatus(lastSeenAt, peerPresent = false) {
+  if (peerPresent) {
+    return { label: "Active now", isActive: true };
   }
 
-  if (lastSeenAt) {
-    const diff = now - new Date(lastSeenAt).getTime();
-    if (diff < ACTIVE_THRESHOLD_MS) {
-      return { label: "Active now", isActive: true };
-    }
-    return { label: `Last seen ${formatRelative(lastSeenAt)}`, isActive: false };
+  if (!lastSeenAt) {
+    return { label: "Offline", isActive: false };
   }
 
-  return { label: "Offline", isActive: false };
+  const diff = Date.now() - new Date(lastSeenAt).getTime();
+  if (diff < ACTIVE_THRESHOLD_MS) {
+    return { label: "Active now", isActive: true };
+  }
+
+  return { label: `Last seen ${formatRelative(lastSeenAt)}`, isActive: false };
 }

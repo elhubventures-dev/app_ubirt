@@ -1,4 +1,7 @@
+import { useNavigate } from "react-router-dom";
+import { dataProvider } from "@/api/dataProvider";
 import { useNotifications } from "@/hooks/useNotifications";
+import { getNotificationPath } from "@/lib/notificationLinks";
 import { SkeletonRow } from "@/components/ui/SkeletonRow";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -12,6 +15,7 @@ const iconMap = {
 };
 
 export default function Notifications() {
+  const navigate = useNavigate();
   const { data: items = [], isLoading, markAllRead, markRead, isMarkingRead } = useNotifications();
   const unreadCount = items.filter((item) => !item.read).length;
 
@@ -22,6 +26,12 @@ export default function Notifications() {
 
   const onItemClick = async (item) => {
     if (!item.read) await markRead(item.id);
+
+    let path = getNotificationPath(item);
+    if (!path && dataProvider.resolveNotificationLink) {
+      path = await dataProvider.resolveNotificationLink(item);
+    }
+    if (path) navigate(path);
   };
 
   return (

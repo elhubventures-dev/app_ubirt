@@ -74,7 +74,21 @@ async function sendFcmV1({ accessToken, projectId, token, title, body, data }) {
         data: Object.fromEntries(
           Object.entries(data || {}).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)])
         ),
-        android: { priority: "high" },
+        android: {
+          priority: "high",
+          notification: {
+            sound: "default",
+            default_sound: true,
+            notification_priority: "PRIORITY_HIGH",
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: "default",
+            },
+          },
+        },
       },
     }),
   });

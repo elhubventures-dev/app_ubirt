@@ -14,6 +14,8 @@ import ResetPassword from "./pages/ResetPassword";
 import PageTracker from "@/components/PageTracker";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useNativeShell } from "@/hooks/useNativeShell";
+import { useLastSeenHeartbeat } from "@/hooks/useLastSeenHeartbeat";
+import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 
 import Home from "./pages/Home";
 import VideoFeed from "./pages/VideoFeed";
@@ -41,6 +43,8 @@ const AuthenticatedApp = () => {
 
   useNativeShell();
   usePushNotifications();
+  useLastSeenHeartbeat();
+  useRealtimeNotifications();
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (

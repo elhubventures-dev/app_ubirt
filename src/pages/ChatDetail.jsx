@@ -13,11 +13,11 @@ export default function ChatDetail() {
   const [text, setText] = useState(() => localStorage.getItem(draftKey) || "");
   const [showEmoji, setShowEmoji] = useState(false);
   const { data: conversation } = useConversation(id);
-  const { data: messages = [], isLoading, sendMessage, isSending, isTyping, peerOnlineAt, updateTyping } = useChatMessages(id);
+  const { data: messages = [], isLoading, sendMessage, isSending, isTyping, peerPresent, updateTyping } = useChatMessages(id);
   const { toast } = useToast();
   const presence = useMemo(
-    () => formatPresenceStatus(conversation?.lastSeenAt, peerOnlineAt),
-    [conversation?.lastSeenAt, peerOnlineAt]
+    () => formatPresenceStatus(conversation?.lastSeenAt, peerPresent),
+    [conversation?.lastSeenAt, peerPresent]
   );
   const avatarSrc = conversation?.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${conversation?.name || id}`;
   const profileLink = conversation?.username ? `/user/${conversation.username}` : null;

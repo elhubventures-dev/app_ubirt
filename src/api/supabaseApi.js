@@ -2,6 +2,7 @@ import { getSupabase } from "@/lib/supabaseClient";
 import { uploadAvatar, uploadCover } from "@/api/storage";
 import { processImageUpload } from "@/lib/videoPipeline";
 import { inferMediaType } from "@/lib/media";
+import { getNotificationPath } from "@/lib/notificationLinks";
 
 async function getUserId() {
   const supabase = getSupabase();
@@ -16,10 +17,14 @@ async function getUserId() {
 async function notifyUser(recipientId, type, text, options = {}) {
   if (!recipientId) return;
   const supabase = getSupabase();
+  const actorId = options.actorId ?? (await getUserId());
   const { data: notificationId, error } = await supabase.rpc("create_notification", {
     p_recipient_id: recipientId,
     p_type: type,
     p_text: text,
+    p_actor_id: actorId,
+    p_post_id: options.postId ?? null,
+    p_conversation_id: options.conversationId ?? options.chatId ?? null,
   });
   if (error) throw error;
 
@@ -440,7 +445,7 @@ export const supabaseApi = {
 
       await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 5 });
       const actorName = await getActorDisplayName(userId);
-      await notifyUser(post?.user_id, "like", `${actorName} liked your post`);
+      await notifyUser(post?.user_id, "like", `${actorName} liked your post`, { postId });
     }
 
     return { id: postId, liked: !existing };
@@ -690,7 +695,7 @@ export const supabaseApi = {
 
     await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 10 });
     const actorName = await getActorDisplayName(userId);
-    await notifyUser(post?.user_id, "comment", `${actorName} commented on your post`);
+    await notifyUser(post?.user_id, "comment", `${actorName} commented on your post`, { postId });
     return { id: data.id, author: actorName, text: data.text };
   },
 
@@ -732,7 +737,7 @@ export const supabaseApi = {
     const supabase = getSupabase();
     const { data: memberships, error } = await supabase
       .from("conversation_members")
-      .select("conversation_id, conversations(*)")
+      .select("conversation_id, last_read_at, conversations(*)")
       .eq("user_id", userId);
     if (error) throw error;
 
@@ -758,16 +763,41 @@ export const supabaseApi = {
         .limit(1)
         .maybeSingle();
 
+      const readAfter = row.last_read_at ?? "1970-01-01T00:00:00.000Z";
+      const { count: unreadCount, error: unreadError } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("conversation_id", conv.id)
+        .neq("sender_id", userId)
+        .gt("created_at", readAfter);
+      if (unreadError) throw unreadError;
+
+      const sortAt = lastMsg?.created_at ?? conv.updated_at ?? conv.created_at;
+
       results.push({
         id: conv.id,
         name: otherProfile?.display_name ?? otherProfile?.username ?? conv.title ?? "Conversation",
         avatar: otherProfile?.avatar_url ?? null,
         lastMessage: lastMsg?.content ?? "No messages yet",
-        updatedAt: formatRelative(conv.updated_at),
-        unread: 0,
+        updatedAt: formatRelative(sortAt),
+        sortAt,
+        unread: unreadCount ?? 0,
       });
     }
-    return results;
+
+    return results.sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime());
+  },
+
+  async markConversationRead(chatId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("conversation_members")
+      .update({ last_read_at: new Date().toISOString() })
+      .eq("conversation_id", chatId)
+      .eq("user_id", userId);
+    if (error) throw error;
+    return true;
   },
 
   async startConversation(targetUserId) {
@@ -877,23 +907,39 @@ export const supabaseApi = {
 
   subscribeToPresence(chatId, onPresenceChange) {
     const supabase = getSupabase();
-    const channel = supabase.channel(`presence:${chatId}`, {
-      config: { presence: { key: 'user' } },
-    });
-    
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        onPresenceChange(state);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          const userId = await getUserId();
-          const { data: profile } = await supabase.from('profiles').select('username, display_name').eq('id', userId).single();
-          await channel.track({ online_at: new Date().toISOString(), user_id: userId, profile });
-        }
+    let disposed = false;
+    let channel = null;
+
+    getUserId().then(async (userId) => {
+      if (disposed) return;
+
+      channel = supabase.channel(`presence:${chatId}`, {
+        config: { presence: { key: userId } },
       });
-    return () => supabase.removeChannel(channel);
+
+      channel.on("presence", { event: "sync" }, () => {
+        if (!disposed) onPresenceChange(channel.presenceState());
+      });
+
+      channel.subscribe(async (status) => {
+        if (disposed || status !== "SUBSCRIBED") return;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, display_name")
+          .eq("id", userId)
+          .single();
+        await channel.track({ user_id: userId, profile });
+      });
+    });
+
+    return () => {
+      disposed = true;
+      if (channel) {
+        channel.untrack().finally(() => {
+          supabase.removeChannel(channel);
+        });
+      }
+    };
   },
 
   async updateTypingStatus(chatId, isTyping) {
@@ -939,6 +985,7 @@ export const supabaseApi = {
       try {
         await notifyUser(member.user_id, "message", `${actorName}: ${preview}`, {
           chatId,
+          conversationId: chatId,
           url: `/chat/${chatId}`,
         });
       } catch (notifyError) {
@@ -1241,7 +1288,7 @@ export const supabaseApi = {
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from("notifications")
-      .select("*")
+      .select("*, actor:actor_id (username, display_name, avatar_url)")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -1251,7 +1298,96 @@ export const supabaseApi = {
       text: n.text,
       time: formatRelative(n.created_at),
       read: n.read ?? false,
+      actorId: n.actor_id ?? null,
+      actorUsername: n.actor?.username ?? null,
+      postId: n.post_id ?? null,
+      conversationId: n.conversation_id ?? null,
     }));
+  },
+
+  async findDirectConversationWithUser(nameOrUsername) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    let profile = null;
+    const { data: byName } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("display_name", nameOrUsername)
+      .maybeSingle();
+    profile = byName;
+    if (!profile?.id) {
+      const { data: byUsername } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", nameOrUsername)
+        .maybeSingle();
+      profile = byUsername;
+    }
+    if (!profile?.id) return null;
+
+    const { data: memberships } = await supabase
+      .from("conversation_members")
+      .select("conversation_id")
+      .eq("user_id", userId);
+    const conversationIds = (memberships ?? []).map((row) => row.conversation_id);
+    if (!conversationIds.length) return null;
+
+    const { data: peers } = await supabase
+      .from("conversation_members")
+      .select("conversation_id")
+      .eq("user_id", profile.id)
+      .in("conversation_id", conversationIds)
+      .limit(1)
+      .maybeSingle();
+
+    return peers?.conversation_id ?? null;
+  },
+
+  async resolveNotificationLink(item) {
+    const directPath = getNotificationPath(item);
+    if (directPath) return directPath;
+
+    const type = String(item?.type || "").toLowerCase();
+    const supabase = getSupabase();
+
+    const lookupUsername = async (name) => {
+      const { data: byName } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("display_name", name)
+        .maybeSingle();
+      if (byName?.username) return byName.username;
+      const { data: byUsername } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("username", name)
+        .maybeSingle();
+      return byUsername?.username ?? null;
+    };
+
+    if (type === "follow") {
+      const name = item.text?.replace(/ started following you$/i, "").trim();
+      if (name) {
+        const username = await lookupUsername(name);
+        if (username) return `/user/${username}`;
+      }
+    }
+
+    if (type === "message") {
+      const name = item.text?.split(":")[0]?.trim();
+      if (name) {
+        const conversationId = await this.findDirectConversationWithUser(name);
+        if (conversationId) return `/chat/${conversationId}`;
+        const username = await lookupUsername(name);
+        if (username) return `/user/${username}`;
+      }
+    }
+
+    if (["like", "comment", "gift"].includes(type)) {
+      return "/feed";
+    }
+
+    return null;
   },
 
   async markNotificationRead(notificationId) {

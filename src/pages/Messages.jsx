@@ -88,13 +88,18 @@ export default function Messages() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-baseline mb-0.5">
+                    <div className="flex justify-between items-baseline mb-0.5 gap-2">
                       <p className={`font-semibold text-[15px] truncate ${chat.unread > 0 ? "text-white" : "text-slate-200"}`}>
                         {chat.name}
                       </p>
-                      <span className="text-xs text-slate-500 shrink-0 ml-2">{chat.updatedAt || ""}</span>
+                      <span className={`text-xs shrink-0 ${chat.unread > 0 ? "text-[#3b82f6] font-semibold" : "text-slate-500"}`}>
+                        {chat.updatedAt || ""}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {chat.unread > 0 && (
+                        <span className="material-symbols-outlined text-[16px] text-[#3b82f6] shrink-0">mark_chat_unread</span>
+                      )}
                       <p className={`text-[13px] truncate ${chat.unread > 0 ? "text-white font-medium" : "text-slate-400"}`}>
                         {chat.lastMessage || "Sent a message"}
                       </p>
@@ -102,8 +107,11 @@ export default function Messages() {
                   </div>
 
                   {chat.unread > 0 && (
-                    <div className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-[#3b82f6] text-[10px] font-bold text-white shadow-[0_0_8px_rgba(59,130,246,0.5)]">
-                      {chat.unread}
+                    <div
+                      className="shrink-0 min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#3b82f6] text-[11px] font-bold text-white shadow-[0_0_8px_rgba(59,130,246,0.5)] flex items-center justify-center"
+                      aria-label={`${chat.unread} unread messages`}
+                    >
+                      {chat.unread > 99 ? "99+" : chat.unread}
                     </div>
                   )}
                 </Link>

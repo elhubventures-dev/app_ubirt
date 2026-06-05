@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { dataProvider } from "@/api/dataProvider";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
+import { playNotificationSound } from "@/lib/notificationSound";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useConversations() {
@@ -16,7 +17,7 @@ export function useConversation(chatId) {
     queryKey: ["conversation", chatId],
     queryFn: () => dataProvider.getConversation(chatId),
     enabled: Boolean(chatId),
-    refetchInterval: isSupabaseConfigured() ? 60_000 : false,
+    refetchInterval: isSupabaseConfigured() ? 30_000 : false,
   });
 }
 
@@ -36,8 +37,19 @@ export function useChatMessages(chatId) {
     refetchInterval: isSupabaseConfigured() ? false : 1200,
   });
 
-  const [peerOnlineAt, setPeerOnlineAt] = React.useState(null);
+  const [peerPresent, setPeerPresent] = React.useState(false);
   const [realtimeTyping, setRealtimeTyping] = React.useState(false);
+
+  useEffect(() => {
+    if (!chatId || !dataProvider.markConversationRead) return undefined;
+
+    dataProvider
+      .markConversationRead(chatId)
+      .then(() => queryClient.invalidateQueries({ queryKey: ["conversations"] }))
+      .catch(() => {});
+
+    return undefined;
+  }, [chatId, queryClient]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -54,6 +66,9 @@ export function useChatMessages(chatId) {
           if (old.some(m => m.id === newMsg.id)) return old;
           return [...old, newMsg];
         });
+        if (newMsg.role === "other") {
+          playNotificationSound("message");
+        }
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
       }) || (() => {});
     } catch (e) {
@@ -63,20 +78,18 @@ export function useChatMessages(chatId) {
     try {
       // Subscribe to presence
       unsubscribePresence = dataProvider.subscribeToPresence(chatId, (state) => {
-        let peerOnline = null;
+        let present = false;
         let peerTyping = false;
         for (const key in state) {
           state[key].forEach((presence) => {
             if (presence.user_id === user?.id) return;
-            if (presence.online_at) {
-              peerOnline = presence.online_at;
-            }
+            present = true;
             if (presence.typing) {
               peerTyping = true;
             }
           });
         }
-        setPeerOnlineAt(peerOnline);
+        setPeerPresent(present);
         setRealtimeTyping(peerTyping);
       }) || (() => {});
     } catch (e) {
@@ -104,7 +117,7 @@ export function useChatMessages(chatId) {
   return {
     ...messagesQuery,
     isTyping: isSupabaseConfigured() ? realtimeTyping : (typingQuery.data ?? false),
-    peerOnlineAt,
+    peerPresent,
     sendMessage: sendMutation.mutateAsync,
     isSending: sendMutation.isPending,
     updateTyping: (isTyping) => dataProvider.updateTypingStatus(chatId, isTyping),

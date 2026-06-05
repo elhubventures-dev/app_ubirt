@@ -350,7 +350,19 @@ export const mockApi = {
   },
   async getConversations() {
     await wait();
-    return conversations;
+    return [...conversations].sort((a, b) => {
+      const aTime = a.sortAt ? new Date(a.sortAt).getTime() : 0;
+      const bTime = b.sortAt ? new Date(b.sortAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  },
+  async markConversationRead(chatId) {
+    await wait(40);
+    conversations = conversations.map((c) =>
+      c.id === chatId ? { ...c, unread: 0, lastReadAt: new Date().toISOString() } : c
+    );
+    persistState();
+    return true;
   },
   async getConversation(chatId) {
     await wait(80);
@@ -386,6 +398,7 @@ export const mockApi = {
       name: user.name,
       lastMessage: "Say hello!",
       updatedAt: "now",
+      sortAt: new Date().toISOString(),
       unread: 0,
     };
     conversations = [chat, ...conversations];
@@ -421,8 +434,9 @@ export const mockApi = {
       [chatId]: [...(messagesByChat[chatId] ?? []), message],
     };
     typingByChat = { ...typingByChat, [chatId]: true };
+    const now = new Date().toISOString();
     conversations = conversations.map((c) =>
-      c.id === chatId ? { ...c, lastMessage: text, updatedAt: "now", unread: 0 } : c
+      c.id === chatId ? { ...c, lastMessage: text, updatedAt: "now", sortAt: now, unread: 0 } : c
     );
     persistState();
     window.setTimeout(() => {
@@ -445,8 +459,11 @@ export const mockApi = {
         [chatId]: [...(messagesByChat[chatId] ?? []), reply],
       };
       typingByChat = { ...typingByChat, [chatId]: false };
+      const replyAt = new Date().toISOString();
       conversations = conversations.map((c) =>
-        c.id === chatId ? { ...c, lastMessage: reply.text, updatedAt: "now", unread: c.unread + 1 } : c
+        c.id === chatId
+          ? { ...c, lastMessage: reply.text, updatedAt: "now", sortAt: replyAt, unread: (c.unread ?? 0) + 1 }
+          : c
       );
       persistState();
     }, 1500);
@@ -597,6 +614,10 @@ export const mockApi = {
   async getNotifications() {
     await wait();
     return notifications;
+  },
+  async resolveNotificationLink(item) {
+    const { getNotificationPath } = await import("@/lib/notificationLinks");
+    return getNotificationPath(item);
   },
   async markNotificationRead(notificationId) {
     await wait();

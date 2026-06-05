@@ -5,6 +5,7 @@ import { dataProvider } from "@/api/dataProvider";
 import { getPreference } from "@/lib/preferences";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
+import { playNotificationSound } from "@/lib/notificationSound";
 
 export function usePushNotifications() {
   const [pushToken, setPushToken] = useState(null);
@@ -73,6 +74,8 @@ export function usePushNotifications() {
       "pushNotificationReceived",
       (notification) => {
         console.log("Push received:", notification);
+        const type = notification.data?.type;
+        playNotificationSound(type === "message" ? "message" : "default");
         toast({
           title: notification.title || "New Notification",
           description: notification.body || "Tap to view",
