@@ -17,8 +17,19 @@ export function getOAuthRedirectUrl() {
   if (isNativePlatform()) {
     return NATIVE_OAUTH_REDIRECT;
   }
-  const base = import.meta.env.VITE_APP_URL || window.location.origin;
+  // Always return to the same host the user started on (avoids www vs apex PKCE mismatch).
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}/`;
+  }
+  const base = import.meta.env.VITE_APP_URL || "";
   return `${base.replace(/\/$/, "")}/`;
+}
+
+/** Web OAuth callback still in the URL (PKCE code or implicit tokens). */
+export function hasPendingWebOAuth() {
+  if (isNativePlatform() || typeof window === "undefined") return false;
+  const { search, hash } = window.location;
+  return search.includes("code=") || hash.includes("access_token=");
 }
 
 export function isOAuthCallbackUrl(url) {

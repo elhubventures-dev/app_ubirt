@@ -39,16 +39,16 @@ import JoinGroup from "./pages/JoinGroup";
 
 const LOGO_URL = "/pwa-192x192.png";
 
-/** Always mounted so OAuth deep links and push registration work from /login. */
+/** Always mounted so OAuth deep links work from /login. */
 function NativeBootstrap() {
   useNativeShell();
-  usePushNotifications();
   return null;
 }
 
 const AuthenticatedApp = () => {
   const { user, isLoadingAuth, isLoadingPublicSettings, authError, isLiveAuth, retryAuth } = useAuth();
 
+  usePushNotifications();
   useLastSeenHeartbeat();
   useRealtimeNotifications();
 
@@ -146,22 +146,24 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <NativeBootstrap />
-        <PageTracker />
-        <ToastProvider>
-          <QueryClientProvider client={queryClientInstance}>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/*" element={<ErrorBoundary><AuthenticatedApp /></ErrorBoundary>} />
-            </Routes>
-            <Toaster />
-          </QueryClientProvider>
-        </ToastProvider>
-      </AuthProvider>
-    </Router>
+    <ErrorBoundary>
+      <Router>
+        <AuthProvider>
+          <NativeBootstrap />
+          <PageTracker />
+          <ToastProvider>
+            <QueryClientProvider client={queryClientInstance}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/*" element={<AuthenticatedApp />} />
+              </Routes>
+              <Toaster />
+            </QueryClientProvider>
+          </ToastProvider>
+        </AuthProvider>
+      </Router>
+    </ErrorBoundary>
   );
 }
 

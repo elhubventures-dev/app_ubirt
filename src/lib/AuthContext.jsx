@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ensureUserProfile, getAuthAvatarUrl, getAuthDisplayName, getOAuthRedirectUrl } from "@/lib/authHelpers";
-import { isNativePlatform } from "@/lib/platform";
+import { hasPendingWebOAuth, isNativePlatform } from "@/lib/platform";
 import { resetAnalyticsUser } from "@/lib/monitoring";
 import { getApiUrl } from "@/lib/apiBase";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
@@ -125,6 +125,11 @@ export function AuthProvider({ children }) {
       // Update React auth state synchronously so native OAuth navigation does not
       // briefly hit AuthenticatedApp with stale auth_required and bounce to /login.
       if (event === "INITIAL_SESSION") {
+        // OAuth redirect lands with ?code= before Supabase finishes PKCE exchange.
+        // Do not treat a null session as signed-out yet or the code is dropped.
+        if (!session?.user && hasPendingWebOAuth()) {
+          return;
+        }
         setUserFromSession(session, setUser, setAuthError);
         finishBootstrap();
         if (session?.user) {
@@ -142,6 +147,7 @@ export function AuthProvider({ children }) {
       }
 
       if (!session?.user) {
+        if (hasPendingWebOAuth()) return;
         setUser(null);
         setAuthError({ type: "auth_required" });
         return;
@@ -169,16 +175,27 @@ export function AuthProvider({ children }) {
       }, 0);
     });
 
-    // If INITIAL_SESSION never fires (rare), stop blocking the UI.
+    const pendingOAuth = hasPendingWebOAuth();
+
+    // If auth never settles (or OAuth exchange fails), stop blocking the UI.
     const safetyTimer = setTimeout(() => {
       if (!active || bootstrappedRef.current) return;
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (!active || bootstrappedRef.current) return;
-        setUserFromSession(session, setUser, setAuthError);
-        if (session?.user) hydrateProfile(session.user);
+        if (!session?.user && hasPendingWebOAuth()) {
+          setAuthError({
+            type: "auth_error",
+            message: "Sign-in could not be completed. Please try again.",
+          });
+          window.history.replaceState(null, "", "/login");
+          navigate("/login", { replace: true });
+        } else {
+          setUserFromSession(session, setUser, setAuthError);
+          if (session?.user) hydrateProfile(session.user);
+        }
         finishBootstrap();
       });
-    }, 5000);
+    }, pendingOAuth ? 15000 : 5000);
 
     return () => {
       active = false;
