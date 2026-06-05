@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ensureUserProfile, getAuthAvatarUrl, getAuthDisplayName, getOAuthRedirectUrl } from "@/lib/authHelpers";
-import { hasPendingWebOAuth, isNativePlatform } from "@/lib/platform";
+import { hasNativeWebviewOAuthCallback, hasPendingWebOAuth, isNativePlatform } from "@/lib/platform";
 import { resetAnalyticsUser } from "@/lib/monitoring";
 import { getApiUrl } from "@/lib/apiBase";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
@@ -127,7 +127,7 @@ export function AuthProvider({ children }) {
       if (event === "INITIAL_SESSION") {
         // OAuth redirect lands with ?code= before Supabase finishes PKCE exchange.
         // Do not treat a null session as signed-out yet or the code is dropped.
-        if (!session?.user && hasPendingWebOAuth()) {
+        if (!session?.user && (hasPendingWebOAuth() || hasNativeWebviewOAuthCallback())) {
           return;
         }
         setUserFromSession(session, setUser, setAuthError);
@@ -147,7 +147,7 @@ export function AuthProvider({ children }) {
       }
 
       if (!session?.user) {
-        if (hasPendingWebOAuth()) return;
+        if (hasPendingWebOAuth() || hasNativeWebviewOAuthCallback()) return;
         setUser(null);
         setAuthError({ type: "auth_required" });
         return;
@@ -162,7 +162,12 @@ export function AuthProvider({ children }) {
           window.location.hash.includes("access_token") ||
           window.location.search.includes("code=");
         if (fromOAuth) {
-          if (!isNativePlatform()) {
+          if (isNativePlatform()) {
+            import("@capacitor/browser")
+              .then(({ Browser }) => Browser.close().catch(() => {}))
+              .catch(() => {});
+            window.history.replaceState(null, "", "/");
+          } else {
             window.history.replaceState(null, "", window.location.pathname || "/");
           }
           navigate("/", { replace: true });

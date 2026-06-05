@@ -4,7 +4,9 @@ This project supports iOS/Android with Capacitor.
 
 ## 1) Install and sync
 
-The native app loads the live web app from `https://app.ubirtai.site` (see `capacitor.config.json` `server.url`), so Messages/Group Chat UI updates ship with your Vercel deploy—rebuild the store app only when changing native plugins or permissions.
+The native app bundles the Vite `dist` output. After UI changes (e.g. group chat), run `npm run build:mobile` and reinstall the app on your device.
+
+**OAuth:** Supabase must allow `com.elhubventures.ubirt://login` as a redirect URL. Do not set `server.url` to the production website — that breaks Google sign-in return to the app.
 
 ```bash
 npm install

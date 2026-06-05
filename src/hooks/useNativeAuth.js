@@ -76,6 +76,10 @@ async function completeOAuthFromUrl(url) {
   return { completed: true };
 }
 
+async function closeOAuthBrowser() {
+  await Browser.close().catch(() => {});
+}
+
 /** Handles OAuth deep-link returns on iOS/Android (PKCE + implicit). */
 export function useNativeAuth() {
   const navigate = useNavigate();
@@ -87,10 +91,13 @@ export function useNativeAuth() {
       try {
         const { completed } = await completeOAuthFromUrl(url);
         if (completed) {
+          await closeOAuthBrowser();
+          window.history.replaceState(null, "", "/");
           navigate("/", { replace: true });
         }
       } catch (error) {
         console.error("OAuth deep link failed:", error);
+        await closeOAuthBrowser();
         window.dispatchEvent(
           new CustomEvent("ubirt:native-oauth-error", {
             detail: { message: error.message || "Google sign-in failed." },
@@ -110,6 +117,42 @@ export function useNativeAuth() {
 
     return () => {
       listener.then((handle) => handle.remove());
+    };
+  }, [navigate]);
+
+  // Failsafe: if OAuth lands on a web URL inside the WebView instead of the app deep link.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return undefined;
+
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (!code) return undefined;
+
+    let active = true;
+    (async () => {
+      try {
+        const supabase = getSupabase();
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) throw error;
+        if (!active) return;
+        await closeOAuthBrowser();
+        window.history.replaceState(null, "", "/");
+        navigate("/", { replace: true });
+      } catch (error) {
+        console.error("Native WebView OAuth exchange failed:", error);
+        await closeOAuthBrowser();
+        if (active) {
+          window.dispatchEvent(
+            new CustomEvent("ubirt:native-oauth-error", {
+              detail: { message: error.message || "Google sign-in failed." },
+            })
+          );
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
     };
   }, [navigate]);
 }

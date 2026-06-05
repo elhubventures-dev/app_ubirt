@@ -3,7 +3,6 @@
   "appName": "UBIRT",
   "webDir": "dist",
   "server": {
-    "url": "https://app.ubirtai.site",
     "androidScheme": "https"
   },
   "plugins": {

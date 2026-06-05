@@ -14,7 +14,8 @@ export function getNativePlatform() {
 
 /** Base URL for auth redirects — custom scheme on native, web URL otherwise. */
 export function getOAuthRedirectUrl() {
-  if (isNativePlatform()) {
+  const platform = getNativePlatform();
+  if (platform === "ios" || platform === "android") {
     return NATIVE_OAUTH_REDIRECT;
   }
   // Always return to the same host the user started on (avoids www vs apex PKCE mismatch).
@@ -25,11 +26,17 @@ export function getOAuthRedirectUrl() {
   return `${base.replace(/\/$/, "")}/`;
 }
 
-/** Web OAuth callback still in the URL (PKCE code or implicit tokens). */
+/** OAuth callback still in the URL (PKCE code or implicit tokens). */
 export function hasPendingWebOAuth() {
-  if (isNativePlatform() || typeof window === "undefined") return false;
+  if (typeof window === "undefined") return false;
   const { search, hash } = window.location;
   return search.includes("code=") || hash.includes("access_token=");
+}
+
+/** Native app received a web-style OAuth callback in the WebView (misconfigured redirect). */
+export function hasNativeWebviewOAuthCallback() {
+  if (!isNativePlatform() || typeof window === "undefined") return false;
+  return hasPendingWebOAuth();
 }
 
 export function isOAuthCallbackUrl(url) {
