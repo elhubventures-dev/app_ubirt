@@ -7,7 +7,7 @@ import { dataProvider } from "@/api/dataProvider";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { useToast } from "@/components/ui/use-toast";
 import { usePaystackPayment } from "react-paystack";
-import PageHeader from "@/components/layout/PageHeader";
+import { COIN_PACKAGES } from "@/lib/coinPackages";
 import {
   getActiveGatewayLabel,
   getPaystackAmount,
@@ -28,6 +28,16 @@ export default function Wallet() {
   const [purchaseError, setPurchaseError] = useState("");
   const [convertAmount, setConvertAmount] = useState("");
   const [isConverting, setIsConverting] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  const { data: withdrawalRequests = [] } = useQuery({
+    queryKey: ["withdrawal-requests"],
+    queryFn: () => dataProvider.getWithdrawalRequests(),
+  });
 
   const { data: wallet = EMPTY_WALLET } = useQuery({
     queryKey: ["wallet-balance"],
@@ -174,12 +184,64 @@ export default function Wallet() {
     }
   };
 
+  const handleWithdraw = async () => {
+    const amount = parseInt(withdrawAmount, 10);
+    if (!amount || amount < 100) {
+      toast({
+        title: "Minimum 100 gift coins",
+        description: "Enter at least 100 gift coins to request a withdrawal.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!bankName.trim() || !accountName.trim() || !accountNumber.trim()) {
+      toast({
+        title: "Bank details required",
+        description: "Enter bank name, account name, and account number.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsWithdrawing(true);
+    try {
+      await dataProvider.requestWithdrawal({
+        amount,
+        payoutMethod: "bank",
+        payoutDetails: {
+          bankName: bankName.trim(),
+          accountName: accountName.trim(),
+          accountNumber: accountNumber.trim(),
+        },
+      });
+      setWithdrawAmount("");
+      queryClient.invalidateQueries({ queryKey: ["withdrawal-requests"] });
+      toast({
+        title: "Withdrawal requested",
+        description: "We will review your payout within 3–5 business days.",
+      });
+    } catch (err) {
+      toast({
+        title: "Request failed",
+        description: err.message || "Unable to submit withdrawal.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#101822] text-white flex flex-col relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-[#0a111a] via-[#101822] to-[#152336] z-0" />
       <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#f59e0b]/20 blur-[120px] rounded-full z-0 pointer-events-none" />
 
-      <PageHeader onBack={() => navigate(-1)} title="Wallet" className="bg-[#101822]/50" />
+      <header className="relative z-10 px-4 pt-[calc(env(safe-area-inset-top)+0.25rem)] pb-2 flex items-center border-b border-white/5 bg-[#101822]/50 backdrop-blur-md">
+        <button onClick={() => navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors mr-4">
+          <span className="material-symbols-outlined">arrow_back</span>
+        </button>
+        <h1 className="text-xl font-bold flex-1 text-center pr-10">Wallet</h1>
+      </header>
 
       <main className="flex-1 relative z-10 p-6 max-w-md mx-auto w-full flex flex-col gap-6 pb-10">
         <div className="grid grid-cols-1 gap-4">
@@ -226,7 +288,7 @@ export default function Wallet() {
           <div>
             <h2 className="text-lg font-bold">Convert Gift Coins</h2>
             <p className="text-xs text-slate-400 mt-1">
-              Move gift coins into your platform wallet to spend on the app. Withdrawals coming soon.
+              Move gift coins into your platform wallet to spend on the app, or request a payout below.
             </p>
           </div>
           <div className="flex gap-2">
@@ -256,6 +318,65 @@ export default function Wallet() {
             >
               Convert all {giftCoins.toLocaleString()} gift coins
             </button>
+          ) : null}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+          className="rounded-2xl bg-white/5 border border-white/10 p-4 flex flex-col gap-3"
+        >
+          <div>
+            <h2 className="text-lg font-bold">Withdraw gift earnings</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Minimum 100 gift coins. Payouts are reviewed manually (3–5 business days).
+            </p>
+          </div>
+          <input
+            type="number"
+            min="100"
+            max={giftCoins}
+            value={withdrawAmount}
+            onChange={(e) => setWithdrawAmount(e.target.value)}
+            placeholder="Amount (gift coins)"
+            className="w-full rounded-xl bg-[#0d1420] border border-white/10 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500/50"
+          />
+          <input
+            value={bankName}
+            onChange={(e) => setBankName(e.target.value)}
+            placeholder="Bank name"
+            className="w-full rounded-xl bg-[#0d1420] border border-white/10 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500/50"
+          />
+          <input
+            value={accountName}
+            onChange={(e) => setAccountName(e.target.value)}
+            placeholder="Account holder name"
+            className="w-full rounded-xl bg-[#0d1420] border border-white/10 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500/50"
+          />
+          <input
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(e.target.value)}
+            placeholder="Account number"
+            className="w-full rounded-xl bg-[#0d1420] border border-white/10 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500/50"
+          />
+          <PrimaryButton
+            onClick={handleWithdraw}
+            disabled={isWithdrawing || giftCoins < 100}
+            className="rounded-xl w-full"
+          >
+            {isWithdrawing ? "Submitting..." : "Request withdrawal"}
+          </PrimaryButton>
+          {withdrawalRequests.length > 0 ? (
+            <div className="pt-2 border-t border-white/10 space-y-2">
+              <p className="text-xs font-semibold text-slate-400 uppercase">Recent requests</p>
+              {withdrawalRequests.slice(0, 3).map((req) => (
+                <div key={req.id} className="flex justify-between text-sm text-slate-300">
+                  <span>{req.amount.toLocaleString()} coins</span>
+                  <span className="capitalize text-slate-400">{req.status}</span>
+                </div>
+              ))}
+            </div>
           ) : null}
         </motion.div>
 

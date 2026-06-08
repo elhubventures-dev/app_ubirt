@@ -391,9 +391,12 @@ export const mockApi = {
       avatar: null,
     }));
   },
-  async getConversations() {
+  async getConversations(options = {}) {
     await wait();
-    return [...conversations].sort((a, b) => {
+    const includeArchived = Boolean(options.includeArchived);
+    return [...conversations]
+      .filter((c) => (includeArchived ? c.archived : !c.archived))
+      .sort((a, b) => {
       const aTime = a.sortAt ? new Date(a.sortAt).getTime() : 0;
       const bTime = b.sortAt ? new Date(b.sortAt).getTime() : 0;
       return bTime - aTime;
@@ -401,9 +404,8 @@ export const mockApi = {
   },
   async markConversationRead(chatId) {
     await wait(40);
-    const readAt = new Date().toISOString();
     conversations = conversations.map((c) =>
-      c.id === chatId ? { ...c, unread: 0, lastReadAt: readAt } : c
+      c.id === chatId ? { ...c, unread: 0, lastReadAt: new Date().toISOString() } : c
     );
     persistState();
     return true;
@@ -422,6 +424,10 @@ export const mockApi = {
         canManage: true,
         inviteCode: "mockinvite",
         members: [],
+        memberReads: [],
+        chatTheme: "default",
+        isMuted: false,
+        showReadReceipts: true,
       };
     }
     return {
@@ -432,7 +438,11 @@ export const mockApi = {
       username: chat?.username ?? null,
       avatar: chat?.avatar ?? null,
       lastSeenAt: chat?.lastSeenAt ?? new Date().toISOString(),
-      peerLastReadAt: chat?.peerLastReadAt ?? null,
+      peerLastReadAt: chat?.lastReadAt ?? null,
+      peerShowReadReceipts: true,
+      chatTheme: "default",
+      isMuted: false,
+      showReadReceipts: true,
     };
   },
   async updateLastSeen() {
@@ -525,9 +535,6 @@ export const mockApi = {
   subscribeToMessages(chatId, handlers) {
     return () => {};
   },
-  subscribeToReadReceipts() {
-    return () => {};
-  },
   async deleteMessage(messageId, scope = "me") {
     await wait(80);
     if (scope === "me") {
@@ -564,21 +571,26 @@ export const mockApi = {
   async updateTypingStatus(chatId, isTyping) {
     return true;
   },
-  async sendMessage(chatId, text, attachment) {
+  async sendMessage(chatId, text, attachment, options = {}) {
     await wait();
     const isVoice = attachment?.type === "audio";
     const message = {
       id: `m-${Date.now()}`,
       role: "me",
-      text: isVoice ? "Voice message" : text,
+      text: options.sharedPostId ? "Shared a post" : isVoice ? "Voice message" : text,
       status: "sent",
-      createdAt: new Date().toISOString(),
       mediaUrl: isVoice ? URL.createObjectURL(attachment.file) : null,
       mediaType: isVoice ? "audio" : null,
       mediaDuration:
         isVoice && attachment.durationMs > 0
           ? Math.max(1, Math.round(attachment.durationMs / 100) / 10)
           : null,
+      replyToId: options.replyToId ?? null,
+      replyTo: null,
+      sharedPostId: options.sharedPostId ?? null,
+      sharedPost: options.sharedPostId ? { id: options.sharedPostId, caption: "Shared post" } : null,
+      reactions: [],
+      createdAt: new Date().toISOString(),
     };
     messagesByChat = {
       ...messagesByChat,
@@ -608,28 +620,22 @@ export const mockApi = {
       persistState();
     }, 900);
     window.setTimeout(() => {
-      const replyAt = new Date().toISOString();
       const reply = {
         id: `r-${Date.now()}`,
         role: "other",
         text: "Nice one. I will review and circle back.",
-        createdAt: replyAt,
       };
       messagesByChat = {
         ...messagesByChat,
-        [chatId]: [
-          ...(messagesByChat[chatId] ?? []).map((msg) =>
-            msg.role === "me" ? { ...msg, status: "read" } : msg
-          ),
-          reply,
-        ],
+        [chatId]: [...(messagesByChat[chatId] ?? []), reply],
       };
+      typingByChat = { ...typingByChat, [chatId]: false };
+      const replyAt = new Date().toISOString();
       conversations = conversations.map((c) =>
         c.id === chatId
-          ? { ...c, lastMessage: reply.text, updatedAt: "now", sortAt: replyAt, unread: (c.unread ?? 0) + 1, peerLastReadAt: replyAt }
+          ? { ...c, lastMessage: reply.text, updatedAt: "now", sortAt: replyAt, unread: (c.unread ?? 0) + 1 }
           : c
       );
-      typingByChat = { ...typingByChat, [chatId]: false };
       persistState();
     }, 1500);
     return message;
@@ -846,5 +852,168 @@ export const mockApi = {
       website: mockProfileExtras.website,
       location: mockProfileExtras.location,
     };
+  },
+
+  async getBlockedUserIds() {
+    await wait();
+    return [];
+  },
+
+  async blockUser() {
+    await wait();
+    return true;
+  },
+
+  async unblockUser() {
+    await wait();
+    return true;
+  },
+
+  async isUserBlocked() {
+    await wait();
+    return false;
+  },
+
+  async submitReport() {
+    await wait();
+    return true;
+  },
+
+  async getNotificationPreferences() {
+    await wait();
+    return {
+      inApp: true,
+      likes: true,
+      comments: true,
+      messages: true,
+      follows: true,
+      gifts: true,
+    };
+  },
+
+  async updateNotificationPreferences(prefs) {
+    await wait();
+    return prefs;
+  },
+
+  async searchMessages(chatId, query) {
+    await wait();
+    const q = query?.trim()?.toLowerCase();
+    if (!q) return [];
+    return (messagesByChat[chatId] ?? []).filter((m) => m.text?.toLowerCase().includes(q));
+  },
+
+  async toggleMessageReaction(messageId, emoji) {
+    await wait();
+    for (const chatId of Object.keys(messagesByChat)) {
+      const list = messagesByChat[chatId] ?? [];
+      const idx = list.findIndex((m) => m.id === messageId);
+      if (idx === -1) continue;
+      const msg = list[idx];
+      const reactions = [...(msg.reactions ?? [])];
+      const existing = reactions.find((r) => r.mine);
+      if (existing?.emoji === emoji) {
+        msg.reactions = reactions.filter((r) => !r.mine);
+      } else {
+        const filtered = reactions.filter((r) => !r.mine);
+        filtered.push({ emoji, count: 1, mine: true, userIds: ["me"] });
+        msg.reactions = filtered;
+      }
+      messagesByChat = { ...messagesByChat, [chatId]: [...list] };
+      persistState();
+      return { removed: existing?.emoji === emoji, emoji };
+    }
+    return { removed: false, emoji };
+  },
+
+  subscribeToReadReceipts() {
+    return () => {};
+  },
+
+  subscribeToMessageReactions() {
+    return () => {};
+  },
+
+  async setConversationMuted(chatId, hours) {
+    await wait();
+    conversations = conversations.map((c) =>
+      c.id === chatId
+        ? {
+            ...c,
+            isMuted: hours > 0,
+            mutedUntil: hours > 0 ? new Date(Date.now() + hours * 3600000).toISOString() : null,
+          }
+        : c
+    );
+    persistState();
+    return { mutedUntil: hours > 0 ? conversations.find((c) => c.id === chatId)?.mutedUntil : null };
+  },
+
+  async setConversationArchived(chatId, archived = true) {
+    await wait();
+    conversations = conversations.map((c) => (c.id === chatId ? { ...c, archived: Boolean(archived) } : c));
+    persistState();
+    return { archived };
+  },
+
+  async updateChatTheme(chatId, theme) {
+    await wait();
+    return { theme };
+  },
+
+  async updateShowReadReceipts(show) {
+    await wait();
+    return { showReadReceipts: show };
+  },
+
+  async getShowReadReceipts() {
+    await wait();
+    return true;
+  },
+
+  async requestWithdrawal({ amount }) {
+    await wait();
+    return `wd-${amount}-${Date.now()}`;
+  },
+
+  async getWithdrawalRequests() {
+    await wait();
+    return [];
+  },
+
+  async updateGroupAvatar() {
+    await wait();
+    return null;
+  },
+
+  async repostPost(postId) {
+    await wait();
+    const original = feedPosts.find((p) => p.id === postId);
+    if (!original) throw new Error("Post not found");
+    const repost = {
+      ...original,
+      id: `repost-${Date.now()}`,
+      repostOf: postId,
+      originalUsername: original.username,
+      caption: original.caption,
+    };
+    feedPosts = [repost, ...feedPosts];
+    persistState();
+    return repost;
+  },
+
+  async pinPost(postId) {
+    await wait();
+    return true;
+  },
+
+  async unpinPost() {
+    await wait();
+    return true;
+  },
+
+  async getPostIdForUpload() {
+    await wait();
+    return null;
   },
 };

@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { ToastProvider } from "@/components/ui/use-toast";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClientInstance } from "@/lib/query-client";
-import { BrowserRouter as Router, Route, Routes, Navigate, Outlet, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes, Navigate } from "react-router-dom";
 import PageNotFound from "./lib/PageNotFound";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import UserNotRegisteredError from "@/components/UserNotRegisteredError";
@@ -36,16 +36,11 @@ import HashtagFeed from "./pages/HashtagFeed";
 import Analytics from "./pages/Analytics";
 import CommunityChat from "./pages/CommunityChat";
 import JoinGroup from "./pages/JoinGroup";
-import { useScrollRestore } from "@/hooks/useScrollRestore";
+import AIChat from "./pages/AIChat";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 
 const LOGO_URL = "/pwa-192x192.png";
-
-/** Restores window scroll for routes outside MainLayout. */
-function StandaloneScrollLayout() {
-  const location = useLocation();
-  useScrollRestore(location.pathname);
-  return <Outlet />;
-}
 
 /** Always mounted so OAuth deep links work from /login. */
 function NativeBootstrap() {
@@ -125,29 +120,27 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<Home />} />
         <Route path="/feed" element={<VideoFeed />} />
         <Route path="/messages" element={<Messages />} />
-        <Route path="/ai-chat" element={<Navigate to="/" replace />} />
+        <Route path="/ai-chat" element={<AIChat />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/search" element={<Search />} />
       </Route>
 
-      <Route element={<StandaloneScrollLayout />}>
-        <Route path="/chat/:id" element={<ChatDetail />} />
-        <Route path="/group/join/:code" element={<JoinGroup />} />
-        <Route path="/group/:id" element={<CommunityChat />} />
-        <Route path="/community/:id" element={<CommunityChat />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/upload" element={<Upload />} />
-        <Route path="/create" element={<Camera />} />
-        <Route path="/creator-studio" element={<CreatorStudio />} />
-        <Route path="/achievements" element={<Achievements />} />
-        <Route path="/wallet" element={<Wallet />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/user/:username/followers" element={<FollowList />} />
-        <Route path="/user/:username/following" element={<FollowList />} />
-        <Route path="/user/:username" element={<UserProfile />} />
-        <Route path="/tag/:tag" element={<HashtagFeed />} />
-      </Route>
+      <Route path="/chat/:id" element={<ChatDetail />} />
+      <Route path="/group/join/:code" element={<JoinGroup />} />
+      <Route path="/group/:id" element={<CommunityChat />} />
+      <Route path="/community/:id" element={<CommunityChat />} />
+      <Route path="/settings" element={<Settings />} />
+      <Route path="/upload" element={<Upload />} />
+      <Route path="/create" element={<Camera />} />
+      <Route path="/creator-studio" element={<CreatorStudio />} />
+      <Route path="/achievements" element={<Achievements />} />
+      <Route path="/wallet" element={<Wallet />} />
+      <Route path="/analytics" element={<Analytics />} />
+      <Route path="/user/:username/followers" element={<FollowList />} />
+      <Route path="/user/:username/following" element={<FollowList />} />
+      <Route path="/user/:username" element={<UserProfile />} />
+      <Route path="/tag/:tag" element={<HashtagFeed />} />
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>
@@ -166,6 +159,8 @@ function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/*" element={<AuthenticatedApp />} />
               </Routes>
               <Toaster />

@@ -1,10 +1,13 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useToast } from "@/components/ui/use-toast";
 import { playNotificationSound } from "@/lib/notificationSound";
+import { getPreference } from "@/lib/preferences";
+import { shouldShowInAppNotification } from "@/lib/notificationPreferences";
+import { dataProvider } from "@/api/dataProvider";
 
 export function useRealtimeNotifications() {
   const location = useLocation();
@@ -12,8 +15,16 @@ export function useRealtimeNotifications() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const { data: notificationPrefs } = useQuery({
+    queryKey: ["notification-preferences"],
+    queryFn: () => dataProvider.getNotificationPreferences(),
+    enabled: Boolean(user),
+    staleTime: 60_000,
+  });
+
   useEffect(() => {
     if (!user || !isSupabaseConfigured()) return undefined;
+    if (!getPreference("push", true)) return undefined;
 
     const supabase = getSupabase();
     const channel = supabase
@@ -41,6 +52,7 @@ export function useRealtimeNotifications() {
           }
 
           if (inThisChat) return;
+          if (!shouldShowInAppNotification(notificationPrefs, type)) return;
 
           playNotificationSound(type === "message" ? "message" : "default");
           toast({
@@ -54,5 +66,5 @@ export function useRealtimeNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, queryClient, toast, location.pathname]);
+  }, [user, queryClient, toast, location.pathname, notificationPrefs]);
 }

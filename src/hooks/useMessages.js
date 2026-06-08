@@ -1,14 +1,15 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { dataProvider } from "@/api/dataProvider";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
 import { playNotificationSound } from "@/lib/notificationSound";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-export function useConversations() {
+export function useConversations(options = {}) {
+  const includeArchived = Boolean(options.includeArchived);
   return useQuery({
-    queryKey: ["conversations"],
-    queryFn: dataProvider.getConversations,
+    queryKey: ["conversations", includeArchived ? "archived" : "inbox"],
+    queryFn: () => dataProvider.getConversations({ includeArchived }),
   });
 }
 
@@ -17,13 +18,14 @@ export function useConversation(chatId) {
     queryKey: ["conversation", chatId],
     queryFn: () => dataProvider.getConversation(chatId),
     enabled: Boolean(chatId),
-    refetchInterval: isSupabaseConfigured() ? 10_000 : false,
+    refetchInterval: isSupabaseConfigured() ? 30_000 : false,
   });
 }
 
 export function useChatMessages(chatId) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const reactionDebounceRef = useRef(null);
   const messagesQuery = useQuery({
     queryKey: ["messages", chatId],
     queryFn: () => dataProvider.getMessages(chatId),
@@ -55,13 +57,13 @@ export function useChatMessages(chatId) {
 
   useEffect(() => {
     if (!chatId) return;
-    
+
     let unsubscribeMessages = () => {};
     let unsubscribePresence = () => {};
-    let unsubscribeReadReceipts = () => {};
+    let unsubscribeRead = () => {};
+    let unsubscribeReactions = () => {};
 
     try {
-      // Subscribe to messages
       unsubscribeMessages = dataProvider.subscribeToMessages(chatId, {
         onInsert: (newMsg) => {
           queryClient.setQueryData(["messages", chatId], (old) => {
@@ -86,7 +88,6 @@ export function useChatMessages(chatId) {
     }
 
     try {
-      // Subscribe to presence
       unsubscribePresence = dataProvider.subscribeToPresence(chatId, (state) => {
         let present = false;
         let peerTyping = false;
@@ -117,25 +118,41 @@ export function useChatMessages(chatId) {
       console.warn("Failed to subscribe to presence:", e);
     }
 
-    try {
-      if (dataProvider.subscribeToReadReceipts) {
-        unsubscribeReadReceipts = dataProvider.subscribeToReadReceipts(chatId, () => {
+    if (dataProvider.subscribeToReadReceipts) {
+      try {
+        unsubscribeRead = dataProvider.subscribeToReadReceipts(chatId, () => {
           queryClient.invalidateQueries({ queryKey: ["conversation", chatId] });
-        }) || (() => {});
+        });
+      } catch (e) {
+        console.warn("Failed to subscribe to read receipts:", e);
       }
-    } catch (e) {
-      console.warn("Failed to subscribe to read receipts:", e);
+    }
+
+    if (dataProvider.subscribeToMessageReactions) {
+      try {
+        unsubscribeReactions = dataProvider.subscribeToMessageReactions(chatId, () => {
+          if (reactionDebounceRef.current) clearTimeout(reactionDebounceRef.current);
+          reactionDebounceRef.current = setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+          }, 300);
+        });
+      } catch (e) {
+        console.warn("Failed to subscribe to reactions:", e);
+      }
     }
 
     return () => {
       unsubscribeMessages();
       unsubscribePresence();
-      unsubscribeReadReceipts();
+      unsubscribeRead();
+      unsubscribeReactions();
+      if (reactionDebounceRef.current) clearTimeout(reactionDebounceRef.current);
     };
   }, [chatId, queryClient, user?.id]);
 
   const sendMutation = useMutation({
-    mutationFn: ({ text, attachment }) => dataProvider.sendMessage(chatId, text, attachment),
+    mutationFn: ({ text, attachment, replyToId, sharedPostId }) =>
+      dataProvider.sendMessage(chatId, text, attachment, { replyToId, sharedPostId }),
     onSuccess: (newMsg) => {
       queryClient.setQueryData(["messages", chatId], (old) => {
         if (!old) return [newMsg];
@@ -156,6 +173,18 @@ export function useChatMessages(chatId) {
     },
   });
 
+  const reactionMutation = useMutation({
+    mutationFn: ({ messageId, emoji }) => dataProvider.toggleMessageReaction(messageId, emoji),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+    },
+  });
+
+  const searchMessages = async (query) => {
+    if (!dataProvider.searchMessages) return [];
+    return dataProvider.searchMessages(chatId, query);
+  };
+
   return {
     ...messagesQuery,
     isTyping: isSupabaseConfigured() ? realtimeTyping : (typingQuery.data ?? false),
@@ -166,6 +195,8 @@ export function useChatMessages(chatId) {
     isSending: sendMutation.isPending,
     deleteMessage: deleteMutation.mutateAsync,
     isDeleting: deleteMutation.isPending,
+    toggleReaction: reactionMutation.mutateAsync,
+    searchMessages,
     updateTyping: (isTyping) => dataProvider.updateTypingStatus(chatId, isTyping),
   };
 }

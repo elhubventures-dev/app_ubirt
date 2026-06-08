@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
 import { useToast } from "@/components/ui/use-toast";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
@@ -6,7 +7,7 @@ import { InputField } from "@/components/ui/InputField";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
-import PageHeader from "@/components/layout/PageHeader";
+import { formatCount } from "@/lib/formatStats";
 
 export default function CreatorStudio() {
   const { data: analytics, isLoading: isLoadingAnalytics } = useQuery({
@@ -53,15 +54,16 @@ export default function CreatorStudio() {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden">
-      <PageHeader
-        backTo="/"
-        title="Analytics"
-        right={
-          <button type="button" className="min-w-11 min-h-11 flex items-center justify-center text-slate-400 hover:text-white rounded-full hover:bg-white/5 transition-colors">
-            <span className="material-symbols-outlined text-[24px]">calendar_today</span>
-          </button>
-        }
-      />
+      {/* Header */}
+      <header className="shrink-0 px-4 py-4 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between z-10 shadow-sm relative">
+        <Link to="/" className="text-[#3b82f6] flex items-center gap-1 hover:bg-white/5 rounded-full p-1.5 -ml-1.5 transition-colors">
+          <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
+        </Link>
+        <h1 className="text-base font-bold tracking-wide absolute left-1/2 -translate-x-1/2">Analytics</h1>
+        <button className="text-slate-400 p-2 hover:bg-white/5 rounded-full transition-colors">
+          <span className="material-symbols-outlined text-[24px]">calendar_today</span>
+        </button>
+      </header>
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto hide-scrollbar relative z-0">

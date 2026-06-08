@@ -1,14 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useChatMessages, useConversation } from "@/hooks/useMessages";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useToast } from "@/components/ui/use-toast";
-import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "@/components/layout/PageHeader";
 import GroupSettingsSheet from "@/components/messages/GroupSettingsSheet";
-import VoiceMessageBubble from "@/components/messages/VoiceMessageBubble";
-import MessageMeta from "@/components/messages/MessageMeta";
-import { useQueryClient } from "@tanstack/react-query";
+import ChatMessageList from "@/components/messages/ChatMessageList";
+import ChatOptionsSheet from "@/components/messages/ChatOptionsSheet";
+import { getChatTheme } from "@/lib/chatThemes";
+import { dataProvider } from "@/api/dataProvider";
 
 const QUICK_EMOJIS = ["😀", "😂", "❤️", "🔥", "👍", "🎉", "😮", "🙏", "💯", "✨"];
 
@@ -20,6 +22,11 @@ export default function CommunityChat() {
   const [text, setText] = useState(() => localStorage.getItem(draftKey) || "");
   const [showEmoji, setShowEmoji] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [replyTo, setReplyTo] = useState(null);
   const [menuMessageId, setMenuMessageId] = useState(null);
   const { data: conversation, refetch: refetchConversation } = useConversation(id);
   const {
@@ -29,16 +36,32 @@ export default function CommunityChat() {
     isSending,
     deleteMessage,
     isDeleting,
+    toggleReaction,
+    searchMessages,
     isTyping,
     typingUsers,
     onlineUsers,
     updateTyping,
   } = useChatMessages(id);
   const { toast } = useToast();
+  const theme = getChatTheme(conversation?.chatTheme);
   const scrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const voiceStartRef = useRef(false);
   const voice = useVoiceRecorder();
+
+  const chatMutation = useMutation({
+    mutationFn: async ({ type, ...payload }) => {
+      if (type === "mute") return dataProvider.setConversationMuted(id, payload.hours);
+      if (type === "archive") return dataProvider.setConversationArchived(id, payload.archived);
+      if (type === "theme") return dataProvider.updateChatTheme(id, payload.theme);
+      return null;
+    },
+    onSuccess: () => {
+      refetchConversation();
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
 
   useEffect(() => {
     if (conversation && conversation.type === "direct") {
@@ -46,35 +69,34 @@ export default function CommunityChat() {
     }
   }, [conversation, id, navigate]);
 
-  const handleTyping = (val) => {
-    setText(val);
-    localStorage.setItem(draftKey, val);
-
-    if (updateTyping) {
-      updateTyping(true);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        updateTyping(false);
-      }, 1500);
-    }
-  };
-
-  const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isTyping]);
 
   useEffect(() => {
-    if (!menuMessageId) return undefined;
-    const closeMenu = () => setMenuMessageId(null);
-    document.addEventListener("click", closeMenu);
-    return () => document.removeEventListener("click", closeMenu);
-  }, [menuMessageId]);
+    if (!showSearch || searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      return undefined;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        setSearchResults(await searchMessages(searchQuery.trim()));
+      } catch {
+        setSearchResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, showSearch, searchMessages]);
+
+  const handleTyping = (val) => {
+    setText(val);
+    localStorage.setItem(draftKey, val);
+    if (updateTyping) {
+      updateTyping(true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => updateTyping(false), 1500);
+    }
+  };
 
   const handleDeleteMessage = async (messageId, scope) => {
     setMenuMessageId(null);
@@ -93,17 +115,15 @@ export default function CommunityChat() {
       setText("");
       localStorage.removeItem(draftKey);
       setShowEmoji(false);
-      await sendMessage({ text: val });
-      requestAnimationFrame(() => scrollToBottom());
+      await sendMessage({ text: val, replyToId: replyTo?.id ?? null });
+      setReplyTo(null);
     } catch (err) {
       toast({ title: "Failed to send", description: err.message, variant: "destructive" });
       setText(val);
     }
   };
 
-  const appendEmoji = (emoji) => {
-    handleTyping(text + emoji);
-  };
+  const appendEmoji = (emoji) => handleTyping(text + emoji);
 
   const handleStartVoice = async () => {
     if (voiceStartRef.current || voice.isRecording) return;
@@ -112,13 +132,9 @@ export default function CommunityChat() {
       setShowEmoji(false);
       await voice.startRecording();
     } catch (err) {
-      const message =
-        err?.name === "NotAllowedError"
-          ? "Microphone access was denied. Allow microphone permission in your device settings."
-          : err.message || "Allow microphone access to send voice messages.";
       toast({
         title: "Microphone unavailable",
-        description: message,
+        description: err.message || "Allow microphone access to send voice messages.",
         variant: "destructive",
       });
     } finally {
@@ -128,11 +144,7 @@ export default function CommunityChat() {
 
   const handleSendVoice = async () => {
     if (!voice.blob || voice.blob.size < 500) {
-      toast({
-        title: "Recording too short",
-        description: "Hold the mic a little longer, then send again.",
-        variant: "destructive",
-      });
+      toast({ title: "Recording too short", variant: "destructive" });
       voice.reset();
       return;
     }
@@ -140,9 +152,10 @@ export default function CommunityChat() {
       await sendMessage({
         text: "",
         attachment: { type: "audio", file: voice.blob, durationMs: voice.durationMs },
+        replyToId: replyTo?.id ?? null,
       });
+      setReplyTo(null);
       voice.reset();
-      requestAnimationFrame(() => scrollToBottom());
     } catch (err) {
       toast({ title: "Failed to send voice", description: err.message, variant: "destructive" });
     }
@@ -151,6 +164,16 @@ export default function CommunityChat() {
   const handleSettingsUpdated = () => {
     refetchConversation();
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  };
+
+  const handleArchive = async (archived) => {
+    try {
+      await chatMutation.mutateAsync({ type: "archive", archived });
+      toast({ title: archived ? "Chat archived" : "Moved to inbox" });
+      if (archived) navigate("/messages");
+    } catch (err) {
+      toast({ title: "Could not update chat", description: err.message, variant: "destructive" });
+    }
   };
 
   const groupName = conversation?.name ?? "Group";
@@ -164,16 +187,12 @@ export default function CommunityChat() {
         : "Someone is typing...";
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
+    <div className={`flex flex-col h-[100dvh] ${theme.page} text-white overflow-hidden relative`}>
       <PageHeader
         backTo="/messages"
         centerInteractive
         center={
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            className="flex flex-col items-center cursor-pointer hover:opacity-90"
-          >
+          <button type="button" onClick={() => setShowSettings(true)} className="flex flex-col items-center cursor-pointer hover:opacity-90">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#3b82f6] to-purple-500 overflow-hidden shadow-sm mb-1 flex items-center justify-center">
               {conversation?.avatar ? (
                 <img src={conversation.avatar} alt="" className="w-full h-full object-cover" />
@@ -191,195 +210,85 @@ export default function CommunityChat() {
         right={
           <button
             type="button"
-            onClick={() => setShowSettings(true)}
+            onClick={() => setShowOptions(true)}
             className="min-w-11 min-h-11 flex items-center justify-center text-slate-400 hover:bg-white/5 rounded-full transition-colors"
           >
             <span className="material-symbols-outlined text-[24px]">more_horiz</span>
           </button>
         }
-        className="bg-gradient-to-r from-[#101822] to-[#152336]"
+        className={theme.header}
       />
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-3 pb-4 flex flex-col gap-1 z-0 hide-scrollbar">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="animate-spin-slow rounded-full h-8 w-8 border-t-2 border-b-2 border-[#3b82f6]" />
+      {showSearch && (
+        <div className="shrink-0 px-4 py-2 border-b border-white/5 bg-[#101822]/90 z-10">
+          <div className="flex items-center gap-2">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search messages..."
+              className="flex-1 bg-[#1a2332] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+              autoFocus
+            />
+            <button type="button" onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="text-slate-400 text-sm px-2">
+              Close
+            </button>
           </div>
-        ) : (
-          <AnimatePresence>
-            {messages.map((message, i) => {
-              const isMe = message.role === "me";
-              const nextMsg = messages[i + 1];
-              const prevMsg = messages[i - 1];
-              const sameSenderNext = nextMsg && nextMsg.senderId === message.senderId;
-              const sameSenderPrev = prevMsg && prevMsg.senderId === message.senderId;
-              const isLastInGroup = !sameSenderNext;
-              const isFirstInGroup = !sameSenderPrev;
-              const senderName = isMe ? "You" : message.senderName ?? "Member";
-              const senderAvatar =
-                message.senderAvatar ||
-                `https://api.dicebear.com/9.x/notionists/svg?seed=${message.senderId || senderName}`;
-
-              return (
-                <motion.div
-                  key={message.id}
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  layout
-                  className={`flex max-w-[85%] ${isMe ? "self-end" : "self-start"} ${!isLastInGroup ? "mb-0.5" : "mb-3"}`}
-                >
-                  {!isMe && isFirstInGroup && (
-                    <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden mr-2 shrink-0 mt-1">
-                      <img src={senderAvatar} alt="" className="w-full h-full object-cover" />
-                    </div>
-                  )}
-                  {!isMe && !isFirstInGroup && <div className="w-8 mr-2 shrink-0" />}
-
-                  <div className={`relative flex flex-col ${isMe ? "items-end" : "items-start"}`}>
-                    {!isMe && isFirstInGroup && (
-                      <span className="text-[10px] text-slate-400 mb-1 ml-1 font-semibold">{senderName}</span>
-                    )}
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMenuMessageId((current) => (current === message.id ? null : message.id));
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setMenuMessageId((current) => (current === message.id ? null : message.id));
-                        }
-                      }}
-                      className={`px-4 py-2.5 text-[15px] leading-relaxed shadow-sm cursor-pointer ${
-                        isMe
-                          ? "bg-[#3b82f6] text-white"
-                          : "bg-[#202938] text-slate-100 border border-white/5"
-                      } ${
-                        isMe
-                          ? `${isFirstInGroup ? "rounded-tl-2xl" : "rounded-tl-lg"} ${isFirstInGroup ? "rounded-tr-2xl" : "rounded-tr-lg"} ${isLastInGroup ? "rounded-br-sm" : "rounded-br-lg"} ${isLastInGroup ? "rounded-bl-2xl" : "rounded-bl-lg"}`
-                          : `${isFirstInGroup ? "rounded-tr-2xl" : "rounded-tr-lg"} ${isFirstInGroup ? "rounded-tl-2xl" : "rounded-tl-lg"} ${isLastInGroup ? "rounded-bl-sm" : "rounded-bl-lg"} ${isLastInGroup ? "rounded-br-2xl" : "rounded-br-lg"}`
-                      }`}
-                    >
-                      {message.mediaType === "audio" && message.mediaUrl ? (
-                        <VoiceMessageBubble
-                          url={message.mediaUrl}
-                          isMe={isMe}
-                          durationSeconds={message.mediaDuration ?? 0}
-                        />
-                      ) : (
-                        message.text
-                      )}
-                    </div>
-                    <AnimatePresence>
-                      {menuMessageId === message.id && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95, y: 4 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95, y: 4 }}
-                          className={`absolute z-20 top-full mt-1 ${isMe ? "right-0" : "left-0"}`}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex flex-col gap-1 min-w-[180px]">
-                            <button
-                              type="button"
-                              disabled={isDeleting}
-                              onClick={() => handleDeleteMessage(message.id, "me")}
-                              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#1a2332] border border-white/10 text-slate-200 text-xs font-semibold hover:bg-white/5 disabled:opacity-50 shadow-lg"
-                            >
-                              <span className="material-symbols-outlined text-[16px]">visibility_off</span>
-                              Delete for me
-                            </button>
-                            {isMe && (
-                              <button
-                                type="button"
-                                disabled={isDeleting}
-                                onClick={() => handleDeleteMessage(message.id, "everyone")}
-                                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#1a2332] border border-white/10 text-red-400 text-xs font-semibold hover:bg-red-500/10 disabled:opacity-50 shadow-lg"
-                              >
-                                <span className="material-symbols-outlined text-[16px]">delete</span>
-                                Delete for everyone
-                              </button>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                    {isLastInGroup && (
-                      <MessageMeta
-                        message={message}
-                        isMe={isMe}
-                        showStatus={isMe}
-                        isGroup
-                        memberReads={conversation?.memberReads}
-                      />
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        )}
-
-        <AnimatePresence>
-          {isTyping && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="px-4 pb-2 text-[10px] text-slate-400 font-medium flex items-center gap-1"
-            >
-              <div className="flex gap-0.5">
-                <span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-              </div>
-              {typingLabel}
-            </motion.div>
+          {searchResults.length > 0 && (
+            <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
+              {searchResults.map((msg) => (
+                <button key={msg.id} type="button" onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/5 text-xs text-slate-300 truncate">
+                  {msg.senderName}: {msg.text}
+                </button>
+              ))}
+            </div>
           )}
-        </AnimatePresence>
-      </div>
+        </div>
+      )}
 
-      <footer className="shrink-0 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 bg-[#0a0f16] border-t border-white/5 z-10">
+      <ChatMessageList
+        messages={messages}
+        isLoading={isLoading}
+        scrollRef={scrollRef}
+        conversation={conversation}
+        theme={theme}
+        isGroup
+        menuMessageId={menuMessageId}
+        setMenuMessageId={setMenuMessageId}
+        onReply={setReplyTo}
+        onDelete={handleDeleteMessage}
+        onToggleReaction={(messageId, emoji) => toggleReaction({ messageId, emoji })}
+        isDeleting={isDeleting}
+        isTyping={isTyping}
+        typingLabel={typingLabel}
+      />
+
+      <footer className={`shrink-0 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 ${theme.footer} border-t border-white/5 z-10`}>
+        {replyTo && (
+          <div className="mb-2 flex items-center justify-between gap-2 bg-[#1a2332] border border-white/10 rounded-xl px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-[10px] text-[#3b82f6] font-semibold">Replying to {replyTo.senderName ?? "message"}</p>
+              <p className="text-xs text-slate-300 truncate">{replyTo.mediaType === "audio" ? "Voice message" : replyTo.text}</p>
+            </div>
+            <button type="button" onClick={() => setReplyTo(null)} className="text-slate-400 shrink-0">
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+        )}
         {(voice.isRecording || voice.hasPreview) && (
           <div className="mb-2 flex items-center justify-between gap-3 bg-[#1a2332] border border-white/10 rounded-2xl px-4 py-3">
             <div className="flex items-center gap-3 min-w-0">
-              {voice.isRecording && (
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-              )}
+              {voice.isRecording && <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />}
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">
-                  {voice.isRecording ? "Recording..." : "Voice message ready"}
-                </p>
+                <p className="text-sm font-semibold text-white">{voice.isRecording ? "Recording..." : "Voice message ready"}</p>
                 <p className="text-xs text-slate-400">{voice.durationLabel}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={voice.cancelRecording}
-                className="px-3 py-1.5 rounded-full text-xs font-semibold text-slate-300 hover:bg-white/10"
-              >
-                Cancel
-              </button>
+              <button type="button" onClick={voice.cancelRecording} className="px-3 py-1.5 rounded-full text-xs font-semibold text-slate-300 hover:bg-white/10">Cancel</button>
               {voice.isRecording ? (
-                <button
-                  type="button"
-                  onClick={voice.stopRecording}
-                  className="px-3 py-1.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300 hover:bg-red-500/30"
-                >
-                  Stop
-                </button>
+                <button type="button" onClick={voice.stopRecording} className="px-3 py-1.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300">Stop</button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleSendVoice}
-                  disabled={isSending}
-                  className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
-                >
-                  Send
-                </button>
+                <button type="button" onClick={handleSendVoice} disabled={isSending} className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[#3b82f6] text-white disabled:opacity-50">Send</button>
               )}
             </div>
           </div>
@@ -387,37 +296,15 @@ export default function CommunityChat() {
         {showEmoji && (
           <div className="flex flex-wrap gap-2 bg-[#1a2332] border border-white/10 rounded-2xl p-3 mb-2">
             {QUICK_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => appendEmoji(emoji)}
-                className="text-xl hover:scale-110 transition-transform"
-              >
-                {emoji}
-              </button>
+              <button key={emoji} type="button" onClick={() => appendEmoji(emoji)} className="text-xl hover:scale-110 transition-transform">{emoji}</button>
             ))}
           </div>
         )}
         <form onSubmit={onSubmit} className="flex items-end gap-2 bg-[#1a2332] border border-white/10 rounded-3xl p-1.5 shadow-xl">
-          <button
-            type="button"
-            onClick={() => setShowEmoji((v) => !v)}
-            disabled={voice.isRecording || voice.hasPreview}
-            className="p-2.5 text-slate-400 hover:text-white transition-colors bg-[#253043] rounded-full shrink-0 disabled:opacity-40"
-          >
+          <button type="button" onClick={() => setShowEmoji((v) => !v)} disabled={voice.isRecording || voice.hasPreview} className="p-2.5 text-slate-400 hover:text-white bg-[#253043] rounded-full shrink-0 disabled:opacity-40">
             <span className="material-symbols-outlined text-[20px]">mood</span>
           </button>
-          <button
-            type="button"
-            onClick={voice.isRecording ? voice.stopRecording : handleStartVoice}
-            disabled={isSending || voice.hasPreview || Boolean(text.trim())}
-            className={`p-2.5 rounded-full shrink-0 transition-all disabled:opacity-40 ${
-              voice.isRecording
-                ? "bg-red-500 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]"
-                : "text-slate-400 hover:text-white bg-[#253043]"
-            }`}
-            aria-label={voice.isRecording ? "Stop recording" : "Record voice message"}
-          >
+          <button type="button" onClick={voice.isRecording ? voice.stopRecording : handleStartVoice} disabled={isSending || voice.hasPreview || Boolean(text.trim())} className={`p-2.5 rounded-full shrink-0 disabled:opacity-40 ${voice.isRecording ? "bg-red-500 text-white" : "text-slate-400 bg-[#253043]"}`}>
             <span className="material-symbols-outlined text-[20px]">{voice.isRecording ? "stop" : "mic"}</span>
           </button>
           <textarea
@@ -434,13 +321,7 @@ export default function CommunityChat() {
               }
             }}
           />
-          <button
-            type="submit"
-            disabled={isSending || !text.trim() || voice.isRecording || voice.hasPreview}
-            className={`p-2.5 rounded-full shrink-0 flex items-center justify-center transition-all ${
-              text.trim() ? "bg-[#3b82f6] text-white shadow-[0_0_10px_rgba(59,130,246,0.6)] hover:bg-[#2563eb]" : "bg-[#253043] text-slate-500"
-            }`}
-          >
+          <button type="submit" disabled={isSending || !text.trim() || voice.isRecording || voice.hasPreview} className={`p-2.5 rounded-full shrink-0 ${text.trim() ? "bg-[#3b82f6] text-white" : "bg-[#253043] text-slate-500"}`}>
             <span className="material-symbols-outlined text-[20px] ml-0.5">send</span>
           </button>
         </form>
@@ -453,6 +334,16 @@ export default function CommunityChat() {
             onClose={() => setShowSettings(false)}
             onUpdated={handleSettingsUpdated}
             onLeave={() => navigate("/messages", { replace: true })}
+          />
+        )}
+        {showOptions && (
+          <ChatOptionsSheet
+            conversation={conversation}
+            onClose={() => setShowOptions(false)}
+            onSearch={() => setShowSearch(true)}
+            onMute={(hours) => chatMutation.mutateAsync({ type: "mute", hours }).then(() => toast({ title: hours ? "Notifications muted" : "Notifications unmuted" }))}
+            onArchive={handleArchive}
+            onThemeChange={(themeId) => chatMutation.mutateAsync({ type: "theme", theme: themeId }).then(() => toast({ title: "Theme updated" }))}
           />
         )}
       </AnimatePresence>

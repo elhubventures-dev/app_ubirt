@@ -1,10 +1,14 @@
 import { getSupabase } from "@/lib/supabaseClient";
 import { uploadAvatar, uploadCover, uploadVoiceFile } from "@/api/storage";
+import { normalizeNotificationPrefs } from "@/lib/notificationPreferences";
 import { getApiUrl } from "@/lib/apiBase";
 import { processImageUpload } from "@/lib/videoPipeline";
 import { inferMediaType } from "@/lib/media";
 import { getNotificationPath } from "@/lib/notificationLinks";
 import { sendPushNotification } from "@/lib/sendPush";
+import { validateImageFile } from "@/lib/uploadPolicy";
+import { extractMentionUsernames, resolveMentionUserIds } from "@/lib/mentions";
+import { isVerifiedCreator } from "@/lib/verifiedBadge";
 
 async function getUserId() {
   const supabase = getSupabase();
@@ -75,7 +79,21 @@ async function getActorDisplayName(userId) {
   return data?.display_name ?? data?.username ?? "Someone";
 }
 
-function mapMessageRow(m, userId, profileMap = {}) {
+async function notifyMentionedUsers(text, { postId, actorId, skipUserIds = [] }) {
+  const usernames = extractMentionUsernames(text);
+  if (!usernames.length) return;
+  const supabase = getSupabase();
+  const actor = actorId ?? (await getUserId());
+  const mentioned = await resolveMentionUserIds(supabase, usernames, actor);
+  const skip = new Set([actor, ...skipUserIds]);
+  const actorName = await getActorDisplayName(actor);
+  for (const row of mentioned) {
+    if (skip.has(row.id)) continue;
+    await notifyUser(row.id, "mention", `${actorName} mentioned you`, { postId, actorId: actor });
+  }
+}
+
+function mapMessageRow(m, userId, profileMap = {}, extras = {}) {
   const profile = profileMap[m.sender_id];
   const senderName = profile?.display_name ?? profile?.username ?? "Member";
   return {
@@ -90,7 +108,78 @@ function mapMessageRow(m, userId, profileMap = {}) {
     mediaType: m.media_type,
     mediaDuration: m.media_duration ?? null,
     createdAt: m.created_at,
+    replyToId: m.reply_to_id ?? null,
+    replyTo: extras.replyTo ?? null,
+    sharedPostId: m.shared_post_id ?? null,
+    sharedPost: extras.sharedPost ?? null,
+    reactions: extras.reactions ?? [],
   };
+}
+
+function buildReactionSummaries(reactionRows, userId) {
+  const byMessage = {};
+  for (const row of reactionRows ?? []) {
+    if (!byMessage[row.message_id]) byMessage[row.message_id] = {};
+    const bucket = byMessage[row.message_id];
+    if (!bucket[row.emoji]) {
+      bucket[row.emoji] = { emoji: row.emoji, count: 0, mine: false, userIds: [] };
+    }
+    bucket[row.emoji].count += 1;
+    bucket[row.emoji].userIds.push(row.user_id);
+    if (row.user_id === userId) bucket[row.emoji].mine = true;
+  }
+  const result = {};
+  for (const [messageId, emojis] of Object.entries(byMessage)) {
+    result[messageId] = Object.values(emojis);
+  }
+  return result;
+}
+
+async function enrichMessageRows(supabase, rows, userId, profileMap) {
+  if (!rows.length) return [];
+
+  const messageIds = rows.map((r) => r.id);
+  const replyIds = [...new Set(rows.map((r) => r.reply_to_id).filter(Boolean))];
+  const postIds = [...new Set(rows.map((r) => r.shared_post_id).filter(Boolean))];
+
+  const [reactionsRes, repliesRes, postsRes] = await Promise.all([
+    supabase.from("message_reactions").select("message_id, user_id, emoji").in("message_id", messageIds),
+    replyIds.length
+      ? supabase.from("messages").select("id, content, sender_id, media_type").in("id", replyIds)
+      : Promise.resolve({ data: [] }),
+    postIds.length
+      ? supabase.from("posts").select("id, caption, media_url, user_id").in("id", postIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const reactionsByMessage = buildReactionSummaries(reactionsRes.data, userId);
+  const replyMap = Object.fromEntries((repliesRes.data ?? []).map((r) => [r.id, r]));
+  const postMap = Object.fromEntries((postsRes.data ?? []).map((p) => [p.id, p]));
+
+  const replySenderIds = [...new Set((repliesRes.data ?? []).map((r) => r.sender_id).filter(Boolean))];
+  const missingSenderIds = replySenderIds.filter((id) => !profileMap[id]);
+  if (missingSenderIds.length) {
+    Object.assign(profileMap, await fetchProfilesForSenders(supabase, missingSenderIds));
+  }
+
+  return rows.map((m) => {
+    const replyRow = m.reply_to_id ? replyMap[m.reply_to_id] : null;
+    const replyProfile = replyRow ? profileMap[replyRow.sender_id] : null;
+    const replyTo = replyRow
+      ? {
+          id: replyRow.id,
+          text: replyRow.content,
+          mediaType: replyRow.media_type,
+          senderName: replyProfile?.display_name ?? replyProfile?.username ?? "Member",
+        }
+      : null;
+    const sharedPost = m.shared_post_id ? postMap[m.shared_post_id] ?? null : null;
+    return mapMessageRow(m, userId, profileMap, {
+      replyTo,
+      sharedPost,
+      reactions: reactionsByMessage[m.id] ?? [],
+    });
+  });
 }
 
 async function fetchProfilesForSenders(supabase, senderIds) {
@@ -126,7 +215,7 @@ async function callGroupApi(body) {
   return json;
 }
 
-function mapPost(row, profile, liked, bookmarked) {
+function mapPost(row, profile, liked, bookmarked, extras = {}) {
   const hashtags = row.caption?.match(/#[\w]+/g) || [];
   const tags = new Set(hashtags);
   if (row.category) tags.add(`#${row.category.toLowerCase()}`);
@@ -136,7 +225,6 @@ function mapPost(row, profile, liked, bookmarked) {
     userId: row.user_id,
     author: profile?.display_name ?? "Creator",
     username: profile?.username ?? "user",
-    avatar: profile?.avatar_url ?? null,
     handle: `@${profile?.username ?? "user"}`,
     caption: row.caption,
     tags: Array.from(tags),
@@ -148,6 +236,12 @@ function mapPost(row, profile, liked, bookmarked) {
     media_url: row.media_url,
     media_type: row.media_type ?? inferMediaType(row.media_url, row.mux_playback_id),
     mux_playback_id: row.mux_playback_id,
+    repostOf: row.repost_of ?? null,
+    repostCaption: row.repost_caption ?? null,
+    originalAuthor: extras.originalAuthor ?? null,
+    originalUsername: extras.originalUsername ?? null,
+    isPinned: Boolean(extras.isPinned),
+    authorVerified: Boolean(extras.authorVerified),
   };
 }
 
@@ -188,12 +282,25 @@ export const supabaseApi = {
 
     const { data: posts, error } = await query;
     if (error) throw error;
+
+    const { data: blocks } = await supabase.from("blocked_users").select("blocked_id").eq("blocker_id", userId);
+    const blockedIds = new Set((blocks ?? []).map((b) => b.blocked_id));
     
-    let filteredPosts = posts;
+    let filteredPosts = (posts ?? []).filter((p) => !blockedIds.has(p.user_id));
     if (feedType === "following") {
       const { data: follows } = await supabase.from("follows").select("following_id").eq("follower_id", userId);
-      const followingIds = new Set((follows || []).map(f => f.following_id));
-      filteredPosts = posts.filter(p => p.profiles && followingIds.has(p.profiles.id));
+      const followingIds = new Set((follows || []).map((f) => f.following_id));
+      filteredPosts = filteredPosts.filter((p) => p.profiles && followingIds.has(p.profiles.id));
+    }
+
+    const repostIds = [...new Set(filteredPosts.filter((p) => p.repost_of).map((p) => p.repost_of))];
+    let originalMap = {};
+    if (repostIds.length) {
+      const { data: originals } = await supabase
+        .from("posts")
+        .select("id, profiles:user_id (username, display_name)")
+        .in("id", repostIds);
+      originalMap = Object.fromEntries((originals ?? []).map((o) => [o.id, o.profiles]));
     }
 
     const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", userId);
@@ -201,7 +308,13 @@ export const supabaseApi = {
     const likedSet = new Set((likes || []).map((l) => l.post_id));
     const bookmarkedSet = new Set((bookmarks || []).map((b) => b.post_id));
 
-    return filteredPosts.map((p) => mapPost(p, p.profiles, likedSet.has(p.id), bookmarkedSet.has(p.id)));
+    return filteredPosts.map((p) => {
+      const original = p.repost_of ? originalMap[p.repost_of] : null;
+      return mapPost(p, p.profiles, likedSet.has(p.id), bookmarkedSet.has(p.id), {
+        originalAuthor: original?.display_name ?? null,
+        originalUsername: original?.username ?? null,
+      });
+    });
   },
 
   async getFeedPost(postId) {
@@ -350,17 +463,22 @@ export const supabaseApi = {
 
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("id, username, display_name, avatar_url, cover_url, bio, website, location")
+      .select("id, username, display_name, avatar_url, cover_url, bio, website, location, pinned_post_id")
       .eq("username", username)
       .maybeSingle();
     if (error) throw error;
     if (!profile) return null;
+
+    if (viewerId && viewerId !== profile.id) {
+      await supabase.rpc("record_profile_view", { p_profile_id: profile.id }).catch(() => {});
+    }
 
     const [
       { count: followersCount },
       { count: followingCount },
       { data: posts },
       followRow,
+      viewCountResult,
     ] = await Promise.all([
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", profile.id),
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", profile.id),
@@ -377,9 +495,20 @@ export const supabaseApi = {
             .eq("following_id", profile.id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
+      viewerId === profile.id
+        ? supabase.rpc("get_profile_view_count", { p_profile_id: profile.id, p_days: 28 })
+        : Promise.resolve({ data: null }),
     ]);
 
     const totalLikes = (posts ?? []).reduce((sum, p) => sum + (p.likes_count ?? 0), 0);
+    const postCount = posts?.length ?? 0;
+    const verified = isVerifiedCreator({ followers: followersCount ?? 0, postCount });
+    const pinnedId = profile.pinned_post_id;
+    const sortedPosts = [...(posts ?? [])].sort((a, b) => {
+      if (a.id === pinnedId) return -1;
+      if (b.id === pinnedId) return 1;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
 
     return {
       id: profile.id,
@@ -393,8 +522,13 @@ export const supabaseApi = {
       followers: followersCount ?? 0,
       following: followingCount ?? 0,
       totalLikes,
+      verified,
+      pinnedPostId: pinnedId,
+      profileViews28d: viewerId === profile.id ? viewCountResult?.data ?? 0 : null,
       isFollowing: !!followRow?.data,
-      posts: (posts ?? []).map((p) => mapPost(p, profile, false, false)),
+      posts: sortedPosts.map((p) =>
+        mapPost(p, profile, false, false, { isPinned: p.id === pinnedId, authorVerified: verified })
+      ),
     };
   },
 
@@ -759,6 +893,7 @@ export const supabaseApi = {
     return (data ?? []).map((c) => ({
       id: c.id,
       author: c.profiles?.display_name ?? "User",
+      authorId: c.user_id,
       text: c.text,
       isMine: c.user_id === userId,
     }));
@@ -784,6 +919,7 @@ export const supabaseApi = {
     await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 10 });
     const actorName = await getActorDisplayName(userId);
     await notifyUser(post?.user_id, "comment", `${actorName} commented on your post`, { postId });
+    await notifyMentionedUsers(text, { postId, actorId: userId, skipUserIds: [post?.user_id] });
     return { id: data.id, author: actorName, text: data.text, isMine: true };
   },
 
@@ -797,15 +933,32 @@ export const supabaseApi = {
       .single();
     if (convError) throw convError;
 
+    const { data: myProfile } = await supabase
+      .from("profiles")
+      .select("show_read_receipts")
+      .eq("id", userId)
+      .maybeSingle();
+
     const { data: members, error } = await supabase
       .from("conversation_members")
-      .select("user_id, role, joined_at, last_read_at, profiles:user_id (display_name, username, avatar_url, last_seen_at)")
+      .select(
+        "user_id, role, joined_at, last_read_at, chat_theme, archived_at, muted_until, profiles:user_id (display_name, username, avatar_url, last_seen_at, show_read_receipts)"
+      )
       .eq("conversation_id", chatId);
     if (error) throw error;
 
     const memberRows = members ?? [];
     const myMembership = memberRows.find((m) => m.user_id === userId);
     const isGroup = conv.type === "group";
+    const mutedUntil = myMembership?.muted_until ?? null;
+    const isMuted = mutedUntil ? new Date(mutedUntil).getTime() > Date.now() : false;
+    const membershipMeta = {
+      chatTheme: myMembership?.chat_theme ?? "default",
+      archivedAt: myMembership?.archived_at ?? null,
+      mutedUntil,
+      isMuted,
+      showReadReceipts: myProfile?.show_read_receipts !== false,
+    };
 
     if (isGroup) {
       const canManage = myMembership?.role === "owner" || myMembership?.role === "admin";
@@ -825,11 +978,15 @@ export const supabaseApi = {
           avatar: m.profiles?.avatar_url ?? null,
           role: m.role,
           joinedAt: m.joined_at,
-          lastReadAt: m.last_read_at ?? null,
         })),
         memberReads: memberRows
           .filter((m) => m.user_id !== userId)
-          .map((m) => ({ userId: m.user_id, lastReadAt: m.last_read_at ?? null })),
+          .map((m) => ({
+            userId: m.user_id,
+            lastReadAt: m.profiles?.show_read_receipts === false ? null : m.last_read_at,
+            showReadReceipts: m.profiles?.show_read_receipts !== false,
+          })),
+        ...membershipMeta,
       };
     }
 
@@ -844,7 +1001,10 @@ export const supabaseApi = {
       username: otherProfile?.username ?? null,
       avatar: otherProfile?.avatar_url ?? null,
       lastSeenAt: otherProfile?.last_seen_at ?? null,
-      peerLastReadAt: otherMember?.last_read_at ?? null,
+      peerLastReadAt:
+        otherProfile?.show_read_receipts === false ? null : otherMember?.last_read_at ?? null,
+      peerShowReadReceipts: otherProfile?.show_read_receipts !== false,
+      ...membershipMeta,
     };
   },
 
@@ -859,16 +1019,19 @@ export const supabaseApi = {
     return true;
   },
 
-  async getConversations() {
+  async getConversations(options = {}) {
+    const { includeArchived = false } = options;
     const userId = await getUserId();
     const supabase = getSupabase();
     const { data: memberships, error } = await supabase
       .from("conversation_members")
-      .select("conversation_id, last_read_at, conversations(*)")
+      .select("conversation_id, last_read_at, archived_at, muted_until, conversations(*)")
       .eq("user_id", userId);
     if (error) throw error;
 
-    const rows = memberships ?? [];
+    const rows = (memberships ?? []).filter((row) =>
+      includeArchived ? Boolean(row.archived_at) : !row.archived_at
+    );
     const hiddenIds = await getHiddenMessageIds(userId);
     const results = [];
     for (const row of rows) {
@@ -887,7 +1050,7 @@ export const supabaseApi = {
 
       let lastMsgQuery = supabase
         .from("messages")
-        .select("content, created_at, sender_id, media_type")
+        .select("content, created_at, sender_id, media_type, shared_post_id")
         .eq("conversation_id", conv.id)
         .order("created_at", { ascending: false })
         .limit(20);
@@ -908,13 +1071,22 @@ export const supabaseApi = {
 
       const sortAt = lastMsg?.created_at ?? conv.updated_at ?? conv.created_at;
 
-      let lastMessagePreview =
-        lastMsg?.media_type === "audio" ? "Voice message" : lastMsg?.content ?? "No messages yet";
+      let lastMessagePreview = "No messages yet";
+      if (lastMsg?.shared_post_id) {
+        lastMessagePreview = "Shared a post";
+      } else if (lastMsg?.media_type === "audio") {
+        lastMessagePreview = "Voice message";
+      } else if (lastMsg?.content) {
+        lastMessagePreview = lastMsg.content;
+      }
       if (isGroup && lastMsg && lastMsg.sender_id !== userId) {
         const senderProfile = memberRows.find((m) => m.user_id === lastMsg.sender_id)?.profiles;
         const senderName = senderProfile?.display_name ?? senderProfile?.username ?? "Member";
         lastMessagePreview = `${senderName}: ${lastMessagePreview}`;
       }
+
+      const mutedUntil = row.muted_until ?? null;
+      const isMuted = mutedUntil ? new Date(mutedUntil).getTime() > Date.now() : false;
 
       results.push({
         id: conv.id,
@@ -928,6 +1100,8 @@ export const supabaseApi = {
         updatedAt: formatRelative(sortAt),
         sortAt,
         unread: unreadCount ?? 0,
+        archived: Boolean(row.archived_at),
+        isMuted,
       });
     }
 
@@ -1103,7 +1277,31 @@ export const supabaseApi = {
       supabase,
       rows.map((m) => m.sender_id)
     );
-    return rows.map((m) => mapMessageRow(m, userId, profileMap));
+    return enrichMessageRows(supabase, rows, userId, profileMap);
+  },
+
+  async searchMessages(chatId, query) {
+    const q = query?.trim();
+    if (!q || q.length < 2) return [];
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const hiddenIds = await getHiddenMessageIds(userId);
+    let dbQuery = supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", chatId)
+      .ilike("content", `%${q}%`)
+      .order("created_at", { ascending: false })
+      .limit(40);
+    dbQuery = applyHiddenMessageFilter(dbQuery, hiddenIds);
+    const { data, error } = await dbQuery;
+    if (error) throw error;
+    const rows = data ?? [];
+    const profileMap = await fetchProfilesForSenders(
+      supabase,
+      rows.map((m) => m.sender_id)
+    );
+    return enrichMessageRows(supabase, rows, userId, profileMap);
   },
 
   async getChatTyping(chatId) {
@@ -1130,7 +1328,8 @@ export const supabaseApi = {
           const userId = await userIdPromise;
           const m = payload.new;
           const profileMap = await fetchProfilesForSenders(supabase, [m.sender_id]);
-          onInsert(mapMessageRow(m, userId, profileMap));
+          const [enriched] = await enrichMessageRows(supabase, [m], userId, profileMap);
+          onInsert(enriched);
         }
       );
     }
@@ -1155,24 +1354,6 @@ export const supabaseApi = {
         console.error(`messages:${chatId} subscription ${status}`, err);
       }
     });
-    return () => supabase.removeChannel(channel);
-  },
-
-  subscribeToReadReceipts(chatId, onUpdate) {
-    const supabase = getSupabase();
-    const channel = supabase
-      .channel(`read-receipts:${chatId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "conversation_members",
-          filter: `conversation_id=eq.${chatId}`,
-        },
-        () => onUpdate?.()
-      )
-      .subscribe();
     return () => supabase.removeChannel(channel);
   },
 
@@ -1246,9 +1427,130 @@ export const supabaseApi = {
     }
   },
 
-  async sendMessage(chatId, text, attachment) {
+  subscribeToReadReceipts(chatId, onUpdate) {
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel(`read-receipts:${chatId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversation_members",
+          filter: `conversation_id=eq.${chatId}`,
+        },
+        () => onUpdate?.()
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  },
+
+  subscribeToMessageReactions(chatId, onChange) {
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel(`reactions:${chatId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "message_reactions" },
+        () => onChange?.()
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  },
+
+  async toggleMessageReaction(messageId, emoji) {
     const userId = await getUserId();
     const supabase = getSupabase();
+    const { data: existing } = await supabase
+      .from("message_reactions")
+      .select("emoji")
+      .eq("message_id", messageId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existing?.emoji === emoji) {
+      const { error } = await supabase
+        .from("message_reactions")
+        .delete()
+        .eq("message_id", messageId)
+        .eq("user_id", userId);
+      if (error) throw error;
+      return { removed: true, emoji };
+    }
+
+    const { error } = await supabase.from("message_reactions").upsert(
+      { message_id: messageId, user_id: userId, emoji },
+      { onConflict: "message_id,user_id" }
+    );
+    if (error) throw error;
+    return { removed: false, emoji };
+  },
+
+  async setConversationMuted(chatId, hours) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const mutedUntil =
+      hours > 0 ? new Date(Date.now() + hours * 60 * 60 * 1000).toISOString() : null;
+    const { error } = await supabase
+      .from("conversation_members")
+      .update({ muted_until: mutedUntil })
+      .eq("conversation_id", chatId)
+      .eq("user_id", userId);
+    if (error) throw error;
+    return { mutedUntil };
+  },
+
+  async setConversationArchived(chatId, archived = true) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("conversation_members")
+      .update({ archived_at: archived ? new Date().toISOString() : null })
+      .eq("conversation_id", chatId)
+      .eq("user_id", userId);
+    if (error) throw error;
+    return { archived };
+  },
+
+  async updateChatTheme(chatId, theme) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("conversation_members")
+      .update({ chat_theme: theme })
+      .eq("conversation_id", chatId)
+      .eq("user_id", userId);
+    if (error) throw error;
+    return { theme };
+  },
+
+  async updateShowReadReceipts(show) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ show_read_receipts: show })
+      .eq("id", userId);
+    if (error) throw error;
+    return { showReadReceipts: show };
+  },
+
+  async getShowReadReceipts() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("show_read_receipts")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.show_read_receipts !== false;
+  },
+
+  async sendMessage(chatId, text, attachment, options = {}) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { replyToId, sharedPostId } = options;
     let content = text?.trim() ?? "";
     let mediaUrl = null;
     let mediaType = null;
@@ -1266,7 +1568,11 @@ export const supabaseApi = {
       throw new Error("Only voice messages are supported as attachments right now.");
     }
 
-    if (!content && !mediaUrl) {
+    if (sharedPostId && !content) {
+      content = "Shared a post";
+    }
+
+    if (!content && !mediaUrl && !sharedPostId) {
       throw new Error("Message cannot be empty.");
     }
 
@@ -1279,7 +1585,9 @@ export const supabaseApi = {
         media_url: mediaUrl,
         media_type: mediaType,
         media_duration: mediaDuration,
-        status: "delivered",
+        status: "sent",
+        reply_to_id: replyToId ?? null,
+        shared_post_id: sharedPostId ?? null,
       })
       .select()
       .single();
@@ -1287,8 +1595,9 @@ export const supabaseApi = {
     await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", chatId);
 
     const actorName = await getActorDisplayName(userId);
-    const preview =
-      mediaType === "audio"
+    const preview = sharedPostId
+      ? "Shared a post"
+      : mediaType === "audio"
         ? "Voice message"
         : content.length > 80
           ? `${content.slice(0, 77)}...`
@@ -1302,11 +1611,14 @@ export const supabaseApi = {
 
     const { data: members } = await supabase
       .from("conversation_members")
-      .select("user_id")
+      .select("user_id, muted_until")
       .eq("conversation_id", chatId)
       .neq("user_id", userId);
 
     for (const member of members ?? []) {
+      if (member.muted_until && new Date(member.muted_until).getTime() > Date.now()) {
+        continue;
+      }
       try {
         await notifyUser(member.user_id, "message", `${actorName}: ${preview}`, {
           chatId,
@@ -1319,7 +1631,8 @@ export const supabaseApi = {
     }
 
     const profileMap = await fetchProfilesForSenders(supabase, [userId]);
-    return mapMessageRow(data, userId, profileMap);
+    const [enriched] = await enrichMessageRows(supabase, [data], userId, profileMap);
+    return enriched;
   },
 
   async getAiMessages() {
@@ -1778,6 +2091,8 @@ export const supabaseApi = {
       .single();
     if (error) throw error;
     await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 50 });
+    const caption = upload.description || upload.title || "";
+    await notifyMentionedUsers(caption, { postId: data.id, actorId: userId });
     return data;
   },
 
@@ -1894,6 +2209,211 @@ export const supabaseApi = {
       throw error;
     }
     return mapProfileRow(data);
+  },
+
+  async getBlockedUserIds() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from("blocked_users").select("blocked_id").eq("blocker_id", userId);
+    if (error) throw error;
+    return (data ?? []).map((row) => row.blocked_id);
+  },
+
+  async blockUser(blockedId) {
+    const userId = await getUserId();
+    if (blockedId === userId) throw new Error("You cannot block yourself.");
+    const supabase = getSupabase();
+    const { error } = await supabase.from("blocked_users").upsert(
+      { blocker_id: userId, blocked_id: blockedId },
+      { onConflict: "blocker_id,blocked_id" }
+    );
+    if (error) throw error;
+    return true;
+  },
+
+  async unblockUser(blockedId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("blocked_users")
+      .delete()
+      .eq("blocker_id", userId)
+      .eq("blocked_id", blockedId);
+    if (error) throw error;
+    return true;
+  },
+
+  async isUserBlocked(blockedId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("blocked_users")
+      .select("id")
+      .eq("blocker_id", userId)
+      .eq("blocked_id", blockedId)
+      .maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
+  },
+
+  async submitReport({ targetType, targetId, reason, details }) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase.from("reports").insert({
+      reporter_id: userId,
+      target_type: targetType,
+      target_id: String(targetId),
+      reason,
+      details: details || null,
+    });
+    if (error) throw error;
+    return true;
+  },
+
+  async getNotificationPreferences() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("notification_preferences")
+      .eq("id", userId)
+      .single();
+    if (error) throw error;
+    return normalizeNotificationPrefs(data?.notification_preferences);
+  },
+
+  async updateNotificationPreferences(prefs) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const normalized = normalizeNotificationPrefs(prefs);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ notification_preferences: normalized })
+      .eq("id", userId);
+    if (error) throw error;
+    return normalized;
+  },
+
+  async requestWithdrawal({ amount, payoutMethod, payoutDetails }) {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc("request_gift_coin_withdrawal", {
+      p_amount: amount,
+      p_payout_method: payoutMethod,
+      p_payout_details: payoutDetails ?? {},
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getWithdrawalRequests() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("withdrawal_requests")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      amount: row.amount,
+      payoutMethod: row.payout_method,
+      status: row.status,
+      createdAt: row.created_at,
+      adminNote: row.admin_note,
+    }));
+  },
+
+  async updateGroupAvatar(conversationId, avatarFile) {
+    validateImageFile(avatarFile);
+    const userId = await getUserId();
+    const avatarUrl = await uploadAvatar(avatarFile, userId);
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("conversations")
+      .update({ avatar_url: avatarUrl })
+      .eq("id", conversationId);
+    if (error) throw error;
+    return avatarUrl;
+  },
+
+  async repostPost(postId, repostCaption = "") {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data: original, error: fetchError } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("id", postId)
+      .single();
+    if (fetchError || !original) throw new Error("Post not found");
+
+    const caption = String(repostCaption || "").trim() || original.caption;
+    const { data, error } = await supabase
+      .from("posts")
+      .insert({
+        user_id: userId,
+        caption,
+        media_url: original.media_url,
+        media_type: original.media_type,
+        category: original.category,
+        mux_asset_id: original.mux_asset_id,
+        mux_playback_id: original.mux_playback_id,
+        repost_of: original.id,
+        repost_caption: String(repostCaption || "").trim() || null,
+      })
+      .select("*, profiles:user_id (id, username, display_name, avatar_url)")
+      .single();
+    if (error) throw error;
+
+    const { data: origProfile } = await supabase
+      .from("profiles")
+      .select("username, display_name")
+      .eq("id", original.user_id)
+      .single();
+
+    await notifyMentionedUsers(caption, { postId: data.id, actorId: userId, skipUserIds: [original.user_id] });
+    if (original.user_id !== userId) {
+      const actorName = await getActorDisplayName(userId);
+      await notifyUser(original.user_id, "repost", `${actorName} reposted your post`, { postId: data.id });
+    }
+
+    return mapPost(data, data.profiles, false, false, {
+      originalAuthor: origProfile?.display_name,
+      originalUsername: origProfile?.username,
+    });
+  },
+
+  async pinPost(postId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data: post } = await supabase.from("posts").select("id").eq("id", postId).eq("user_id", userId).maybeSingle();
+    if (!post) throw new Error("Post not found or not yours.");
+    const { error } = await supabase.from("profiles").update({ pinned_post_id: postId }).eq("id", userId);
+    if (error) throw error;
+    return true;
+  },
+
+  async unpinPost() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { error } = await supabase.from("profiles").update({ pinned_post_id: null }).eq("id", userId);
+    if (error) throw error;
+    return true;
+  },
+
+  async getPostIdForUpload(uploadId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data: upload } = await supabase.from("uploads").select("media_url, status").eq("id", uploadId).eq("user_id", userId).maybeSingle();
+    if (!upload?.media_url || upload.status !== "published") return null;
+    const { data: post } = await supabase
+      .from("posts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("media_url", upload.media_url)
+      .maybeSingle();
+    return post?.id ?? null;
   },
 };
 

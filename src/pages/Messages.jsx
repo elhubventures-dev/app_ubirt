@@ -11,7 +11,8 @@ import NewGroupSheet from "@/components/messages/NewGroupSheet";
 import { isNativePlatform } from "@/lib/platform";
 
 export default function Messages() {
-  const { data: chats = [], isLoading } = useConversations();
+  const [tab, setTab] = useState("inbox");
+  const { data: chats = [], isLoading } = useConversations({ includeArchived: tab === "archived" });
   const [showNewChat, setShowNewChat] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const navigate = useNavigate();
@@ -55,6 +56,23 @@ export default function Messages() {
   return (
     <div className="flex flex-col min-h-full pb-24 pt-2 px-2 sm:px-4">
       <div className="px-2 mb-4">
+        <div className="flex gap-2 mb-3 px-2">
+          {[
+            { id: "inbox", label: "Inbox" },
+            { id: "archived", label: "Archived" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setTab(item.id)}
+              className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                tab === item.id ? "bg-[#3b82f6] text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         <div className="flex gap-2 sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 py-2 -mx-2 px-2 bg-[#101822]/95 backdrop-blur-md">
           <button
             type="button"
@@ -81,11 +99,18 @@ export default function Messages() {
         </div>
       ) : !chats.length ? (
         <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-          <span className="material-symbols-outlined text-[64px] text-slate-700">chat_bubble</span>
-          <p className="text-slate-300 font-semibold mt-4">No messages yet</p>
-          <p className="text-sm text-slate-500 mt-1 mb-6">
-            Start a direct chat or create a group to message multiple people.
+          <span className="material-symbols-outlined text-[64px] text-slate-700">
+            {tab === "archived" ? "inventory_2" : "chat_bubble"}
+          </span>
+          <p className="text-slate-300 font-semibold mt-4">
+            {tab === "archived" ? "No archived chats" : "No messages yet"}
           </p>
+          <p className="text-sm text-slate-500 mt-1 mb-6">
+            {tab === "archived"
+              ? "Archived conversations will appear here."
+              : "Start a direct chat or create a group to message multiple people."}
+          </p>
+          {tab === "inbox" && (
           <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
             <button
               type="button"
@@ -102,6 +127,7 @@ export default function Messages() {
               Create Group
             </button>
           </div>
+          )}
         </div>
       ) : (
         <div className="space-y-1">
@@ -149,6 +175,7 @@ export default function Messages() {
                         <span className="material-symbols-outlined text-[16px] text-[#3b82f6] shrink-0">mark_chat_unread</span>
                       )}
                       <p className={`text-[13px] truncate ${chat.unread > 0 ? "text-white font-medium" : "text-slate-400"}`}>
+                        {chat.isMuted ? "🔕 " : ""}
                         {chat.lastMessage || "Sent a message"}
                       </p>
                     </div>

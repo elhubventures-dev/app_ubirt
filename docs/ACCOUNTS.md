@@ -171,5 +171,11 @@ Run every file in `supabase/migrations/` in numeric order in the **SQL Editor** 
 | 023 | `023_comments_delete_policy.sql` | Users delete own comments + comment count decrement |
 | 024 | `024_payment_gateways.sql` | `gateway` column on wallet transactions (Fincra, Paystack) |
 | 025 | `025_dual_wallet.sql` | Platform coins vs gift coins wallets + conversion RPC |
+| 026 | `026_notification_push_dispatch.sql` | Server-side push dispatch on notification insert |
+| 027 | `027_group_chat.sql` | Group conversations, invite links, member roles |
+| 028 | `028_read_receipts_realtime.sql` | Realtime read receipts |
+| 029 | `029_tier1_trust_prefs_withdrawals.sql` | Block/report, notification prefs, withdrawal requests |
+| 030 | `030_tier2_social.sql` | Reposts, pinned posts, profile views, mention prefs |
+| 031 | `031_tier3_messaging.sql` | Reactions, replies, post shares, mute/archive, chat themes, read-receipt pref |
 
-**Minimum for current app features:** through `025`. Skipping `013` breaks DMs; skipping `015`–`022` degrades live chat, voice, deletes, and notification deep links.
+**Minimum for current app features:** through `031`. Skipping `013` breaks DMs; skipping `015`–`022` degrades live chat, voice, deletes, and notification deep links.

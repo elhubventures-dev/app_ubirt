@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { getProfileCoverUrl } from "@/lib/profileDefaults";
 import PostManageSheet from "@/components/profile/PostManageSheet";
 import { ACHIEVEMENT_BADGES } from "@/lib/achievementBadges";
-import { usePageStateRestore } from "@/hooks/usePageStateRestore";
+import VerifiedBadge from "@/components/profile/VerifiedBadge";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -28,9 +28,7 @@ export default function Profile() {
     isPublishingUpload,
   } = useCreatorStudio();
   const { toast } = useToast();
-  const [profileState, setProfileState] = usePageStateRestore("profile", { activeTab: "grid" });
-  const { activeTab } = profileState;
-  const setActiveTab = (tab) => setProfileState((s) => ({ ...s, activeTab: tab }));
+  const [activeTab, setActiveTab] = useState("grid");
   const [selectedUpload, setSelectedUpload] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -42,6 +40,11 @@ export default function Profile() {
     queryKey: ["analytics", user?.id, 28],
     queryFn: () => dataProvider.getCreatorAnalytics(28),
     enabled: activeTab === "analytics",
+  });
+  const { data: publicProfile } = useQuery({
+    queryKey: ["public-profile", user?.username],
+    queryFn: () => dataProvider.getPublicProfile(user.username),
+    enabled: Boolean(user?.username),
   });
   const bannerUrl = getProfileCoverUrl(user?.cover);
 
@@ -118,8 +121,14 @@ export default function Profile() {
         </div>
 
         <div className="mt-3 sm:mt-16 text-center sm:text-left flex-1">
-          <h1 className="text-2xl font-bold tracking-tight text-white">{user?.name || "Creator"}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white inline-flex items-center gap-2 justify-center sm:justify-start">
+            {user?.name || "Creator"}
+            {publicProfile?.verified ? <VerifiedBadge className="w-5 h-5" /> : null}
+          </h1>
           <p className="text-sm font-medium text-[#3b82f6]">@{user?.username || "creator"}</p>
+          {publicProfile?.profileViews28d != null ? (
+            <p className="text-xs text-slate-500 mt-1">{publicProfile.profileViews28d.toLocaleString()} profile views (28d)</p>
+          ) : null}
           <p className="mt-2 text-sm text-slate-300 max-w-sm mx-auto sm:mx-0">
             {user?.bio || "Add a bio to tell people about yourself."}
           </p>

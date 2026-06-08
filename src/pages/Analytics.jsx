@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { Card } from "@/components/ui/card";
 import { dataProvider } from "@/api/dataProvider";
-import PageHeader from "@/components/layout/PageHeader";
+import { useQuery } from "@tanstack/react-query";
 
 const RANGES = [
   { label: "7 Days", days: 7 },
@@ -32,7 +32,12 @@ export default function Analytics() {
     <div className="min-h-screen bg-[#101822] text-white flex flex-col relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#0d5bba]/10 via-[#101822] to-[#152336] z-0" />
 
-      <PageHeader onBack={() => navigate(-1)} title="Creator Analytics" className="bg-[#101822]/50" />
+      <header className="relative z-10 px-4 py-4 flex items-center border-b border-white/5 bg-[#101822]/50 backdrop-blur-md">
+        <button type="button" onClick={() => navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors mr-4">
+          <span className="material-symbols-outlined">arrow_back</span>
+        </button>
+        <h1 className="text-xl font-bold flex-1 text-center pr-10">Creator Analytics</h1>
+      </header>
 
       <main className="flex-1 relative z-10 p-4 max-w-md mx-auto w-full flex flex-col gap-6 pb-10">
         <div className="flex justify-between items-center bg-white/5 rounded-full p-1">

@@ -98,12 +98,8 @@ export default function Camera() {
         </div>
       </div>
 
-      <header className="absolute top-0 left-0 right-0 z-50 px-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-4 flex items-center pointer-events-none">
-        <Link
-          to="/"
-          aria-label="Close"
-          className="pointer-events-auto min-w-11 min-h-11 flex items-center justify-center text-white hover:bg-white/10 rounded-full transition-colors"
-        >
+      <header className="absolute top-0 left-0 right-0 px-4 py-6 flex items-center z-10">
+        <Link to="/" className="text-white hover:bg-white/10 rounded-full p-2 -ml-2 transition-colors">
           <span className="material-symbols-outlined text-[28px]">close</span>
         </Link>
       </header>

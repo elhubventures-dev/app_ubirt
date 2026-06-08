@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
+import MentionText from "@/components/feed/MentionText";
 
 export default function CommentsSheet({
   comments = [],
@@ -73,7 +74,9 @@ export default function CommentsSheet({
                       </button>
                     ) : null}
                   </div>
-                  <p className="text-slate-100 text-sm mt-0.5 break-words">{comment.text}</p>
+                  <p className="text-slate-100 text-sm mt-0.5 break-words">
+                    <MentionText text={comment.text} />
+                  </p>
                 </div>
               </div>
             ))
@@ -85,7 +88,7 @@ export default function CommentsSheet({
             <textarea
               value={commentDraft}
               onChange={(e) => onCommentDraftChange(e.target.value)}
-              placeholder="Add a comment..."
+              placeholder="Add a comment... Use @username to mention"
               rows={1}
               className="flex-1 min-h-[44px] max-h-24 resize-none rounded-2xl bg-white/10 border border-white/10 text-white placeholder:text-slate-500 px-4 py-3 text-sm focus:outline-none focus:border-[#3b82f6]/50"
               onKeyDown={(e) => {

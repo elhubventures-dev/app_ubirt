@@ -106,6 +106,15 @@ export default function Home() {
                  <p className="text-xs text-slate-400 mt-0.5">Find creators</p>
                </div>
              </Link>
+             <Link to="/ai-chat" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
+               <div className="p-2 bg-violet-500/20 text-violet-400 rounded-full">
+                  <span className="material-symbols-outlined text-[24px]">smart_toy</span>
+               </div>
+               <div>
+                 <h3 className="font-bold text-white text-base">AI Assistant</h3>
+                 <p className="text-xs text-slate-400 mt-0.5">Caption & content help</p>
+               </div>
+             </Link>
           </div>
         </section>
 
@@ -136,7 +145,7 @@ export default function Home() {
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent flex flex-col justify-end p-3 pointer-events-none">
                         <div className="flex items-center gap-1.5 mb-1">
-                          <img src={post.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${post.username || post.author}`} alt={post.author} className="w-4 h-4 rounded-full bg-slate-700" />
+                          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${post.username || post.author}`} alt={post.author} className="w-4 h-4 rounded-full bg-slate-700" />
                           <span className="text-[10px] text-white font-medium truncate">{post.author}</span>
                         </div>
                         <p className="text-xs text-slate-300 font-medium truncate">{post.caption}</p>

@@ -6,8 +6,8 @@ function cleanBaseUrl(url) {
   return String(url || "").replace(/\/$/, "");
 }
 
-/** Base URL for serverless API routes. Native apps always hit the deployed backend. */
-export function getApiBaseUrl() {
+/** Public site URL used for OAuth callbacks and share links. */
+export function getAppBaseUrl() {
   const configured = cleanBaseUrl(import.meta.env.VITE_APP_URL);
 
   if (Capacitor.isNativePlatform()) {
@@ -19,7 +19,12 @@ export function getApiBaseUrl() {
 
   if (configured) return configured;
   if (typeof window !== "undefined") return cleanBaseUrl(window.location.origin);
-  return "";
+  return PRODUCTION_APP_URL;
+}
+
+/** Base URL for serverless API routes. Native apps always hit the deployed backend. */
+export function getApiBaseUrl() {
+  return getAppBaseUrl();
 }
 
 export function getApiUrl(path) {

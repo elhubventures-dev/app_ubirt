@@ -1,10 +1,16 @@
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Capacitor } from "@capacitor/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
+import { dataProvider } from "@/api/dataProvider";
 import { getAppBaseUrl, shareContent } from "@/lib/nativeShare";
+import SendToChatSheet from "@/components/messages/SendToChatSheet";
 
 export default function ShareSheet({ post, onClose }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [showSendToChat, setShowSendToChat] = useState(false);
   const shareUrl = `${getAppBaseUrl()}/feed?post=${post?.id ?? ""}`;
   const shareText = post?.caption
     ? `Check out this post on UBIRT: ${post.caption.slice(0, 80)}`
@@ -35,6 +41,18 @@ export default function ShareSheet({ post, onClose }) {
     }
   };
 
+  const handleRepost = async () => {
+    if (!post?.id) return;
+    try {
+      await dataProvider.repostPost(post.id);
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      toast({ title: "Reposted", description: "This post was added to your profile and feed." });
+      onClose();
+    } catch (error) {
+      toast({ title: "Repost failed", description: error.message, variant: "destructive" });
+    }
+  };
+
   return (
     <>
       <motion.div
@@ -53,7 +71,15 @@ export default function ShareSheet({ post, onClose }) {
       >
         <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-6" />
         <h3 className="font-semibold text-lg text-white mb-4">Share post</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <button
+            type="button"
+            onClick={() => setShowSendToChat(true)}
+            className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
+          >
+            <span className="material-symbols-outlined text-[28px] text-pink-400">send</span>
+            <span className="text-sm font-semibold text-white">Send to chat</span>
+          </button>
           <button
             type="button"
             onClick={nativeShare}
@@ -61,6 +87,14 @@ export default function ShareSheet({ post, onClose }) {
           >
             <span className="material-symbols-outlined text-[28px] text-[#3b82f6]">share</span>
             <span className="text-sm font-semibold text-white">{isNative ? "Share to…" : "Share"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleRepost}
+            className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
+          >
+            <span className="material-symbols-outlined text-[28px] text-violet-400">repeat</span>
+            <span className="text-sm font-semibold text-white">Repost</span>
           </button>
           <button
             type="button"
@@ -79,6 +113,11 @@ export default function ShareSheet({ post, onClose }) {
           Cancel
         </button>
       </motion.div>
+      <AnimatePresence>
+        {showSendToChat && (
+          <SendToChatSheet post={post} onClose={() => { setShowSendToChat(false); onClose(); }} />
+        )}
+      </AnimatePresence>
     </>
   );
 }

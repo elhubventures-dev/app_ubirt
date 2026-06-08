@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
-import PageHeader from "@/components/layout/PageHeader";
+import { mapBadgesWithUnlock } from "@/lib/achievementBadges";
 
 export default function Achievements() {
   const [activeTab, setActiveTab] = useState("badges");
@@ -24,7 +25,13 @@ export default function Achievements() {
       <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none z-0" />
 
-      <PageHeader backTo="/profile" title="Achievements" />
+      <header className="shrink-0 px-4 py-4 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between z-10 shadow-sm relative">
+        <Link to="/profile" className="text-[#3b82f6] flex items-center gap-1 hover:bg-white/5 rounded-full p-1.5 -ml-1.5 transition-colors">
+          <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
+        </Link>
+        <h1 className="text-base font-bold tracking-wide absolute left-1/2 -translate-x-1/2">Achievements</h1>
+        <div className="w-8" />
+      </header>
 
       <div className="flex-1 overflow-y-auto hide-scrollbar relative z-10">
         <div className="px-4 py-6 max-w-lg mx-auto space-y-8">

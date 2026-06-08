@@ -1,19 +1,11 @@
-import { useRef } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import AppHeader from "@/components/layout/AppHeader";
 import BottomNav from "@/components/layout/BottomNav";
-import { useScrollRestore } from "@/hooks/useScrollRestore";
-
-function MainScrollRestore({ routeKey, containerRef }) {
-  useScrollRestore(routeKey, containerRef);
-  return null;
-}
 
 export default function MainLayout() {
   const location = useLocation();
   const isFeed = location.pathname === "/feed";
-  const mainScrollRef = useRef(null);
 
   return (
     <div className="min-h-screen bg-[#101822] text-white overflow-hidden relative">
@@ -23,15 +15,7 @@ export default function MainLayout() {
       <div className="relative z-10 h-full flex flex-col">
         {!isFeed && <AppHeader />}
 
-        <main
-          ref={mainScrollRef}
-          className={`flex-1 relative ${
-            isFeed
-              ? "h-[100dvh] w-full overflow-hidden"
-              : "max-w-4xl mx-auto w-full px-4 py-4 pb-28 overflow-y-auto overscroll-y-contain hide-scrollbar"
-          }`}
-        >
-          {!isFeed && <MainScrollRestore routeKey={location.pathname} containerRef={mainScrollRef} />}
+        <main className={`flex-1 relative ${isFeed ? "h-[100dvh] w-full" : "max-w-4xl mx-auto w-full px-4 py-4 pb-28"}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

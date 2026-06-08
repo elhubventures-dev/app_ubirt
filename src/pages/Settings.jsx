@@ -7,11 +7,12 @@ import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
 import { getDataMode, dataProvider } from "@/api/dataProvider";
 import { getPreference, setPreference } from "@/lib/preferences";
+import { DEFAULT_NOTIFICATION_PREFS } from "@/lib/notificationPreferences";
 import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { Capacitor } from "@capacitor/core";
 import { getProfileCoverUrl } from "@/lib/profileDefaults";
-import PageHeader from "@/components/layout/PageHeader";
+import { motion } from "framer-motion";
 
 function Toggle({ checked, onChange, label }) {
   return (
@@ -59,6 +60,8 @@ export default function Settings() {
   } = useAuth();
   const [autoplay, setAutoplay] = useState(() => getPreference("autoplay", true));
   const [notifications, setNotifications] = useState(() => getPreference("push", true));
+  const [notifPrefs, setNotifPrefs] = useState({ ...DEFAULT_NOTIFICATION_PREFS });
+  const [isSavingNotifPrefs, setIsSavingNotifPrefs] = useState(false);
 
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -85,6 +88,24 @@ export default function Settings() {
     queryFn: () => dataProvider.getOwnProfile(),
     enabled: Boolean(user?.id),
   });
+
+  const { data: savedNotifPrefs } = useQuery({
+    queryKey: ["notification-preferences"],
+    queryFn: () => dataProvider.getNotificationPreferences(),
+    enabled: Boolean(user?.id),
+  });
+
+  const { data: showReadReceipts = true } = useQuery({
+    queryKey: ["show-read-receipts"],
+    queryFn: () => dataProvider.getShowReadReceipts?.() ?? true,
+    enabled: Boolean(user?.id),
+  });
+
+  const [isSavingReadReceipts, setIsSavingReadReceipts] = useState(false);
+
+  useEffect(() => {
+    if (savedNotifPrefs) setNotifPrefs(savedNotifPrefs);
+  }, [savedNotifPrefs]);
 
   useEffect(() => {
     if (!user) return;
@@ -133,6 +154,38 @@ export default function Settings() {
       title: "Push preference saved",
       description: next ? enabledDescription : "Push notifications disabled in preferences.",
     });
+  };
+
+  const toggleNotifPref = async (key, next) => {
+    const updated = { ...notifPrefs, [key]: next };
+    setNotifPrefs(updated);
+    setIsSavingNotifPrefs(true);
+    try {
+      await dataProvider.updateNotificationPreferences(updated);
+      queryClient.invalidateQueries({ queryKey: ["notification-preferences"] });
+    } catch (error) {
+      setNotifPrefs(notifPrefs);
+      toast({ title: "Could not save", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingNotifPrefs(false);
+    }
+  };
+
+  const toggleReadReceipts = async (next) => {
+    if (!dataProvider.updateShowReadReceipts) return;
+    setIsSavingReadReceipts(true);
+    try {
+      await dataProvider.updateShowReadReceipts(next);
+      queryClient.setQueryData(["show-read-receipts"], next);
+      toast({
+        title: "Read receipts updated",
+        description: next ? "Others can see when you've read their messages." : "Read receipts are hidden from others.",
+      });
+    } catch (error) {
+      toast({ title: "Could not save", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingReadReceipts(false);
+    }
   };
 
   const [isSaving, setIsSaving] = useState(false);
@@ -259,7 +312,16 @@ export default function Settings() {
     <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
       <div className="absolute top-[20%] left-[-10%] w-[50%] h-[40%] bg-[#8b5cf6]/10 blur-[120px] rounded-full pointer-events-none z-0" />
 
-      <PageHeader backTo="/profile" title="Edit Profile" />
+      <header className="shrink-0 px-4 py-4 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between z-10 shadow-sm">
+        <Link
+          to="/profile"
+          className="text-[#3b82f6] flex items-center gap-1 hover:bg-white/5 rounded-full p-1.5 -ml-1.5 transition-colors"
+        >
+          <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
+        </Link>
+        <h1 className="text-base font-bold tracking-wide absolute left-1/2 -translate-x-1/2">Edit Profile</h1>
+        <div className="w-8" />
+      </header>
 
       <div className="flex-1 overflow-y-auto hide-scrollbar relative z-10">
         <div className="px-4 py-6 max-w-2xl mx-auto space-y-8">
@@ -453,7 +515,87 @@ export default function Settings() {
             <SectionTitle>App preferences</SectionTitle>
             <div className="space-y-2">
               <Toggle checked={autoplay} onChange={toggleAutoplay} label="Autoplay feed posts" />
-              <Toggle checked={notifications} onChange={togglePush} label="Push notifications" />
+              <Toggle checked={notifications} onChange={togglePush} label="Push notifications (device)" />
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle>Privacy</SectionTitle>
+            <div className="space-y-2">
+              <Toggle
+                checked={showReadReceipts}
+                onChange={toggleReadReceipts}
+                label="Show read receipts"
+              />
+              <p className="text-xs text-slate-500 px-1">
+                When off, others won&apos;t see when you&apos;ve read their DMs.
+                {isSavingReadReceipts ? " Saving..." : ""}
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle>Notification types</SectionTitle>
+            <p className="text-xs text-slate-500 px-1 mb-2">
+              Synced to your account. In-app alerts respect these settings.
+              {isSavingNotifPrefs ? " Saving..." : ""}
+            </p>
+            <div className="space-y-2">
+              <Toggle
+                checked={notifPrefs.inApp}
+                onChange={(next) => toggleNotifPref("inApp", next)}
+                label="In-app alerts & sounds"
+              />
+              <Toggle
+                checked={notifPrefs.messages}
+                onChange={(next) => toggleNotifPref("messages", next)}
+                label="Messages"
+              />
+              <Toggle
+                checked={notifPrefs.likes}
+                onChange={(next) => toggleNotifPref("likes", next)}
+                label="Likes"
+              />
+              <Toggle
+                checked={notifPrefs.comments}
+                onChange={(next) => toggleNotifPref("comments", next)}
+                label="Comments"
+              />
+              <Toggle
+                checked={notifPrefs.follows}
+                onChange={(next) => toggleNotifPref("follows", next)}
+                label="New followers"
+              />
+              <Toggle
+                checked={notifPrefs.gifts}
+                onChange={(next) => toggleNotifPref("gifts", next)}
+                label="Gifts"
+              />
+              <Toggle
+                checked={notifPrefs.mentions !== false}
+                onChange={(next) => toggleNotifPref("mentions", next)}
+                label="Mentions & reposts"
+              />
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle>Legal</SectionTitle>
+            <div className="space-y-2">
+              <Link
+                to="/privacy"
+                className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-colors"
+              >
+                <span className="text-sm font-medium text-slate-200">Privacy Policy</span>
+                <span className="material-symbols-outlined text-slate-400 text-[20px]">chevron_right</span>
+              </Link>
+              <Link
+                to="/terms"
+                className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-colors"
+              >
+                <span className="text-sm font-medium text-slate-200">Terms of Service</span>
+                <span className="material-symbols-outlined text-slate-400 text-[20px]">chevron_right</span>
+              </Link>
             </div>
           </section>
 

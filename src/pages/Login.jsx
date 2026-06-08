@@ -274,6 +274,18 @@ export default function Login() {
             </button>
           </div>
         )}
+
+        <p className="mt-6 text-center text-[11px] text-slate-500 leading-relaxed">
+          By continuing you agree to our{" "}
+          <Link to="/terms" className="text-[#3b82f6] hover:underline">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link to="/privacy" className="text-[#3b82f6] hover:underline">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </motion.div>
     </div>
   );

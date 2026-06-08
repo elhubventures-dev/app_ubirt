@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useFeed, useFeedComments } from "@/hooks/useFeed";
 import CommentsSheet from "@/components/feed/CommentsSheet";
 import ShareSheet from "@/components/feed/ShareSheet";
+import ReportSheet from "@/components/safety/ReportSheet";
 import { dataProvider } from "@/api/dataProvider";
 import { useAuth } from "@/lib/AuthContext";
 import MuxPlayer from "@mux/mux-player-react";
@@ -11,14 +12,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { motion, AnimatePresence } from "framer-motion";
 import { getPreference } from "@/lib/preferences";
-import { isImagePost, stripHashtagsFromCaption } from "@/lib/media";
+import { isImagePost } from "@/lib/media";
 import NotificationBell from "@/components/layout/NotificationBell";
-import { calculateGiftSplit } from "@/lib/giftSplit";
-import { saveNavState, loadNavState } from "@/lib/navigationRestore";
-
-function feedStateKey(type) {
-  return `feed.${type}`;
-}
+import MentionText from "@/components/feed/MentionText";
+import VerifiedBadge from "@/components/profile/VerifiedBadge";
 
 function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId, setGiftPostId }) {
   const videoRef = useRef(null);
@@ -26,8 +23,6 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
   const [isPlaying, setIsPlaying] = useState(true);
   const [showPlayOverlay, setShowPlayOverlay] = useState(false);
   const profileSlug = post.username || post.author;
-  const avatarSrc = post.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${profileSlug}`;
-  const captionText = stripHashtagsFromCaption(post.caption);
 
   useEffect(() => {
     if (isVisible && post.id && !viewedRef.current) {
@@ -84,39 +79,39 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
 
   const hasMedia = !!post.media_url;
   const showAsImage = isImagePost(post);
-  const mediaFitClass = "max-w-full max-h-full w-auto h-auto object-contain";
 
   return (
     <div className="relative w-full h-[100dvh] bg-black snap-start flex justify-center items-center overflow-hidden">
-      {/* Media — fit uploaded aspect ratio (landscape, portrait, square) without cropping */}
+      {/* Media Background */}
       {hasMedia ? (
-        <div className="absolute inset-0 flex items-center justify-center" onClick={handleTap}>
-          {showAsImage ? (
-            <img src={post.media_url} alt="Post media" className={mediaFitClass} />
-          ) : post.mux_playback_id ? (
+        showAsImage ? (
+          <img src={post.media_url} alt="Post media" className="w-full h-full object-cover" onClick={handleTap} />
+        ) : post.mux_playback_id ? (
+          <div onClick={handleTap} className="w-full h-full overflow-hidden relative">
             <MuxPlayer
               ref={videoRef}
               playbackId={post.mux_playback_id}
-              className="w-full h-full max-h-[100dvh]"
+              className="w-full h-full object-cover absolute inset-0 scale-[1.01]"
               loop={false}
               muted
               autoPlay="muted"
               onEnded={() => onAutoScroll && onAutoScroll()}
               streamType="on-demand"
-              style={{ "--controls": "none", "--media-object-fit": "contain" }}
+              style={{ "--controls": "none", "--media-object-fit": "cover" }}
             />
-          ) : (
-            <video
-              ref={videoRef}
-              src={post.media_url}
-              className={mediaFitClass}
-              loop={false}
-              muted
-              playsInline
-              onEnded={() => onAutoScroll && onAutoScroll()}
-            />
-          )}
-        </div>
+          </div>
+        ) : (
+          <video
+            ref={videoRef}
+            src={post.media_url}
+            className="w-full h-full object-cover"
+            loop={false}
+            muted
+            playsInline
+            onClick={handleTap}
+            onEnded={() => onAutoScroll && onAutoScroll()}
+          />
+        )
       ) : (
         <div className="w-full h-full bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center" onClick={handleTap}>
           <p className="text-slate-500 font-medium tracking-widest uppercase">No Media</p>
@@ -158,10 +153,19 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
 
       {/* Info Area (Bottom Left) */}
       <div className="absolute bottom-24 left-4 right-20 pb-4 pointer-events-auto">
-        <Link to={`/user/${profileSlug}`} className="text-white font-bold text-lg drop-shadow-md hover:underline">@{profileSlug}</Link>
-        {captionText ? (
-          <p className="text-slate-200 text-sm mt-1 drop-shadow-md line-clamp-3">{captionText}</p>
+        {post.repostOf && post.originalUsername ? (
+          <p className="text-slate-300 text-xs mb-1 flex items-center gap-1">
+            <span className="material-symbols-outlined text-[14px]">repeat</span>
+            Repost from @{post.originalUsername}
+          </p>
         ) : null}
+        <Link to={`/user/${profileSlug}`} className="text-white font-bold text-lg drop-shadow-md hover:underline inline-flex items-center gap-1">
+          @{profileSlug}
+          {post.authorVerified ? <VerifiedBadge /> : null}
+        </Link>
+        <p className="text-slate-200 text-sm mt-1 drop-shadow-md line-clamp-3">
+          <MentionText text={post.caption} />
+        </p>
         {post.tags && post.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2">
             {post.tags.map((tag, i) => (
@@ -175,7 +179,7 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
       <div className="absolute bottom-28 right-4 flex flex-col items-center gap-6 pointer-events-auto">
         {/* Avatar */}
         <Link to={`/user/${profileSlug}`} className="w-12 h-12 rounded-full border-2 border-white overflow-hidden bg-slate-800 transition-transform active:scale-90">
-          <img src={avatarSrc} alt={post.author || profileSlug} className="w-full h-full object-cover" />
+          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${profileSlug}`} alt="Avatar" className="w-full h-full object-cover" />
         </Link>
 
         {/* Like */}
@@ -229,12 +233,12 @@ export default function VideoFeed() {
   const [optionsPostId, setOptionsPostId] = useState("");
   const [sharePostId, setSharePostId] = useState("");
   const [giftPostId, setGiftPostId] = useState("");
+  const [reportTarget, setReportTarget] = useState(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [activePostIndex, setActivePostIndex] = useState(0);
-  const [feedType, setFeedType] = useState(() => loadNavState("feed.tab")?.feedType ?? "foryou");
+  const [feedType, setFeedType] = useState(() => sessionStorage.getItem("ubirt.feedTab") || "foryou");
   const scrolledToPostRef = useRef(null);
   const postRefs = useRef({});
-  const lastFeedRestoreRef = useRef(null);
 
   const {
     data: posts = [],
@@ -266,52 +270,6 @@ export default function VideoFeed() {
   const { data: comments = [], isLoading: isLoadingComments } = useFeedComments(expandedPostId);
   const { toast } = useToast();
   const containerRef = useRef(null);
-
-  const persistFeedPosition = (index, posts = displayPosts, type = feedType) => {
-    const postId = posts[index]?.id;
-    if (!postId) return;
-    saveNavState("feed.tab", { feedType: type });
-    saveNavState(feedStateKey(type), { postId, activePostIndex: index });
-  };
-
-  useEffect(() => {
-    if (!isFeedReady || !displayPosts.length || targetPostId) return;
-    const restoreKey = feedType;
-    if (lastFeedRestoreRef.current === restoreKey) return;
-
-    const saved = loadNavState(feedStateKey(feedType));
-    lastFeedRestoreRef.current = restoreKey;
-    if (!saved) return;
-
-    let index = typeof saved.activePostIndex === "number" ? saved.activePostIndex : 0;
-    if (saved.postId) {
-      const byId = displayPosts.findIndex((p) => p.id === saved.postId);
-      if (byId >= 0) index = byId;
-    }
-    index = Math.max(0, Math.min(index, displayPosts.length - 1));
-
-    const scrollToIndex = () => {
-      const height = window.innerHeight;
-      if (containerRef.current) {
-        containerRef.current.scrollTop = index * height;
-      }
-      setActivePostIndex(index);
-    };
-    requestAnimationFrame(() => requestAnimationFrame(scrollToIndex));
-  }, [isFeedReady, displayPosts, feedType, targetPostId]);
-
-  const feedStateRef = useRef({ activePostIndex, displayPosts, feedType });
-  feedStateRef.current = { activePostIndex, displayPosts, feedType };
-
-  useEffect(() => {
-    return () => {
-      const { activePostIndex: index, displayPosts: posts, feedType: type } = feedStateRef.current;
-      const postId = posts[index]?.id;
-      if (!postId) return;
-      saveNavState("feed.tab", { feedType: type });
-      saveNavState(feedStateKey(type), { postId, activePostIndex: index });
-    };
-  }, []);
 
   useEffect(() => {
     if (!targetPostId || !isFeedReady || !displayPosts.length) return;
@@ -365,7 +323,6 @@ export default function VideoFeed() {
     if (index !== activePostIndex) {
       setActivePostIndex(index);
     }
-    persistFeedPosition(index);
   };
 
   const handleLike = async (postId) => {
@@ -396,38 +353,46 @@ export default function VideoFeed() {
   );
 
   if (!displayPosts.length) return (
-    <div className="w-full h-[100dvh] flex items-center justify-center bg-black">
-      <p className="text-slate-300">No posts yet. Create the first upload draft.</p>
+    <div className="w-full h-[100dvh] flex flex-col items-center justify-center bg-black px-6 text-center gap-4">
+      {feedType === "following" ? (
+        <>
+          <span className="material-symbols-outlined text-[48px] text-slate-500">group</span>
+          <p className="text-slate-200 font-semibold">Your Following feed is empty</p>
+          <p className="text-slate-400 text-sm">Follow creators to see their posts here.</p>
+          <Link to="/search" className="text-[#3b82f6] font-semibold hover:underline">Discover creators</Link>
+        </>
+      ) : (
+        <>
+          <p className="text-slate-300">No posts yet. Create the first upload draft.</p>
+          <Link to="/upload" className="text-[#3b82f6] font-semibold hover:underline">Start creating</Link>
+        </>
+      )}
     </div>
   );
 
   return (
     <div className="relative w-full h-[100dvh] bg-black">
       {/* Top Navigation Toggle */}
-      <div className="absolute top-0 left-0 right-0 z-50 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-4 px-4 flex justify-center items-start gap-6 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
-        <div className="absolute top-[calc(env(safe-area-inset-top,0px)+0.75rem)] right-4 pointer-events-auto">
+      <div className="absolute top-0 left-0 right-0 z-10 pt-12 pb-4 flex justify-center items-start gap-6 pointer-events-auto bg-gradient-to-b from-black/60 to-transparent">
+        <div className="absolute top-12 right-4 pointer-events-auto">
           <NotificationBell variant="overlay" />
         </div>
-        <button
-          type="button"
+        <button 
           onClick={() => {
             setFeedType("following");
-            lastFeedRestoreRef.current = null;
-            saveNavState("feed.tab", { feedType: "following" });
+            sessionStorage.setItem("ubirt.feedTab", "following");
           }}
-          className={`pointer-events-auto text-lg font-bold transition-colors ${feedType === "following" ? "text-white drop-shadow-md" : "text-white/50"}`}
+          className={`text-lg font-bold transition-colors ${feedType === "following" ? "text-white drop-shadow-md" : "text-white/50"}`}
         >
           Following
           {feedType === "following" && <motion.div layoutId="feedTab" className="h-1 w-6 bg-white mx-auto rounded-full mt-1" />}
         </button>
-        <button
-          type="button"
+        <button 
           onClick={() => {
             setFeedType("foryou");
-            lastFeedRestoreRef.current = null;
-            saveNavState("feed.tab", { feedType: "foryou" });
+            sessionStorage.setItem("ubirt.feedTab", "foryou");
           }}
-          className={`pointer-events-auto text-lg font-bold transition-colors ${feedType === "foryou" ? "text-white drop-shadow-md" : "text-white/50"}`}
+          className={`text-lg font-bold transition-colors ${feedType === "foryou" ? "text-white drop-shadow-md" : "text-white/50"}`}
         >
           For You
           {feedType === "foryou" && <motion.div layoutId="feedTab" className="h-1 w-6 bg-white mx-auto rounded-full mt-1" />}
@@ -537,6 +502,22 @@ export default function VideoFeed() {
                         <span className="material-symbols-outlined">share</span> Share Post
                       </button>
                       {isAuthor ? (
+                        <>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await dataProvider.pinPost(optionsPostId);
+                              toast({ title: "Post pinned", description: "Shown first on your profile." });
+                              setOptionsPostId("");
+                            } catch (err) {
+                              toast({ title: "Pin failed", description: err.message, variant: "destructive" });
+                            }
+                          }}
+                          className="flex items-center gap-3 text-white hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
+                        >
+                          <span className="material-symbols-outlined">push_pin</span> Pin to profile
+                        </button>
                         <button
                           type="button"
                           onClick={async () => {
@@ -552,17 +533,37 @@ export default function VideoFeed() {
                         >
                           <span className="material-symbols-outlined">delete</span> Delete Post
                         </button>
+                        </>
                       ) : (
+                        <>
                         <button
                           type="button"
                           onClick={() => {
-                            toast({ title: "Post Reported", description: "Thanks for keeping the community safe." });
+                            setReportTarget({ targetType: "post", targetId: optionsPostId });
                             setOptionsPostId("");
                           }}
                           className="flex items-center gap-3 text-red-500 hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
                         >
                           <span className="material-symbols-outlined">flag</span> Report Post
                         </button>
+                        {targetPost?.userId && targetPost.userId !== user?.id ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await dataProvider.blockUser(targetPost.userId);
+                                toast({ title: "User blocked", description: "You will no longer see their content." });
+                                setOptionsPostId("");
+                              } catch (err) {
+                                toast({ title: "Block failed", description: err.message, variant: "destructive" });
+                              }
+                            }}
+                            className="flex items-center gap-3 text-slate-300 hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
+                          >
+                            <span className="material-symbols-outlined">block</span> Block user
+                          </button>
+                        ) : null}
+                        </>
                       )}
                     </>
                   );
@@ -583,6 +584,20 @@ export default function VideoFeed() {
           <ShareSheet
             post={displayPosts.find((p) => p.id === sharePostId)}
             onClose={() => setSharePostId("")}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {reportTarget && (
+          <ReportSheet
+            targetType={reportTarget.targetType}
+            targetId={reportTarget.targetId}
+            onSubmit={async (payload) => {
+              await dataProvider.submitReport(payload);
+              toast({ title: "Report submitted", description: "Thanks for helping keep UBIRT safe." });
+            }}
+            onClose={() => setReportTarget(null)}
           />
         )}
       </AnimatePresence>

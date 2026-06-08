@@ -1,8 +1,10 @@
 import { Capacitor } from "@capacitor/core";
+import { getAppBaseUrl } from "@/lib/apiBase";
 
 export const APP_ID = "ubirtai.app";
 export const NATIVE_OAUTH_PATH = "login";
 export const NATIVE_OAUTH_REDIRECT = `${APP_ID}://${NATIVE_OAUTH_PATH}`;
+export const NATIVE_OAUTH_BRIDGE = "/oauth-return.html";
 
 export function isNativePlatform() {
   return Capacitor.isNativePlatform();
@@ -12,11 +14,16 @@ export function getNativePlatform() {
   return Capacitor.getPlatform();
 }
 
+/** HTTPS bridge page in the OAuth browser tab → deep link back into the app. */
+export function getNativeOAuthBridgeUrl() {
+  return `${getAppBaseUrl()}${NATIVE_OAUTH_BRIDGE}`;
+}
+
 /** Base URL for auth redirects — custom scheme on native, web URL otherwise. */
 export function getOAuthRedirectUrl() {
   const platform = getNativePlatform();
   if (platform === "ios" || platform === "android") {
-    return NATIVE_OAUTH_REDIRECT;
+    return getNativeOAuthBridgeUrl();
   }
   // Always return to the same host the user started on (avoids www vs apex PKCE mismatch).
   if (typeof window !== "undefined" && window.location?.origin) {

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
-import PageHeader from "@/components/layout/PageHeader";
+import { formatCount } from "@/lib/formatStats";
 
 export default function FollowList() {
   const { username } = useParams();
@@ -46,16 +46,19 @@ export default function FollowList() {
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#0a0f16] pb-6">
-      <PageHeader
-        onBack={() => navigate(-1)}
-        center={
-          <div className="min-w-0 text-center">
-            <h1 className="text-base font-bold text-white truncate">{title}</h1>
-            <p className="text-xs text-slate-400 truncate">@{username}</p>
-          </div>
-        }
-        className="sticky top-0 bg-[#0a0f16]/95"
-      />
+      <div className="sticky top-0 z-50 flex items-center gap-3 px-4 py-3 bg-[#0a0f16]/95 backdrop-blur-md border-b border-white/5">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white shrink-0"
+        >
+          <span className="material-symbols-outlined">arrow_back</span>
+        </button>
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold text-white truncate">{title}</h1>
+          <p className="text-xs text-slate-400 truncate">@{username}</p>
+        </div>
+      </div>
 
       <div className="flex border-b border-white/5 shrink-0">
         <Link

@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
+import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 
 function roleLabel(role) {
   if (role === "owner") return "Owner";
@@ -20,6 +21,8 @@ export default function GroupSettingsSheet({ conversation, onClose, onUpdated, o
   const [debouncedTerm, setDebouncedTerm] = useState("");
   const [busy, setBusy] = useState(false);
   const [inviteCode, setInviteCode] = useState(conversation?.inviteCode ?? null);
+  const [groupAvatar, setGroupAvatar] = useState(conversation?.avatar ?? null);
+  const avatarInputRef = useRef(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedTerm(term.trim()), 300);
@@ -47,6 +50,29 @@ export default function GroupSettingsSheet({ conversation, onClose, onUpdated, o
       toast({ title: "Invite link copied" });
     } catch {
       toast({ title: "Could not copy link", variant: "destructive" });
+    }
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !conversation?.canManage) return;
+    try {
+      validateImageFile(file);
+    } catch (err) {
+      toast({ title: "Invalid image", description: err.message, variant: "destructive" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const url = await dataProvider.updateGroupAvatar(conversation.id, file);
+      setGroupAvatar(url);
+      toast({ title: "Group photo updated" });
+      onUpdated?.();
+    } catch (err) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+      e.target.value = "";
     }
   };
 
@@ -138,6 +164,40 @@ export default function GroupSettingsSheet({ conversation, onClose, onUpdated, o
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-6">
+          {conversation?.canManage ? (
+            <section className="flex flex-col items-center gap-3">
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={busy}
+                className="w-20 h-20 rounded-full bg-slate-800 border-2 border-white/10 overflow-hidden relative"
+              >
+                {groupAvatar ? (
+                  <img src={groupAvatar} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="material-symbols-outlined text-[32px] text-slate-500 absolute inset-0 flex items-center justify-center">
+                    groups
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={busy}
+                className="text-xs font-semibold text-[#3b82f6]"
+              >
+                Change group photo
+              </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept={ALLOWED_IMAGE_ACCEPT}
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+            </section>
+          ) : null}
+
           {conversation?.canManage && inviteCode && (
             <section>
               <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Invite Link</h4>

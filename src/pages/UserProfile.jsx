@@ -5,9 +5,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
+import ReportSheet from "@/components/safety/ReportSheet";
+import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { feedPostPath } from "@/lib/feedLinks";
 import { getProfileCoverUrl } from "@/lib/profileDefaults";
-import { usePageStateRestore } from "@/hooks/usePageStateRestore";
 
 export default function UserProfile() {
   const { username } = useParams();
@@ -15,14 +16,21 @@ export default function UserProfile() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [profileState, setProfileState] = usePageStateRestore(`user-profile.${username}`, { activeTab: "grid" });
-  const { activeTab } = profileState;
-  const setActiveTab = (tab) => setProfileState((s) => ({ ...s, activeTab: tab }));
+  const [activeTab, setActiveTab] = useState("grid");
+  const [showReport, setShowReport] = useState(false);
 
   const { data: profile, isLoading, isError } = useQuery({
     queryKey: ["public-profile", username],
     queryFn: () => dataProvider.getPublicProfile(username),
     enabled: Boolean(username),
+  });
+
+  const isSelf = currentUser?.username?.toLowerCase() === username?.toLowerCase();
+
+  const { data: isBlocked, refetch: refetchBlocked } = useQuery({
+    queryKey: ["is-blocked", profile?.id],
+    queryFn: () => dataProvider.isUserBlocked(profile.id),
+    enabled: Boolean(profile?.id && !isSelf),
   });
 
   const followMutation = useMutation({
@@ -47,11 +55,10 @@ export default function UserProfile() {
   });
 
   const handleMessage = () => {
-    if (!profile?.id || messageMutation.isPending) return;
+    if (!profile?.id || messageMutation.isPending || isBlocked) return;
     messageMutation.mutate(profile.id);
   };
 
-  const isSelf = currentUser?.username?.toLowerCase() === username?.toLowerCase();
   const bannerUrl = getProfileCoverUrl(profile?.cover);
 
   if (isLoading) {
@@ -76,12 +83,11 @@ export default function UserProfile() {
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#0a0f16] pb-6 relative overflow-x-hidden">
-      <div className="absolute top-0 left-0 right-0 z-50 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-4 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
+      <div className="absolute top-0 left-0 right-0 p-4 z-50 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          aria-label="Go back"
-          className="pointer-events-auto min-w-11 min-h-11 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white"
+          className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white"
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -102,8 +108,14 @@ export default function UserProfile() {
         </div>
 
         <div className="mt-3 sm:mt-16 text-center sm:text-left flex-1">
-          <h1 className="text-2xl font-bold tracking-tight text-white">{profile.name}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white inline-flex items-center gap-2 justify-center sm:justify-start">
+            {profile.name}
+            {profile.verified ? <VerifiedBadge className="w-5 h-5" /> : null}
+          </h1>
           <p className="text-sm font-medium text-[#3b82f6]">@{profile.username}</p>
+          {isSelf && profile.profileViews28d != null ? (
+            <p className="text-xs text-slate-500 mt-1">{profile.profileViews28d.toLocaleString()} profile views (28d)</p>
+          ) : null}
 
           {profile.bio ? (
             <p className="mt-2 text-sm text-slate-300 max-w-sm mx-auto sm:mx-0 text-center sm:text-left">{profile.bio}</p>
@@ -146,10 +158,14 @@ export default function UserProfile() {
           </div>
 
           {!isSelf && (
-            <div className="mt-6 flex gap-3 justify-center sm:justify-start">
+            <div className="mt-6 flex flex-col gap-3 items-center sm:items-start">
+              {isBlocked ? (
+                <p className="text-sm text-slate-400">You blocked this user.</p>
+              ) : null}
+              <div className="flex gap-3 justify-center sm:justify-start w-full">
               <button
                 type="button"
-                disabled={followMutation.isPending}
+                disabled={followMutation.isPending || isBlocked}
                 onClick={() => followMutation.mutate()}
                 className={`flex-1 max-w-[200px] h-10 rounded-full font-bold text-sm transition-colors disabled:opacity-60 ${
                   profile.isFollowing
@@ -161,7 +177,7 @@ export default function UserProfile() {
               </button>
               <button
                 type="button"
-                disabled={messageMutation.isPending || !profile.id}
+                disabled={messageMutation.isPending || !profile.id || isBlocked}
                 onClick={handleMessage}
                 className="w-10 h-10 rounded-full border border-white/20 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors disabled:opacity-60"
                 aria-label="Send message"
@@ -172,6 +188,36 @@ export default function UserProfile() {
                   <span className="material-symbols-outlined text-[20px] text-white">mail</span>
                 )}
               </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReport(true)}
+                  className="text-xs font-semibold text-slate-400 hover:text-red-400 px-3 py-1.5 rounded-full bg-white/5"
+                >
+                  Report
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if (isBlocked) {
+                        await dataProvider.unblockUser(profile.id);
+                        toast({ title: "User unblocked" });
+                      } else {
+                        await dataProvider.blockUser(profile.id);
+                        toast({ title: "User blocked" });
+                      }
+                      refetchBlocked();
+                    } catch (err) {
+                      toast({ title: "Action failed", description: err.message, variant: "destructive" });
+                    }
+                  }}
+                  className="text-xs font-semibold text-slate-400 hover:text-white px-3 py-1.5 rounded-full bg-white/5"
+                >
+                  {isBlocked ? "Unblock" : "Block"}
+                </button>
+              </div>
             </div>
           )}
           {isSelf && (
@@ -228,6 +274,11 @@ export default function UserProfile() {
                     to={feedPostPath(post.id)}
                     className="aspect-[3/4] bg-slate-800 relative group cursor-pointer overflow-hidden"
                   >
+                    {post.isPinned ? (
+                      <span className="absolute top-2 left-2 z-10 bg-black/60 rounded-full p-1">
+                        <span className="material-symbols-outlined text-white text-[14px]">push_pin</span>
+                      </span>
+                    ) : null}
                     <img
                       src={
                         post.media_url ||
@@ -249,6 +300,20 @@ export default function UserProfile() {
           </motion.div>
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {showReport && profile?.id && (
+          <ReportSheet
+            targetType="user"
+            targetId={profile.id}
+            onSubmit={async (payload) => {
+              await dataProvider.submitReport(payload);
+              toast({ title: "Report submitted", description: "Thanks for helping keep UBIRT safe." });
+            }}
+            onClose={() => setShowReport(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

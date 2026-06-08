@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Returning to UBIRT</title>
+    <script>
+      (function () {
+        var search = window.location.search || "";
+        var hash = window.location.hash || "";
+        var target = "ubirtai.app://login" + search + hash;
+        window.location.replace(target);
+        setTimeout(function () {
+          document.getElementById("hint").textContent =
+            "If the app did not open, close this tab and try signing in again.";
+        }, 2500);
+      })();
+    </script>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #101822;
+        color: #94a3b8;
+        font-family: system-ui, sans-serif;
+        text-align: center;
+        padding: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <p id="hint">Returning to UBIRT…</p>
+  </body>
+</html>
