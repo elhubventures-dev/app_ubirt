@@ -1,4 +1,4 @@
-package com.elhubventures.ubirt;
+package ubirtai.app;
 
 import com.getcapacitor.BridgeActivity;
 

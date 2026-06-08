@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 
-export const APP_ID = "com.elhubventures.ubirt";
+export const APP_ID = "ubirtai.app";
 export const NATIVE_OAUTH_PATH = "login";
 export const NATIVE_OAUTH_REDIRECT = `${APP_ID}://${NATIVE_OAUTH_PATH}`;
 
