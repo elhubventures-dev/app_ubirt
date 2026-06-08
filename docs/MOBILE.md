@@ -6,7 +6,7 @@ This project supports iOS/Android with Capacitor.
 
 The native app bundles the Vite `dist` output. After UI changes (e.g. group chat), run `npm run build:mobile` and reinstall the app on your device.
 
-**OAuth:** Supabase must allow `com.elhubventures.ubirt://login` as a redirect URL. Do not set `server.url` to the production website — that breaks Google sign-in return to the app.
+**OAuth:** Supabase must allow `ubirtai.app://login` as a redirect URL (matches `capacitor.config.json` appId). Do not set `server.url` to the production website — that breaks Google sign-in return to the app.
 
 ```bash
 npm install
@@ -21,9 +21,11 @@ Useful scripts:
 
 ## 2) OAuth deep link setup (Supabase)
 
-Add this redirect URL in Supabase Auth URL configuration:
+Add these redirect URLs in Supabase Auth URL configuration:
 
-- `com.elhubventures.ubirt://login`
+- `ubirtai.app://login` (native deep link — required)
+- `https://www.app.ubirtai.site/oauth-return.html` (Android fallback bridge)
+- `https://app.ubirtai.site/oauth-return.html` (Android fallback bridge)
 
 Keep your website redirects too:
 

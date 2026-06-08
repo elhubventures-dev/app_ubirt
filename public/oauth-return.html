@@ -6,6 +6,8 @@
     <title>Returning to UBIRT</title>
     <script>
       (function () {
+        var APP_SCHEME = "ubirtai.app";
+        var APP_PACKAGE = "ubirtai.app";
         var search = window.location.search || "";
         var hash = window.location.hash || "";
         var hasAuth = search.indexOf("code=") !== -1 || hash.indexOf("access_token=") !== -1;
@@ -13,11 +15,33 @@
           window.location.replace("/");
           return;
         }
-        var deepLink = "ubirtai.app://login" + search + hash;
-        window.location.replace(deepLink);
+
+        var deepLink = APP_SCHEME + "://login" + search + hash;
+        var isAndroid = /Android/i.test(navigator.userAgent);
+
+        if (isAndroid) {
+          var intent =
+            "intent://login" +
+            search +
+            hash +
+            "#Intent;scheme=" +
+            APP_SCHEME +
+            ";package=" +
+            APP_PACKAGE +
+            ";end";
+          window.location.replace(intent);
+        } else {
+          window.location.replace(deepLink);
+        }
+
         setTimeout(function () {
-          window.location.replace("/" + search + hash);
-        }, 1200);
+          window.location.replace(deepLink);
+        }, 600);
+
+        setTimeout(function () {
+          document.getElementById("hint").textContent =
+            "If the app did not open, close this tab and open UBIRT from your home screen.";
+        }, 2500);
       })();
     </script>
     <style>

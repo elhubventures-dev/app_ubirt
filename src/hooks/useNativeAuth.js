@@ -94,6 +94,7 @@ export function useNativeAuth() {
           await closeOAuthBrowser();
           window.history.replaceState(null, "", "/");
           navigate("/", { replace: true });
+          window.dispatchEvent(new CustomEvent("ubirt:native-oauth-success"));
         }
       } catch (error) {
         console.error("OAuth deep link failed:", error);
@@ -106,6 +107,27 @@ export function useNativeAuth() {
       }
     };
 
+    let browserFinishedHandle;
+
+    const onBrowserFinished = async () => {
+      await new Promise((r) => setTimeout(r, 400));
+      const supabase = getSupabase();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user) {
+        window.dispatchEvent(
+          new CustomEvent("ubirt:native-oauth-error", {
+            detail: { message: "Sign-in was cancelled." },
+          })
+        );
+      }
+    };
+
+    Browser.addListener("browserFinished", onBrowserFinished).then((handle) => {
+      browserFinishedHandle = handle;
+    });
+
     App.getLaunchUrl()
       .then((launch) => {
         if (launch?.url) return finishOAuth(launch.url);
@@ -117,6 +139,7 @@ export function useNativeAuth() {
 
     return () => {
       listener.then((handle) => handle.remove());
+      browserFinishedHandle?.remove();
     };
   }, [navigate]);
 
@@ -138,6 +161,7 @@ export function useNativeAuth() {
         await closeOAuthBrowser();
         window.history.replaceState(null, "", "/");
         navigate("/", { replace: true });
+        window.dispatchEvent(new CustomEvent("ubirt:native-oauth-success"));
       } catch (error) {
         console.error("Native WebView OAuth exchange failed:", error);
         await closeOAuthBrowser();

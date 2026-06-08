@@ -31,8 +31,13 @@ export default function Login() {
         variant: "destructive",
       });
     };
+    const onOAuthSuccess = () => setLoading(false);
     window.addEventListener("ubirt:native-oauth-error", onOAuthError);
-    return () => window.removeEventListener("ubirt:native-oauth-error", onOAuthError);
+    window.addEventListener("ubirt:native-oauth-success", onOAuthSuccess);
+    return () => {
+      window.removeEventListener("ubirt:native-oauth-error", onOAuthError);
+      window.removeEventListener("ubirt:native-oauth-success", onOAuthSuccess);
+    };
   }, [toast]);
 
   if (user && isLiveAuth && !isLoadingAuth) {

@@ -58,7 +58,7 @@ Apple Sign In is supported in code (`signInWithApple`) but the login button is c
 3. Paste **Services ID**, **Team ID**, **Key ID**, and private key into Supabase Apple provider → Enable.
 4. Add the same redirect URLs in Supabase **URL Configuration** as Google.
 
-Native iOS/Android OAuth uses deep-link callback `com.elhubventures.ubirt://login` (see `docs/MOBILE.md`).
+Native iOS/Android OAuth uses deep-link callback `ubirtai.app://login` (see `docs/MOBILE.md`).
 
 ### Payments (wallet coin purchases)
 

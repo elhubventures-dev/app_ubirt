@@ -23,7 +23,7 @@ export function getNativeOAuthBridgeUrl() {
 export function getOAuthRedirectUrl() {
   const platform = getNativePlatform();
   if (platform === "ios" || platform === "android") {
-    return getNativeOAuthBridgeUrl();
+    return NATIVE_OAUTH_REDIRECT;
   }
   // Always return to the same host the user started on (avoids www vs apex PKCE mismatch).
   if (typeof window !== "undefined" && window.location?.origin) {
@@ -31,6 +31,11 @@ export function getOAuthRedirectUrl() {
   }
   const base = import.meta.env.VITE_APP_URL || "";
   return `${base.replace(/\/$/, "")}/`;
+}
+
+export function isNativeOAuthBridgeUrl(url) {
+  if (!url) return false;
+  return url.includes(NATIVE_OAUTH_BRIDGE);
 }
 
 /** OAuth callback still in the URL (PKCE code or implicit tokens). */
@@ -48,5 +53,9 @@ export function hasNativeWebviewOAuthCallback() {
 
 export function isOAuthCallbackUrl(url) {
   if (!url) return false;
-  return url.startsWith(`${APP_ID}://`) || url.includes("access_token=") || url.includes("code=");
+  if (url.startsWith(`${APP_ID}://`)) return true;
+  if (isNativeOAuthBridgeUrl(url) && (url.includes("code=") || url.includes("access_token="))) {
+    return true;
+  }
+  return url.includes("access_token=") || url.includes("code=");
 }
