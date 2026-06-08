@@ -5,6 +5,8 @@ import {
   getDirectConversationPeer,
   getProfileDisplayName,
   isBlockedBetween,
+  expireStaleCalls,
+  cancelOutgoingRing,
 } from "./helpers.js";
 import { dispatchPushToUser } from "../push/dispatchPush.js";
 
@@ -40,14 +42,21 @@ export async function handleStartCall(req, res) {
 
     const admin = getAdminSupabase();
 
-    const { data: activeCall } = await admin
+    await expireStaleCalls(admin, conversationId);
+
+    const { data: activeCalls, error: activeError } = await admin
       .from("call_sessions")
-      .select("id, status")
+      .select("*")
       .eq("conversation_id", conversationId)
-      .in("status", ["ringing", "active"])
-      .maybeSingle();
+      .in("status", ["ringing", "active"]);
+    if (activeError) throw activeError;
+
+    const activeCall = activeCalls?.[0] ?? null;
     if (activeCall) {
-      return res.status(409).json({ error: "A call is already in progress for this chat." });
+      const replaced = await cancelOutgoingRing(admin, activeCall, auth.user.id);
+      if (!replaced) {
+        return res.status(409).json({ error: "A call is already in progress for this chat." });
+      }
     }
 
     const roomName = `ubirt-${conversationId.replace(/-/g, "").slice(0, 20)}-${Date.now()}`;

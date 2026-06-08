@@ -94,8 +94,10 @@ export function CallProvider({ children }) {
   const placeCall = useCallback(
     async (conversationId, callType = "audio") => {
       setIsBusy(true);
+      let callId = null;
       try {
         const result = await startCall({ conversationId, callType });
+        callId = result.callId;
         const session = {
           id: result.callId,
           conversationId: result.conversationId,
@@ -111,11 +113,17 @@ export function CallProvider({ children }) {
         setActiveSession(session);
         await daily.join({ roomUrl: result.roomUrl, token: result.token, startVideo: callType === "video" });
         return session;
+      } catch (err) {
+        if (callId) {
+          await endCall({ callId, status: "cancelled" }).catch(() => {});
+          await clearSessions();
+        }
+        throw err;
       } finally {
         setIsBusy(false);
       }
     },
-    [daily, user?.id]
+    [daily, user?.id, clearSessions]
   );
 
   const acceptIncoming = useCallback(async () => {
@@ -161,6 +169,14 @@ export function CallProvider({ children }) {
     }
   }, [activeSession, incomingSession, clearSessions]);
 
+  useEffect(() => {
+    if (!activeSession?.isOutgoing || activeSession.status !== "ringing") return undefined;
+    const timer = setTimeout(() => {
+      hangUp();
+    }, 45_000);
+    return () => clearTimeout(timer);
+  }, [activeSession?.id, activeSession?.isOutgoing, activeSession?.status, hangUp]);
+
   const value = useMemo(
     () => ({
       placeCall,
@@ -186,7 +202,7 @@ export function CallProvider({ children }) {
           isBusy={isBusy}
         />
       ) : null}
-      {activeSession && daily.isJoined ? (
+      {activeSession && (daily.isJoined || activeSession.status === "ringing") ? (
         <ActiveCallOverlay session={activeSession} onHangUp={hangUp} daily={daily} />
       ) : null}
     </CallContext.Provider>
