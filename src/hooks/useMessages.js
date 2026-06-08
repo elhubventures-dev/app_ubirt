@@ -17,7 +17,7 @@ export function useConversation(chatId) {
     queryKey: ["conversation", chatId],
     queryFn: () => dataProvider.getConversation(chatId),
     enabled: Boolean(chatId),
-    refetchInterval: isSupabaseConfigured() ? 30_000 : false,
+    refetchInterval: isSupabaseConfigured() ? 10_000 : false,
   });
 }
 
@@ -58,6 +58,7 @@ export function useChatMessages(chatId) {
     
     let unsubscribeMessages = () => {};
     let unsubscribePresence = () => {};
+    let unsubscribeReadReceipts = () => {};
 
     try {
       // Subscribe to messages
@@ -116,9 +117,20 @@ export function useChatMessages(chatId) {
       console.warn("Failed to subscribe to presence:", e);
     }
 
+    try {
+      if (dataProvider.subscribeToReadReceipts) {
+        unsubscribeReadReceipts = dataProvider.subscribeToReadReceipts(chatId, () => {
+          queryClient.invalidateQueries({ queryKey: ["conversation", chatId] });
+        }) || (() => {});
+      }
+    } catch (e) {
+      console.warn("Failed to subscribe to read receipts:", e);
+    }
+
     return () => {
       unsubscribeMessages();
       unsubscribePresence();
+      unsubscribeReadReceipts();
     };
   }, [chatId, queryClient, user?.id]);
 

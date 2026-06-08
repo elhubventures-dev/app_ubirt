@@ -16,7 +16,7 @@ export default function AppHeader() {
   const title = routeTitles[location.pathname] ?? "UBIRT";
 
   return (
-    <header className="sticky top-0 z-40 bg-[#101822]/95 backdrop-blur border-b border-white/10 pt-[env(safe-area-inset-top)]">
+    <header className="sticky top-0 z-50 bg-[#101822]/95 backdrop-blur border-b border-white/10 pt-[env(safe-area-inset-top,0px)]">
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
         <div>
           <p className="text-slate-400 text-xs tracking-widest uppercase">UBIRT.AI</p>

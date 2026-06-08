@@ -11,7 +11,7 @@ import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { Capacitor } from "@capacitor/core";
 import { getProfileCoverUrl } from "@/lib/profileDefaults";
-import { motion } from "framer-motion";
+import PageHeader from "@/components/layout/PageHeader";
 
 function Toggle({ checked, onChange, label }) {
   return (
@@ -259,16 +259,7 @@ export default function Settings() {
     <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
       <div className="absolute top-[20%] left-[-10%] w-[50%] h-[40%] bg-[#8b5cf6]/10 blur-[120px] rounded-full pointer-events-none z-0" />
 
-      <header className="shrink-0 px-4 py-4 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between z-10 shadow-sm">
-        <Link
-          to="/profile"
-          className="text-[#3b82f6] flex items-center gap-1 hover:bg-white/5 rounded-full p-1.5 -ml-1.5 transition-colors"
-        >
-          <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
-        </Link>
-        <h1 className="text-base font-bold tracking-wide absolute left-1/2 -translate-x-1/2">Edit Profile</h1>
-        <div className="w-8" />
-      </header>
+      <PageHeader backTo="/profile" title="Edit Profile" />
 
       <div className="flex-1 overflow-y-auto hide-scrollbar relative z-10">
         <div className="px-4 py-6 max-w-2xl mx-auto space-y-8">

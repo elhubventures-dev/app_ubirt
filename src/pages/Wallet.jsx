@@ -7,7 +7,7 @@ import { dataProvider } from "@/api/dataProvider";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { useToast } from "@/components/ui/use-toast";
 import { usePaystackPayment } from "react-paystack";
-import { COIN_PACKAGES } from "@/lib/coinPackages";
+import PageHeader from "@/components/layout/PageHeader";
 import {
   getActiveGatewayLabel,
   getPaystackAmount,
@@ -179,12 +179,7 @@ export default function Wallet() {
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-[#0a111a] via-[#101822] to-[#152336] z-0" />
       <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#f59e0b]/20 blur-[120px] rounded-full z-0 pointer-events-none" />
 
-      <header className="relative z-10 px-4 pt-[calc(env(safe-area-inset-top)+0.25rem)] pb-2 flex items-center border-b border-white/5 bg-[#101822]/50 backdrop-blur-md">
-        <button onClick={() => navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors mr-4">
-          <span className="material-symbols-outlined">arrow_back</span>
-        </button>
-        <h1 className="text-xl font-bold flex-1 text-center pr-10">Wallet</h1>
-      </header>
+      <PageHeader onBack={() => navigate(-1)} title="Wallet" className="bg-[#101822]/50" />
 
       <main className="flex-1 relative z-10 p-6 max-w-md mx-auto w-full flex flex-col gap-6 pb-10">
         <div className="grid grid-cols-1 gap-4">

@@ -12,3 +12,12 @@ export function isImagePost(post) {
   if (post.media_type === "video" && post.mux_playback_id) return false;
   return inferMediaType(post.media_url, post.mux_playback_id) === "image";
 }
+
+/** Caption text without #hashtags — tags are shown separately as links in the feed. */
+export function stripHashtagsFromCaption(text) {
+  if (!text) return "";
+  return text
+    .replace(/#[\w]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}

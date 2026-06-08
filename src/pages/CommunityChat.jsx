@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useChatMessages, useConversation } from "@/hooks/useMessages";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import PageHeader from "@/components/layout/PageHeader";
 import GroupSettingsSheet from "@/components/messages/GroupSettingsSheet";
 import VoiceMessageBubble from "@/components/messages/VoiceMessageBubble";
+import MessageMeta from "@/components/messages/MessageMeta";
 import { useQueryClient } from "@tanstack/react-query";
 
 const QUICK_EMOJIS = ["😀", "😂", "❤️", "🔥", "👍", "🎉", "😮", "🙏", "💯", "✨"];
@@ -163,38 +165,40 @@ export default function CommunityChat() {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
-      <header className="shrink-0 px-4 py-3 pt-[calc(env(safe-area-inset-top)+0.25rem)] bg-gradient-to-r from-[#101822] to-[#152336] backdrop-blur-xl border-b border-white/5 flex items-center justify-between z-10 shadow-sm relative">
-        <Link to="/messages" className="text-[#3b82f6] flex items-center gap-1 -ml-2 p-2 hover:bg-white/5 rounded-full transition-colors">
-          <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
-        </Link>
-
-        <button
-          type="button"
-          onClick={() => setShowSettings(true)}
-          className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 cursor-pointer hover:opacity-90"
-        >
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#3b82f6] to-purple-500 overflow-hidden shadow-sm mb-1 flex items-center justify-center">
-            {conversation?.avatar ? (
-              <img src={conversation.avatar} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <span className="material-symbols-outlined text-white text-[20px]">groups</span>
-            )}
-          </div>
-          <h1 className="text-xs font-semibold tracking-wide max-w-[180px] truncate">{groupName}</h1>
-          <span className="text-[9px] text-slate-400 font-medium">
-            {memberCount} member{memberCount !== 1 ? "s" : ""}
-            {onlineCount > 0 ? ` · ${onlineCount} online` : ""}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowSettings(true)}
-          className="text-slate-400 p-2 hover:bg-white/5 rounded-full transition-colors"
-        >
-          <span className="material-symbols-outlined text-[24px]">more_horiz</span>
-        </button>
-      </header>
+      <PageHeader
+        backTo="/messages"
+        centerInteractive
+        center={
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="flex flex-col items-center cursor-pointer hover:opacity-90"
+          >
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#3b82f6] to-purple-500 overflow-hidden shadow-sm mb-1 flex items-center justify-center">
+              {conversation?.avatar ? (
+                <img src={conversation.avatar} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="material-symbols-outlined text-white text-[20px]">groups</span>
+              )}
+            </div>
+            <h1 className="text-xs font-semibold tracking-wide max-w-[180px] truncate">{groupName}</h1>
+            <span className="text-[9px] text-slate-400 font-medium">
+              {memberCount} member{memberCount !== 1 ? "s" : ""}
+              {onlineCount > 0 ? ` · ${onlineCount} online` : ""}
+            </span>
+          </button>
+        }
+        right={
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="min-w-11 min-h-11 flex items-center justify-center text-slate-400 hover:bg-white/5 rounded-full transition-colors"
+          >
+            <span className="material-symbols-outlined text-[24px]">more_horiz</span>
+          </button>
+        }
+        className="bg-gradient-to-r from-[#101822] to-[#152336]"
+      />
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-3 pb-4 flex flex-col gap-1 z-0 hide-scrollbar">
         {isLoading ? (
@@ -302,8 +306,14 @@ export default function CommunityChat() {
                         </motion.div>
                       )}
                     </AnimatePresence>
-                    {isMe && isLastInGroup && message.status && (
-                      <span className="text-[10px] text-slate-500 mt-1 mr-1 font-medium">{message.status}</span>
+                    {isLastInGroup && (
+                      <MessageMeta
+                        message={message}
+                        isMe={isMe}
+                        showStatus={isMe}
+                        isGroup
+                        memberReads={conversation?.memberReads}
+                      />
                     )}
                   </div>
                 </motion.div>

@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { useAIChat } from "@/hooks/useAIChat";
 import { useToast } from "@/components/ui/use-toast";
-import { motion, AnimatePresence } from "framer-motion";
+import PageHeader from "@/components/layout/PageHeader";
 
 const presets = [
   "Write a 20s reel script about AI tips.",
@@ -50,26 +49,38 @@ export default function AIChat() {
       <div className="absolute top-0 right-0 w-[60%] h-[40%] bg-[#8b5cf6]/10 blur-[150px] rounded-full pointer-events-none z-0" />
       <div className="absolute bottom-0 left-[-20%] w-[50%] h-[50%] bg-[#3b82f6]/10 blur-[150px] rounded-full pointer-events-none z-0" />
 
-      {/* Header */}
-      <header className="shrink-0 px-4 py-3 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between z-10 shadow-sm relative">
-        <Link to="/" className="text-[#3b82f6] flex items-center gap-1 hover:bg-white/5 rounded-full p-1.5 -ml-1.5 transition-colors">
-          <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
-        </Link>
-        <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2">
-           <div className="w-8 h-8 bg-gradient-to-br from-[#8b5cf6] to-[#3b82f6] rounded-xl flex items-center justify-center mb-1 shadow-[0_0_10px_rgba(139,92,246,0.5)]">
-             <span className="material-symbols-outlined text-[18px] text-white">smart_toy</span>
-           </div>
-           <h1 className="text-xs font-bold tracking-wide">{meta?.title ?? "UBIRT AI"}</h1>
-        </div>
-        <div className="flex gap-1">
-          <button onClick={retryLast} disabled={isAsking || messages.length === 0} className="text-slate-400 p-2 hover:bg-white/5 hover:text-white rounded-full transition-colors" title="Retry Last Response">
-            <span className="material-symbols-outlined text-[22px]">refresh</span>
-          </button>
-          <button onClick={clearConversation} className="text-slate-400 p-2 hover:bg-red-500/10 hover:text-red-400 rounded-full transition-colors" title="Clear Chat">
-            <span className="material-symbols-outlined text-[22px]">delete_sweep</span>
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        backTo="/"
+        center={
+          <div className="flex flex-col items-center">
+            <div className="w-8 h-8 bg-gradient-to-br from-[#8b5cf6] to-[#3b82f6] rounded-xl flex items-center justify-center mb-1 shadow-[0_0_10px_rgba(139,92,246,0.5)]">
+              <span className="material-symbols-outlined text-[18px] text-white">smart_toy</span>
+            </div>
+            <h1 className="text-xs font-bold tracking-wide text-white">{meta?.title ?? "UBIRT AI"}</h1>
+          </div>
+        }
+        right={
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={retryLast}
+              disabled={isAsking || messages.length === 0}
+              className="min-w-11 min-h-11 flex items-center justify-center text-slate-400 hover:bg-white/5 hover:text-white rounded-full transition-colors"
+              title="Retry Last Response"
+            >
+              <span className="material-symbols-outlined text-[22px]">refresh</span>
+            </button>
+            <button
+              type="button"
+              onClick={clearConversation}
+              className="min-w-11 min-h-11 flex items-center justify-center text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-full transition-colors"
+              title="Clear Chat"
+            >
+              <span className="material-symbols-outlined text-[22px]">delete_sweep</span>
+            </button>
+          </div>
+        }
+      />
 
       {/* Scrollable Messages Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 z-0 hide-scrollbar pb-40">

@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { getProfileCoverUrl } from "@/lib/profileDefaults";
 import PostManageSheet from "@/components/profile/PostManageSheet";
 import { ACHIEVEMENT_BADGES } from "@/lib/achievementBadges";
+import { usePageStateRestore } from "@/hooks/usePageStateRestore";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -27,7 +28,9 @@ export default function Profile() {
     isPublishingUpload,
   } = useCreatorStudio();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("grid");
+  const [profileState, setProfileState] = usePageStateRestore("profile", { activeTab: "grid" });
+  const { activeTab } = profileState;
+  const setActiveTab = (tab) => setProfileState((s) => ({ ...s, activeTab: tab }));
   const [selectedUpload, setSelectedUpload] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");

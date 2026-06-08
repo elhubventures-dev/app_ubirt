@@ -136,6 +136,7 @@ function mapPost(row, profile, liked, bookmarked) {
     userId: row.user_id,
     author: profile?.display_name ?? "Creator",
     username: profile?.username ?? "user",
+    avatar: profile?.avatar_url ?? null,
     handle: `@${profile?.username ?? "user"}`,
     caption: row.caption,
     tags: Array.from(tags),
@@ -798,7 +799,7 @@ export const supabaseApi = {
 
     const { data: members, error } = await supabase
       .from("conversation_members")
-      .select("user_id, role, joined_at, profiles:user_id (display_name, username, avatar_url, last_seen_at)")
+      .select("user_id, role, joined_at, last_read_at, profiles:user_id (display_name, username, avatar_url, last_seen_at)")
       .eq("conversation_id", chatId);
     if (error) throw error;
 
@@ -824,7 +825,11 @@ export const supabaseApi = {
           avatar: m.profiles?.avatar_url ?? null,
           role: m.role,
           joinedAt: m.joined_at,
+          lastReadAt: m.last_read_at ?? null,
         })),
+        memberReads: memberRows
+          .filter((m) => m.user_id !== userId)
+          .map((m) => ({ userId: m.user_id, lastReadAt: m.last_read_at ?? null })),
       };
     }
 
@@ -839,6 +844,7 @@ export const supabaseApi = {
       username: otherProfile?.username ?? null,
       avatar: otherProfile?.avatar_url ?? null,
       lastSeenAt: otherProfile?.last_seen_at ?? null,
+      peerLastReadAt: otherMember?.last_read_at ?? null,
     };
   },
 
@@ -1152,6 +1158,24 @@ export const supabaseApi = {
     return () => supabase.removeChannel(channel);
   },
 
+  subscribeToReadReceipts(chatId, onUpdate) {
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel(`read-receipts:${chatId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversation_members",
+          filter: `conversation_id=eq.${chatId}`,
+        },
+        () => onUpdate?.()
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  },
+
   async deleteMessage(messageId, scope = "me") {
     const userId = await getUserId();
     const supabase = getSupabase();
@@ -1255,7 +1279,7 @@ export const supabaseApi = {
         media_url: mediaUrl,
         media_type: mediaType,
         media_duration: mediaDuration,
-        status: "sent",
+        status: "delivered",
       })
       .select()
       .single();

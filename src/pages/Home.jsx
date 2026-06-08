@@ -136,7 +136,7 @@ export default function Home() {
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent flex flex-col justify-end p-3 pointer-events-none">
                         <div className="flex items-center gap-1.5 mb-1">
-                          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${post.username || post.author}`} alt={post.author} className="w-4 h-4 rounded-full bg-slate-700" />
+                          <img src={post.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${post.username || post.author}`} alt={post.author} className="w-4 h-4 rounded-full bg-slate-700" />
                           <span className="text-[10px] text-white font-medium truncate">{post.author}</span>
                         </div>
                         <p className="text-xs text-slate-300 font-medium truncate">{post.caption}</p>

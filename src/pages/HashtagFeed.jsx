@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { dataProvider } from "@/api/dataProvider";
+import PageHeader from "@/components/layout/PageHeader";
 
 export default function HashtagFeed() {
   const { tag } = useParams();
@@ -22,19 +22,21 @@ export default function HashtagFeed() {
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#0a0f16] text-white">
-      {/* Header */}
-      <header className="shrink-0 px-4 py-4 bg-[#101822] border-b border-white/5 flex items-center justify-between z-10 shadow-sm relative sticky top-0">
-        <button onClick={() => navigate(-1)} className="text-[#3b82f6] flex items-center gap-1 hover:bg-white/5 rounded-full p-1.5 -ml-1.5 transition-colors">
-          <span className="material-symbols-outlined text-[24px]">arrow_back_ios</span>
-        </button>
-        <h1 className="text-base font-bold tracking-wide absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
-           <div className="w-6 h-6 rounded-full bg-[#3b82f6] text-white flex items-center justify-center font-black text-xs mr-1">#</div>
-           {tag}
-        </h1>
-        <button className="text-slate-400 p-2 hover:text-white transition-colors">
-          <span className="material-symbols-outlined">share</span>
-        </button>
-      </header>
+      <PageHeader
+        onBack={() => navigate(-1)}
+        center={
+          <h1 className="text-base font-bold tracking-wide flex items-center gap-1 text-white">
+            <span className="w-6 h-6 rounded-full bg-[#3b82f6] text-white flex items-center justify-center font-black text-xs">#</span>
+            {tag}
+          </h1>
+        }
+        right={
+          <button type="button" className="min-w-11 min-h-11 flex items-center justify-center text-slate-400 hover:text-white rounded-full hover:bg-white/5 transition-colors">
+            <span className="material-symbols-outlined">share</span>
+          </button>
+        }
+        className="sticky top-0 bg-[#101822]"
+      />
 
       {/* Hashtag Stats Overlay */}
       <div className="px-4 py-6 bg-gradient-to-b from-[#101822] to-transparent">

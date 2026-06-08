@@ -5,6 +5,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { feedPostPath } from "@/lib/feedLinks";
 import { searchSounds, SOUND_LIBRARY } from "@/lib/soundLibrary";
+import { usePageStateRestore } from "@/hooks/usePageStateRestore";
+
+const SEARCH_DEFAULT = {
+  term: "",
+  activeTab: "top",
+  showFilters: false,
+  dateFilter: "any",
+  sortBy: "relevant",
+};
 
 const DATE_FILTERS = {
   any: null,
@@ -15,12 +24,9 @@ const DATE_FILTERS = {
 const SORT_OPTIONS = ["relevant", "likes", "views"];
 
 export default function Search() {
-  const [term, setTerm] = useState("");
-  const [debouncedTerm, setDebouncedTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("top");
-  const [showFilters, setShowFilters] = useState(false);
-  const [dateFilter, setDateFilter] = useState("any");
-  const [sortBy, setSortBy] = useState("relevant");
+  const [searchState, setSearchState] = usePageStateRestore("search", SEARCH_DEFAULT);
+  const { term, activeTab, showFilters, dateFilter, sortBy } = searchState;
+  const [debouncedTerm, setDebouncedTerm] = useState(term.trim());
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedTerm(term.trim()), 300);
@@ -103,18 +109,18 @@ export default function Search() {
           <input
             type="text"
             value={term}
-            onChange={(e) => setTerm(e.target.value)}
+            onChange={(e) => setSearchState((s) => ({ ...s, term: e.target.value }))}
             placeholder="Search creators, posts, sounds, tags..."
             className="w-full bg-[#1a2332]/80 backdrop-blur-md border border-white/10 rounded-full py-3.5 pl-12 pr-4 text-white placeholder-slate-400 focus:outline-none focus:border-[#3b82f6]/50 focus:ring-1 focus:ring-[#3b82f6]/50 transition-all shadow-inner"
           />
           {term && (
-            <button type="button" onClick={() => setTerm("")} className="absolute inset-y-0 right-12 flex items-center text-slate-400 hover:text-white">
+            <button type="button" onClick={() => setSearchState((s) => ({ ...s, term: "" }))} className="absolute inset-y-0 right-12 flex items-center text-slate-400 hover:text-white">
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           )}
           <button
             type="button"
-            onClick={() => setShowFilters(!showFilters)}
+            onClick={() => setSearchState((s) => ({ ...s, showFilters: !s.showFilters }))}
             className={`absolute inset-y-0 right-2 flex items-center p-2 rounded-full transition-colors ${showFilters ? "text-[#3b82f6] bg-[#3b82f6]/10" : "text-slate-400 hover:text-white"}`}
           >
             <span className="material-symbols-outlined text-[20px]">tune</span>
@@ -134,7 +140,7 @@ export default function Search() {
                    <span className="font-semibold text-slate-300">Date Posted</span>
                    <select
                      value={dateFilter}
-                     onChange={(e) => setDateFilter(e.target.value)}
+                     onChange={(e) => setSearchState((s) => ({ ...s, dateFilter: e.target.value }))}
                      className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 outline-none"
                    >
                      <option value="any">Any time</option>
@@ -147,7 +153,7 @@ export default function Search() {
                    <span className="font-semibold text-slate-300">Popularity</span>
                    <select
                      value={sortBy}
-                     onChange={(e) => setSortBy(e.target.value)}
+                     onChange={(e) => setSearchState((s) => ({ ...s, sortBy: e.target.value }))}
                      className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 outline-none"
                    >
                      <option value="relevant">Most Relevant</option>
@@ -227,7 +233,7 @@ export default function Search() {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => setSearchState((s) => ({ ...s, activeTab: tab.id }))}
                   className={`py-2 text-sm font-semibold relative transition-colors whitespace-nowrap ${activeTab === tab.id ? "text-[#3b82f6]" : "text-slate-400 hover:text-slate-200"}`}
                 >
                   {tab.label}

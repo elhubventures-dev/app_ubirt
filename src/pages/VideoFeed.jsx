@@ -11,9 +11,14 @@ import { useToast } from "@/components/ui/use-toast";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { motion, AnimatePresence } from "framer-motion";
 import { getPreference } from "@/lib/preferences";
-import { isImagePost } from "@/lib/media";
+import { isImagePost, stripHashtagsFromCaption } from "@/lib/media";
 import NotificationBell from "@/components/layout/NotificationBell";
 import { calculateGiftSplit } from "@/lib/giftSplit";
+import { saveNavState, loadNavState } from "@/lib/navigationRestore";
+
+function feedStateKey(type) {
+  return `feed.${type}`;
+}
 
 function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId, setGiftPostId }) {
   const videoRef = useRef(null);
@@ -21,6 +26,8 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
   const [isPlaying, setIsPlaying] = useState(true);
   const [showPlayOverlay, setShowPlayOverlay] = useState(false);
   const profileSlug = post.username || post.author;
+  const avatarSrc = post.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${profileSlug}`;
+  const captionText = stripHashtagsFromCaption(post.caption);
 
   useEffect(() => {
     if (isVisible && post.id && !viewedRef.current) {
@@ -77,39 +84,39 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
 
   const hasMedia = !!post.media_url;
   const showAsImage = isImagePost(post);
+  const mediaFitClass = "max-w-full max-h-full w-auto h-auto object-contain";
 
   return (
     <div className="relative w-full h-[100dvh] bg-black snap-start flex justify-center items-center overflow-hidden">
-      {/* Media Background */}
+      {/* Media — fit uploaded aspect ratio (landscape, portrait, square) without cropping */}
       {hasMedia ? (
-        showAsImage ? (
-          <img src={post.media_url} alt="Post media" className="w-full h-full object-cover" onClick={handleTap} />
-        ) : post.mux_playback_id ? (
-          <div onClick={handleTap} className="w-full h-full overflow-hidden relative">
+        <div className="absolute inset-0 flex items-center justify-center" onClick={handleTap}>
+          {showAsImage ? (
+            <img src={post.media_url} alt="Post media" className={mediaFitClass} />
+          ) : post.mux_playback_id ? (
             <MuxPlayer
               ref={videoRef}
               playbackId={post.mux_playback_id}
-              className="w-full h-full object-cover absolute inset-0 scale-[1.01]"
+              className="w-full h-full max-h-[100dvh]"
               loop={false}
               muted
               autoPlay="muted"
               onEnded={() => onAutoScroll && onAutoScroll()}
               streamType="on-demand"
-              style={{ "--controls": "none", "--media-object-fit": "cover" }}
+              style={{ "--controls": "none", "--media-object-fit": "contain" }}
             />
-          </div>
-        ) : (
-          <video
-            ref={videoRef}
-            src={post.media_url}
-            className="w-full h-full object-cover"
-            loop={false}
-            muted
-            playsInline
-            onClick={handleTap}
-            onEnded={() => onAutoScroll && onAutoScroll()}
-          />
-        )
+          ) : (
+            <video
+              ref={videoRef}
+              src={post.media_url}
+              className={mediaFitClass}
+              loop={false}
+              muted
+              playsInline
+              onEnded={() => onAutoScroll && onAutoScroll()}
+            />
+          )}
+        </div>
       ) : (
         <div className="w-full h-full bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center" onClick={handleTap}>
           <p className="text-slate-500 font-medium tracking-widest uppercase">No Media</p>
@@ -152,7 +159,9 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
       {/* Info Area (Bottom Left) */}
       <div className="absolute bottom-24 left-4 right-20 pb-4 pointer-events-auto">
         <Link to={`/user/${profileSlug}`} className="text-white font-bold text-lg drop-shadow-md hover:underline">@{profileSlug}</Link>
-        <p className="text-slate-200 text-sm mt-1 drop-shadow-md line-clamp-3">{post.caption}</p>
+        {captionText ? (
+          <p className="text-slate-200 text-sm mt-1 drop-shadow-md line-clamp-3">{captionText}</p>
+        ) : null}
         {post.tags && post.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2">
             {post.tags.map((tag, i) => (
@@ -166,7 +175,7 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
       <div className="absolute bottom-28 right-4 flex flex-col items-center gap-6 pointer-events-auto">
         {/* Avatar */}
         <Link to={`/user/${profileSlug}`} className="w-12 h-12 rounded-full border-2 border-white overflow-hidden bg-slate-800 transition-transform active:scale-90">
-          <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${profileSlug}`} alt="Avatar" className="w-full h-full object-cover" />
+          <img src={avatarSrc} alt={post.author || profileSlug} className="w-full h-full object-cover" />
         </Link>
 
         {/* Like */}
@@ -222,9 +231,10 @@ export default function VideoFeed() {
   const [giftPostId, setGiftPostId] = useState("");
   const [commentDraft, setCommentDraft] = useState("");
   const [activePostIndex, setActivePostIndex] = useState(0);
-  const [feedType, setFeedType] = useState("foryou");
+  const [feedType, setFeedType] = useState(() => loadNavState("feed.tab")?.feedType ?? "foryou");
   const scrolledToPostRef = useRef(null);
   const postRefs = useRef({});
+  const lastFeedRestoreRef = useRef(null);
 
   const {
     data: posts = [],
@@ -256,6 +266,52 @@ export default function VideoFeed() {
   const { data: comments = [], isLoading: isLoadingComments } = useFeedComments(expandedPostId);
   const { toast } = useToast();
   const containerRef = useRef(null);
+
+  const persistFeedPosition = (index, posts = displayPosts, type = feedType) => {
+    const postId = posts[index]?.id;
+    if (!postId) return;
+    saveNavState("feed.tab", { feedType: type });
+    saveNavState(feedStateKey(type), { postId, activePostIndex: index });
+  };
+
+  useEffect(() => {
+    if (!isFeedReady || !displayPosts.length || targetPostId) return;
+    const restoreKey = feedType;
+    if (lastFeedRestoreRef.current === restoreKey) return;
+
+    const saved = loadNavState(feedStateKey(feedType));
+    lastFeedRestoreRef.current = restoreKey;
+    if (!saved) return;
+
+    let index = typeof saved.activePostIndex === "number" ? saved.activePostIndex : 0;
+    if (saved.postId) {
+      const byId = displayPosts.findIndex((p) => p.id === saved.postId);
+      if (byId >= 0) index = byId;
+    }
+    index = Math.max(0, Math.min(index, displayPosts.length - 1));
+
+    const scrollToIndex = () => {
+      const height = window.innerHeight;
+      if (containerRef.current) {
+        containerRef.current.scrollTop = index * height;
+      }
+      setActivePostIndex(index);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scrollToIndex));
+  }, [isFeedReady, displayPosts, feedType, targetPostId]);
+
+  const feedStateRef = useRef({ activePostIndex, displayPosts, feedType });
+  feedStateRef.current = { activePostIndex, displayPosts, feedType };
+
+  useEffect(() => {
+    return () => {
+      const { activePostIndex: index, displayPosts: posts, feedType: type } = feedStateRef.current;
+      const postId = posts[index]?.id;
+      if (!postId) return;
+      saveNavState("feed.tab", { feedType: type });
+      saveNavState(feedStateKey(type), { postId, activePostIndex: index });
+    };
+  }, []);
 
   useEffect(() => {
     if (!targetPostId || !isFeedReady || !displayPosts.length) return;
@@ -309,6 +365,7 @@ export default function VideoFeed() {
     if (index !== activePostIndex) {
       setActivePostIndex(index);
     }
+    persistFeedPosition(index);
   };
 
   const handleLike = async (postId) => {
@@ -347,20 +404,30 @@ export default function VideoFeed() {
   return (
     <div className="relative w-full h-[100dvh] bg-black">
       {/* Top Navigation Toggle */}
-      <div className="absolute top-0 left-0 right-0 z-10 pt-12 pb-4 flex justify-center items-start gap-6 pointer-events-auto bg-gradient-to-b from-black/60 to-transparent">
-        <div className="absolute top-12 right-4 pointer-events-auto">
+      <div className="absolute top-0 left-0 right-0 z-50 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-4 px-4 flex justify-center items-start gap-6 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
+        <div className="absolute top-[calc(env(safe-area-inset-top,0px)+0.75rem)] right-4 pointer-events-auto">
           <NotificationBell variant="overlay" />
         </div>
-        <button 
-          onClick={() => setFeedType("following")}
-          className={`text-lg font-bold transition-colors ${feedType === "following" ? "text-white drop-shadow-md" : "text-white/50"}`}
+        <button
+          type="button"
+          onClick={() => {
+            setFeedType("following");
+            lastFeedRestoreRef.current = null;
+            saveNavState("feed.tab", { feedType: "following" });
+          }}
+          className={`pointer-events-auto text-lg font-bold transition-colors ${feedType === "following" ? "text-white drop-shadow-md" : "text-white/50"}`}
         >
           Following
           {feedType === "following" && <motion.div layoutId="feedTab" className="h-1 w-6 bg-white mx-auto rounded-full mt-1" />}
         </button>
-        <button 
-          onClick={() => setFeedType("foryou")}
-          className={`text-lg font-bold transition-colors ${feedType === "foryou" ? "text-white drop-shadow-md" : "text-white/50"}`}
+        <button
+          type="button"
+          onClick={() => {
+            setFeedType("foryou");
+            lastFeedRestoreRef.current = null;
+            saveNavState("feed.tab", { feedType: "foryou" });
+          }}
+          className={`pointer-events-auto text-lg font-bold transition-colors ${feedType === "foryou" ? "text-white drop-shadow-md" : "text-white/50"}`}
         >
           For You
           {feedType === "foryou" && <motion.div layoutId="feedTab" className="h-1 w-6 bg-white mx-auto rounded-full mt-1" />}

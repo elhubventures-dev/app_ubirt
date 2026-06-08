@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useChatMessages, useConversation } from "@/hooks/useMessages";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import VoiceMessageBubble from "@/components/messages/VoiceMessageBubble";
+import MessageMeta from "@/components/messages/MessageMeta";
 import { formatPresenceStatus } from "@/lib/presence";
 import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -150,8 +151,8 @@ export default function ChatDetail() {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#0a0f16] text-white overflow-hidden relative">
-      <header className="shrink-0 grid grid-cols-[auto_1fr_auto] items-center gap-2 px-2 pt-[calc(env(safe-area-inset-top)+0.25rem)] pb-2 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 z-10 shadow-sm">
-        <Link to="/messages" className="text-[#3b82f6] p-1.5 hover:bg-white/5 rounded-full transition-colors">
+      <header className="shrink-0 grid grid-cols-[auto_1fr_auto] items-center gap-2 px-2 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-2 bg-[#101822]/80 backdrop-blur-xl border-b border-white/5 z-50 shadow-sm">
+        <Link to="/messages" className="relative z-20 min-w-11 min-h-11 flex items-center justify-center text-[#3b82f6] p-1.5 hover:bg-white/5 rounded-full transition-colors">
           <span className="material-symbols-outlined text-[22px]">arrow_back_ios</span>
         </Link>
 
@@ -274,8 +275,13 @@ export default function ChatDetail() {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                  {isMe && isLastInGroup && message.status && (
-                    <span className="text-[10px] text-slate-500 mt-1 mr-1 font-medium">{message.status}</span>
+                  {isLastInGroup && (
+                    <MessageMeta
+                      message={message}
+                      isMe={isMe}
+                      showStatus={isMe}
+                      peerLastReadAt={conversation?.peerLastReadAt}
+                    />
                   )}
                 </motion.div>
               );

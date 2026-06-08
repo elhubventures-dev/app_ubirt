@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { feedPostPath } from "@/lib/feedLinks";
 import { getProfileCoverUrl } from "@/lib/profileDefaults";
+import { usePageStateRestore } from "@/hooks/usePageStateRestore";
 
 export default function UserProfile() {
   const { username } = useParams();
@@ -14,7 +15,9 @@ export default function UserProfile() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("grid");
+  const [profileState, setProfileState] = usePageStateRestore(`user-profile.${username}`, { activeTab: "grid" });
+  const { activeTab } = profileState;
+  const setActiveTab = (tab) => setProfileState((s) => ({ ...s, activeTab: tab }));
 
   const { data: profile, isLoading, isError } = useQuery({
     queryKey: ["public-profile", username],
@@ -73,11 +76,12 @@ export default function UserProfile() {
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#0a0f16] pb-6 relative overflow-x-hidden">
-      <div className="absolute top-0 left-0 right-0 p-4 z-50 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-50 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-4 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white"
+          aria-label="Go back"
+          className="pointer-events-auto min-w-11 min-h-11 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white"
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>

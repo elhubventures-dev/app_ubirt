@@ -401,8 +401,9 @@ export const mockApi = {
   },
   async markConversationRead(chatId) {
     await wait(40);
+    const readAt = new Date().toISOString();
     conversations = conversations.map((c) =>
-      c.id === chatId ? { ...c, unread: 0, lastReadAt: new Date().toISOString() } : c
+      c.id === chatId ? { ...c, unread: 0, lastReadAt: readAt } : c
     );
     persistState();
     return true;
@@ -431,6 +432,7 @@ export const mockApi = {
       username: chat?.username ?? null,
       avatar: chat?.avatar ?? null,
       lastSeenAt: chat?.lastSeenAt ?? new Date().toISOString(),
+      peerLastReadAt: chat?.peerLastReadAt ?? null,
     };
   },
   async updateLastSeen() {
@@ -523,6 +525,9 @@ export const mockApi = {
   subscribeToMessages(chatId, handlers) {
     return () => {};
   },
+  subscribeToReadReceipts() {
+    return () => {};
+  },
   async deleteMessage(messageId, scope = "me") {
     await wait(80);
     if (scope === "me") {
@@ -567,6 +572,7 @@ export const mockApi = {
       role: "me",
       text: isVoice ? "Voice message" : text,
       status: "sent",
+      createdAt: new Date().toISOString(),
       mediaUrl: isVoice ? URL.createObjectURL(attachment.file) : null,
       mediaType: isVoice ? "audio" : null,
       mediaDuration:
@@ -602,22 +608,28 @@ export const mockApi = {
       persistState();
     }, 900);
     window.setTimeout(() => {
+      const replyAt = new Date().toISOString();
       const reply = {
         id: `r-${Date.now()}`,
         role: "other",
         text: "Nice one. I will review and circle back.",
+        createdAt: replyAt,
       };
       messagesByChat = {
         ...messagesByChat,
-        [chatId]: [...(messagesByChat[chatId] ?? []), reply],
+        [chatId]: [
+          ...(messagesByChat[chatId] ?? []).map((msg) =>
+            msg.role === "me" ? { ...msg, status: "read" } : msg
+          ),
+          reply,
+        ],
       };
-      typingByChat = { ...typingByChat, [chatId]: false };
-      const replyAt = new Date().toISOString();
       conversations = conversations.map((c) =>
         c.id === chatId
-          ? { ...c, lastMessage: reply.text, updatedAt: "now", sortAt: replyAt, unread: (c.unread ?? 0) + 1 }
+          ? { ...c, lastMessage: reply.text, updatedAt: "now", sortAt: replyAt, unread: (c.unread ?? 0) + 1, peerLastReadAt: replyAt }
           : c
       );
+      typingByChat = { ...typingByChat, [chatId]: false };
       persistState();
     }, 1500);
     return message;

@@ -10,6 +10,7 @@ import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoFilters, getFilterClass } from "@/components/studio/VideoFilters";
 import { getSoundById } from "@/lib/soundLibrary";
+import PageHeader from "@/components/layout/PageHeader";
 
 const selectClass = "w-full rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white focus:bg-white/10 transition-colors outline-none";
 
@@ -18,7 +19,7 @@ export default function Upload() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("Product");
-  const [visibility, setVisibility] = useState("team");
+  const [visibility, setVisibility] = useState("public");
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [filter, setFilter] = useState("none");
@@ -62,7 +63,11 @@ export default function Upload() {
     }
   };
 
-  const onSubmit = async () => {
+  const publishNow = async () => {
+    if (!title.trim()) {
+      toast({ title: "Title required", description: "Please enter a title.", variant: "destructive" });
+      return;
+    }
     if (!file) {
       toast({ title: "Image required", description: "Select a JPG or PNG image first.", variant: "destructive" });
       return;
@@ -72,20 +77,15 @@ export default function Upload() {
         payload: { title, description, category, visibility, filter, audio, captions },
         file,
       });
-      toast({ title: "Draft saved", description: `Upload ${result.id} has been stored successfully.` });
-      navigate("/creator-studio");
+      await publishUpload(result.id);
+      toast({ title: "Published!", description: "Your post is now live." });
+      navigate("/feed");
     } catch (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      toast({ title: "Publish failed", description: error.message, variant: "destructive" });
     }
   };
 
-  const nextStep = () => {
-    if (step === 3 && !title) {
-      toast({ title: "Title required", description: "Please enter a title.", variant: "destructive" });
-      return;
-    }
-    setStep((s) => Math.min(s + 1, 4));
-  };
+  const nextStep = () => setStep((s) => Math.min(s + 1, 3));
   const prevStep = () => setStep((s) => Math.max(s - 1, 1));
 
   return (
@@ -94,18 +94,22 @@ export default function Upload() {
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-[#0a111a] via-[#101822] to-[#152336] z-0" />
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#0d5bba]/20 blur-[120px] rounded-full z-0 pointer-events-none" />
 
-      {/* Header */}
-      <header className="relative z-10 px-4 py-4 flex items-center justify-between border-b border-white/5 bg-[#101822]/50 backdrop-blur-md">
-        <button onClick={() => step > 1 ? prevStep() : navigate(-1)} className="text-slate-400 p-2 hover:text-white rounded-full bg-white/5 transition-colors">
-          <span className="material-symbols-outlined">{step > 1 ? "arrow_back" : "close"}</span>
-        </button>
-          <div className="flex gap-1.5 w-32 justify-center mx-auto absolute left-1/2 -translate-x-1/2">
-            {[1, 2, 3, 4].map((s) => (
-              <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${step >= s ? "bg-[#3b82f6]" : "bg-white/20"}`} />
+      <PageHeader
+        onBack={() => (step > 1 ? prevStep() : navigate(-1))}
+        backIcon={step > 1 ? "arrow_back" : "close"}
+        backLabel={step > 1 ? "Previous step" : "Close"}
+        center={
+          <div className="flex gap-1.5 w-32">
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                className={`h-1.5 flex-1 rounded-full transition-colors ${step >= s ? "bg-[#3b82f6]" : "bg-white/20"}`}
+              />
             ))}
           </div>
-        <div className="w-10" /> {/* Spacer */}
-      </header>
+        }
+        className="bg-[#101822]/50"
+      />
 
       <main className="flex-1 relative z-10 p-4 max-w-md mx-auto w-full flex flex-col">
         <AnimatePresence mode="wait" custom={step}>
@@ -171,10 +175,14 @@ export default function Upload() {
                 <h1 className="text-2xl font-bold">Edit Photo</h1>
               </div>
 
-              {/* Live Preview Miniature for Editing */}
-              <div className="h-64 rounded-2xl bg-black overflow-hidden relative shadow-lg ring-1 ring-white/10 shrink-0">
+              {/* Full-image preview — entire upload visible before publishing */}
+              <div className="flex-1 min-h-[220px] max-h-[min(52vh,520px)] rounded-2xl bg-black overflow-hidden relative shadow-lg ring-1 ring-white/10 flex items-center justify-center">
                 {filePreview ? (
-                  <img src={filePreview} alt="Preview" className={`w-full h-full object-cover opacity-90 ${getFilterClass(filter)}`} />
+                  <img
+                    src={filePreview}
+                    alt="Preview"
+                    className={`max-w-full max-h-full w-auto h-auto object-contain ${getFilterClass(filter)}`}
+                  />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
                     <span className="text-slate-500 font-medium">No image</span>
@@ -182,8 +190,8 @@ export default function Upload() {
                 )}
               </div>
 
-              <div className="space-y-6 flex-1 overflow-y-auto hide-scrollbar pb-10">
-                <VideoFilters currentFilter={filter} onSelectFilter={setFilter} />
+              <div className="space-y-4 shrink-0 overflow-y-auto hide-scrollbar max-h-[38vh] pb-2">
+                <VideoFilters currentFilter={filter} onSelectFilter={setFilter} previewSrc={filePreview} />
               </div>
 
               <div className="mt-auto pt-6 bg-[#0a0f16]">
@@ -229,87 +237,12 @@ export default function Upload() {
               </div>
 
               <div className="mt-auto pt-6">
-                <PrimaryButton className="w-full py-4 rounded-full text-base font-semibold" onClick={nextStep}>
-                  Next
-                </PrimaryButton>
-              </div>
-            </motion.div>
-          )}
-
-          {step === 4 && (
-            <motion.div
-              key="step4"
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 50 }}
-              className="flex-1 flex flex-col gap-6"
-            >
-              <div className="mt-4">
-                <h1 className="text-2xl font-bold">Publish Settings</h1>
-              </div>
-
-              {/* Live Preview Miniature */}
-              <div className="h-48 rounded-2xl bg-black overflow-hidden relative shadow-lg ring-1 ring-white/10">
-                {filePreview ? (
-                  <img src={filePreview} alt="Preview" className={`w-full h-full object-cover opacity-80 ${getFilterClass(filter)}`} />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
-                    <span className="text-slate-500 font-medium">No Media</span>
-                  </div>
-                )}
-                
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                <div className="absolute bottom-3 left-3 right-3">
-                  <h3 className="font-bold text-white text-sm truncate">{title || "Untitled Draft"}</h3>
-                  <p className="text-xs text-slate-300 truncate">{description || "No description provided."}</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-1 block">Category</label>
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectClass}>
-                    <option value="Product">Product</option>
-                    <option value="Tutorial">Tutorial</option>
-                    <option value="Community">Community</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-1 block">Visibility</label>
-                  <select value={visibility} onChange={(e) => setVisibility(e.target.value)} className={selectClass}>
-                    <option value="team">Team Only</option>
-                    <option value="public">Public</option>
-                    <option value="private">Private</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="mt-auto pt-6 flex gap-3">
-                <PrimaryButton variant="secondary" className="flex-1 py-4 rounded-full" onClick={onSubmit} disabled={isSavingUpload || isPublishingUpload}>
-                  Save Draft
-                </PrimaryButton>
-                <PrimaryButton 
-                  className="flex-1 py-4 rounded-full" 
-                  onClick={async () => {
-                    if (!file) {
-                      toast({ title: "Image required", description: "Select a JPG or PNG image first.", variant: "destructive" });
-                      return;
-                    }
-                    try {
-                      const result = await saveUpload({
-                        payload: { title, description, category, visibility },
-                        file,
-                      });
-                      await publishUpload(result.id);
-                      toast({ title: "Published!", description: "Your post is now live." });
-                      navigate("/feed");
-                    } catch (error) {
-                      toast({ title: "Publish failed", description: error.message, variant: "destructive" });
-                    }
-                  }} 
+                <PrimaryButton
+                  className="w-full py-4 rounded-full text-base font-semibold"
+                  onClick={publishNow}
                   disabled={isSavingUpload || isPublishingUpload}
                 >
-                  Publish Now
+                  {isSavingUpload || isPublishingUpload ? "Publishing..." : "Publish"}
                 </PrimaryButton>
               </div>
             </motion.div>

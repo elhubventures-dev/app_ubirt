@@ -59,10 +59,10 @@ export const mockConversations = [
 
 export const mockMessagesByChat = {
   "chat-1": [
-    { id: "m1", role: "other", text: "Can you review the upload flow?" },
-    { id: "m2", role: "me", text: "Yes, sending notes in 10 minutes." },
+    { id: "m1", role: "other", text: "Can you review the upload flow?", createdAt: new Date(Date.now() - 3600000).toISOString() },
+    { id: "m2", role: "me", text: "Yes, sending notes in 10 minutes.", status: "seen", createdAt: new Date(Date.now() - 3500000).toISOString() },
   ],
-  "chat-2": [{ id: "m3", role: "other", text: "Drop your latest experiments here." }],
+  "chat-2": [{ id: "m3", role: "other", text: "Drop your latest experiments here.", createdAt: new Date(Date.now() - 7200000).toISOString() }],
 };
 
 export const mockAiMessages = [
