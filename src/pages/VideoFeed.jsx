@@ -20,7 +20,8 @@ import PollCard from "@/components/discovery/PollCard";
 import GiftAnimation from "@/components/monetization/GiftAnimation";
 import { calculateGiftSplit } from "@/lib/giftSplit";
 import { hapticLike, hapticGift } from "@/lib/haptics";
-import { usePullToRefresh, PullToRefreshIndicator } from "@/hooks/usePullToRefresh";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import PullToRefreshIndicator from "@/components/mobile/PullToRefreshIndicator";
 
 function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId, setGiftPostId }) {
   const videoRef = useRef(null);

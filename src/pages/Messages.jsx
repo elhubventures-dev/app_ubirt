@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import PullToRefresh from "@/components/mobile/PullToRefresh";
 import { useConversations } from "@/hooks/useMessages";
 import { SkeletonRow } from "@/components/ui/SkeletonRow";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
 import { useToast } from "@/components/ui/use-toast";
 import NewConversationSheet from "@/components/messages/NewConversationSheet";

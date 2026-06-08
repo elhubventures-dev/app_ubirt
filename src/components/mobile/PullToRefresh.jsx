@@ -1,5 +1,6 @@
 import { useRef } from "react";
-import { usePullToRefresh, PullToRefreshIndicator } from "@/hooks/usePullToRefresh";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import PullToRefreshIndicator from "@/components/mobile/PullToRefreshIndicator";
 
 /** Pull-to-refresh wrapper for scrollable page content. */
 export default function PullToRefresh({ onRefresh, children, className = "" }) {
