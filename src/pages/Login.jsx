@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/use-toast";
 import { isSupabaseConfigured, getSupabase } from "@/lib/supabaseClient";
 import MfaChallengeModal from "@/components/safety/MfaChallengeModal";
@@ -246,8 +247,7 @@ export default function Login() {
                <>
                  <div>
                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-1 block">Password</label>
-                   <InputField
-                     type="password"
+                   <PasswordInput
                      value={password}
                      onChange={(e) => setPassword(e.target.value)}
                      placeholder="••••••••"
