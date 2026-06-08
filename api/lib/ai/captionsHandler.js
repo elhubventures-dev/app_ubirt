@@ -1,12 +1,4 @@
-/**
- * Vercel serverless: OpenAI Chat API for generating fake captions
- * POST /api/ai/captions  { "topic": "video topic or filename" }
- */
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
+export async function handleAiCaptions(req, res) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return res.status(503).json({
@@ -61,21 +53,20 @@ export default async function handler(req, res) {
 
     const data = await response.json();
     const rawReply = data.choices?.[0]?.message?.content?.trim() || "[]";
-    
+
     let captions = [];
     try {
-      // Clean up potential markdown formatting from GPT
       const cleaned = rawReply.replace(/```json/g, "").replace(/```/g, "").trim();
       captions = JSON.parse(cleaned);
-    } catch (e) {
+    } catch {
       console.error("Failed to parse GPT JSON:", rawReply);
       captions = [
         { time: "0:00", text: "Welcome to this new video!" },
         { time: "0:03", text: "Today we are looking at something cool." },
-        { time: "0:06", text: "Stay tuned for more." }
+        { time: "0:06", text: "Stay tuned for more." },
       ];
     }
-    
+
     return res.status(200).json({ captions });
   } catch (error) {
     return res.status(500).json({ error: error.message });

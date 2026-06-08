@@ -1,14 +1,6 @@
-/**
- * Vercel serverless: OpenAI Moderation API
- * POST /api/ai/moderate  { "input": "text to moderate" }
- */
-import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
+import { applyRateLimit, getClientIp } from "../rateLimit.js";
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
+export async function handleAiModerate(req, res) {
   const ip = getClientIp(req);
   if (!applyRateLimit(req, res, `ai-moderate:${ip}`, { limit: 120, windowMs: 60_000 })) {
     return;
@@ -18,7 +10,7 @@ export default async function handler(req, res) {
   if (!apiKey) {
     return res.status(503).json({
       error: "OPENAI_API_KEY is not configured.",
-      flagged: false // default safe if no key
+      flagged: false,
     });
   }
 
@@ -53,7 +45,7 @@ export default async function handler(req, res) {
 
     const data = await response.json();
     const flagged = data.results?.[0]?.flagged ?? false;
-    
+
     return res.status(200).json({ flagged });
   } catch (error) {
     return res.status(500).json({ error: error.message });

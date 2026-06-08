@@ -1,12 +1,8 @@
-import { authenticateRequest, getAdminSupabase } from "../lib/payment/auth.js";
-import { createDailyMeetingToken } from "../lib/daily.js";
-import { getProfileDisplayName } from "../lib/calls/helpers.js";
+import { authenticateRequest, getAdminSupabase } from "../payment/auth.js";
+import { createDailyMeetingToken } from "../daily.js";
+import { getProfileDisplayName } from "./helpers.js";
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
+export async function handleJoinCall(req, res) {
   const auth = await authenticateRequest(req);
   if (auth.error) {
     return res.status(auth.error.status).json({ error: auth.error.message });
@@ -47,12 +43,7 @@ export default async function handler(req, res) {
       callType: session.call_type,
     });
 
-    if (session.status === "ringing" && session.callee_id === auth.user.id) {
-      await admin
-        .from("call_sessions")
-        .update({ status: "active", started_at: new Date().toISOString() })
-        .eq("id", callId);
-    } else if (session.status === "ringing" && session.initiated_by === auth.user.id) {
+    if (session.status === "ringing") {
       await admin
         .from("call_sessions")
         .update({ status: "active", started_at: new Date().toISOString() })

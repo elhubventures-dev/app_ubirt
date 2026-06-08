@@ -1,15 +1,7 @@
-/**
- * Vercel serverless: OpenAI proxy (never expose API key to the browser).
- * POST /api/ai/chat  { "prompt": "..." }
- */
-import { authenticateRequest } from "../lib/payment/auth.js";
-import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
+import { authenticateRequest } from "../payment/auth.js";
+import { applyRateLimit, getClientIp } from "../rateLimit.js";
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
+export async function handleAiChat(req, res) {
   const auth = await authenticateRequest(req);
   if (auth.error) {
     return res.status(auth.error.status).json({ error: auth.error.message });

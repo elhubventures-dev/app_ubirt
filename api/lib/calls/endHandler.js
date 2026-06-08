@@ -1,13 +1,9 @@
-import { authenticateRequest, getAdminSupabase } from "../lib/payment/auth.js";
-import { deleteDailyRoom } from "../lib/daily.js";
+import { authenticateRequest, getAdminSupabase } from "../payment/auth.js";
+import { deleteDailyRoom } from "../daily.js";
 
 const VALID_STATUS = new Set(["ended", "declined", "missed", "cancelled"]);
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
+export async function handleEndCall(req, res) {
   const auth = await authenticateRequest(req);
   if (auth.error) {
     return res.status(auth.error.status).json({ error: auth.error.message });

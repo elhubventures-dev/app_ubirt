@@ -1,18 +1,14 @@
-import { authenticateRequest, getAdminSupabase } from "../lib/payment/auth.js";
-import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
-import { createDailyMeetingToken, createDailyRoom } from "../lib/daily.js";
+import { authenticateRequest, getAdminSupabase } from "../payment/auth.js";
+import { applyRateLimit, getClientIp } from "../rateLimit.js";
+import { createDailyMeetingToken, createDailyRoom } from "../daily.js";
 import {
   getDirectConversationPeer,
   getProfileDisplayName,
   isBlockedBetween,
-} from "../lib/calls/helpers.js";
-import { dispatchPushToUser } from "../lib/push/dispatchPush.js";
+} from "./helpers.js";
+import { dispatchPushToUser } from "../push/dispatchPush.js";
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
+export async function handleStartCall(req, res) {
   const auth = await authenticateRequest(req);
   if (auth.error) {
     return res.status(auth.error.status).json({ error: auth.error.message });
