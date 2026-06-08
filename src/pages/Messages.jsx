@@ -144,7 +144,7 @@ export default function Messages() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ delay: i * 0.05 }}
+                transition={{ delay: Math.min(i * 0.03, 0.24) }}
               >
                 <Link
                   to={chat.type === "group" ? `/group/${chat.id}` : `/chat/${chat.id}`}

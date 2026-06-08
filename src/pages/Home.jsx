@@ -5,21 +5,34 @@ import { formatCount } from "@/lib/formatStats";
 import { motion } from "framer-motion";
 import NotificationBell from "@/components/layout/NotificationBell";
 import SuggestedCreators from "@/components/discovery/SuggestedCreators";
-import { useQuery } from "@tanstack/react-query";
+import PullToRefresh from "@/components/mobile/PullToRefresh";
+import { StatSkeleton } from "@/components/ui/StatSkeleton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
+import { feedPostPath } from "@/lib/feedLinks";
 
 export default function Home() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { data: trendingPosts = [], isLoading: isLoadingTrending } = useQuery({
     queryKey: ["trending-posts"],
     queryFn: () => dataProvider.getTrendingPosts(5),
   });
-  const { data: stats } = useCreatorStudio();
+  const { data: stats, isLoading: isLoadingStats } = useCreatorStudio();
+
+  const refreshHome = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["trending-posts"] }),
+      queryClient.invalidateQueries({ queryKey: ["creator-stats"] }),
+      queryClient.invalidateQueries({ queryKey: ["suggested-creators"] }),
+    ]);
+  };
 
   const greeting = new Date().getHours() < 12 ? "Good Morning" : new Date().getHours() < 18 ? "Good Afternoon" : "Good Evening";
 
   return (
+    <PullToRefresh onRefresh={refreshHome} className="min-h-full">
     <div className="flex flex-col min-h-full pb-20 pt-4 px-4 overflow-hidden relative">
       {/* Premium Background */}
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#0a111a] via-[#101822] to-[#152336] z-0" />
@@ -58,13 +71,21 @@ export default function Home() {
              <div>
                <p className="text-xs text-slate-400 uppercase font-medium">Followers</p>
                <div className="flex items-end gap-2 mt-1">
-                 <p className="text-3xl font-bold text-white">{formatCount(stats?.followers ?? 0)}</p>
+                 {isLoadingStats ? (
+                   <StatSkeleton className="h-9 w-20" />
+                 ) : (
+                   <p className="text-3xl font-bold text-white">{formatCount(stats?.followers ?? 0)}</p>
+                 )}
                </div>
              </div>
              <div>
                <p className="text-xs text-slate-400 uppercase font-medium">Total Views</p>
                <div className="flex items-end gap-2 mt-1">
-                 <p className="text-3xl font-bold text-white">{formatCount(stats?.views ?? 0)}</p>
+                 {isLoadingStats ? (
+                   <StatSkeleton className="h-9 w-24" />
+                 ) : (
+                   <p className="text-3xl font-bold text-white">{formatCount(stats?.views ?? 0)}</p>
+                 )}
                </div>
              </div>
           </div>
@@ -154,5 +175,6 @@ export default function Home() {
         </section>
       </div>
     </div>
+    </PullToRefresh>
   );
 }

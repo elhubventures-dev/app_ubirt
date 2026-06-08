@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
+import { hapticLight } from "@/lib/haptics";
 
 const navItems = [
   { path: "/", icon: "home", label: "Home" },
@@ -25,9 +26,12 @@ export default function BottomNav() {
             <Link
               key={item.path}
               to={item.path}
+              onClick={() => {
+                if (!isActive) hapticLight();
+              }}
               aria-label={`Navigate to ${item.label}`}
               aria-current={isActive ? "page" : undefined}
-              className="relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all min-w-0 flex-1"
+              className="relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all min-w-0 flex-1 active:scale-95"
             >
               {isActive && (
                 <motion.div

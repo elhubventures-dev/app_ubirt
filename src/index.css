@@ -64,6 +64,14 @@
     color: #f8fafc;
     font-family: 'Spline Sans', sans-serif;
     margin: 0;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
   }
 
   a {

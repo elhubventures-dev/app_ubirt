@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ export default function UserProfile() {
   const [showReport, setShowReport] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const qrButtonRef = useRef(null);
 
   const { data: profile, isLoading, isError } = useQuery({
     queryKey: ["public-profile", username],
@@ -97,6 +98,7 @@ export default function UserProfile() {
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
         <button
+          ref={qrButtonRef}
           type="button"
           onClick={() => setShowQR(true)}
           className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white"
@@ -351,6 +353,7 @@ export default function UserProfile() {
         onClose={() => setShowQR(false)}
         username={profile?.username}
         name={profile?.name}
+        anchorRef={qrButtonRef}
       />
     </div>
   );

@@ -22,6 +22,7 @@ import { calculateGiftSplit } from "@/lib/giftSplit";
 import { hapticLike, hapticGift } from "@/lib/haptics";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import PullToRefreshIndicator from "@/components/mobile/PullToRefreshIndicator";
+import FeedLoadingShell from "@/components/feed/FeedLoadingShell";
 
 function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId, setGiftPostId }) {
   const videoRef = useRef(null);
@@ -405,11 +406,7 @@ export default function VideoFeed() {
     }
   };
 
-  if (!isFeedReady) return (
-    <div className="w-full h-[100dvh] flex items-center justify-center bg-black">
-      <div className="animate-spin-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-[#0d5bba]"></div>
-    </div>
-  );
+  if (!isFeedReady) return <FeedLoadingShell />;
 
   if (!displayPosts.length) return (
     <div className="w-full h-[100dvh] flex flex-col items-center justify-center bg-black px-6 text-center gap-4">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
@@ -14,11 +14,13 @@ import PostManageSheet from "@/components/profile/PostManageSheet";
 import { ACHIEVEMENT_BADGES } from "@/lib/achievementBadges";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import ProfileQRSheet from "@/components/profile/ProfileQRSheet";
+import { StatSkeleton } from "@/components/ui/StatSkeleton";
 
 export default function Profile() {
   const { user } = useAuth();
   const {
     data: stats,
+    isLoading: isLoadingStats,
     uploads = [],
     isLoadingUploads,
     updateUpload,
@@ -34,6 +36,7 @@ export default function Profile() {
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [showQR, setShowQR] = useState(false);
+  const qrButtonRef = useRef(null);
   const { data: achievements } = useQuery({
     queryKey: ["achievements"],
     queryFn: () => dataProvider.getAchievements(),
@@ -160,15 +163,27 @@ export default function Profile() {
             {user?.username && (
               <>
                 <Link to={`/user/${user.username}/followers`} className="text-center hover:opacity-80 transition-opacity">
-                  <p className="text-white font-bold text-lg">{formatCount(stats?.followers ?? 0)}</p>
+                  {isLoadingStats ? (
+                    <StatSkeleton className="h-7 w-12 mx-auto" />
+                  ) : (
+                    <p className="text-white font-bold text-lg">{formatCount(stats?.followers ?? 0)}</p>
+                  )}
                   <p className="text-slate-400 text-xs font-semibold uppercase">Followers</p>
                 </Link>
                 <Link to={`/user/${user.username}/following`} className="text-center hover:opacity-80 transition-opacity">
-                  <p className="text-white font-bold text-lg">{formatCount(stats?.following ?? 0)}</p>
+                  {isLoadingStats ? (
+                    <StatSkeleton className="h-7 w-12 mx-auto" />
+                  ) : (
+                    <p className="text-white font-bold text-lg">{formatCount(stats?.following ?? 0)}</p>
+                  )}
                   <p className="text-slate-400 text-xs font-semibold uppercase">Following</p>
                 </Link>
                 <div className="text-center">
-                  <p className="text-white font-bold text-lg">{formatCount(stats?.totalLikes ?? 0)}</p>
+                  {isLoadingStats ? (
+                    <StatSkeleton className="h-7 w-12 mx-auto" />
+                  ) : (
+                    <p className="text-white font-bold text-lg">{formatCount(stats?.totalLikes ?? 0)}</p>
+                  )}
                   <p className="text-slate-400 text-xs font-semibold uppercase">Likes</p>
                 </div>
               </>
@@ -181,6 +196,7 @@ export default function Profile() {
             </Link>
             {user?.username ? (
               <button
+                ref={qrButtonRef}
                 type="button"
                 onClick={() => setShowQR(true)}
                 className={getButtonClasses("secondary", "sm", "rounded-full px-4")}
@@ -267,7 +283,11 @@ export default function Profile() {
               transition={{ duration: 0.2 }}
             >
               {isLoadingUploads ? (
-                <p className="text-center text-slate-400 mt-10">Loading grid...</p>
+                <div className="grid grid-cols-3 gap-1 md:gap-2">
+                  {Array.from({ length: 9 }).map((_, i) => (
+                    <div key={i} className="aspect-[3/4] bg-white/5 rounded-md sm:rounded-xl animate-pulse" />
+                  ))}
+                </div>
               ) : uploads.length === 0 ? (
                 <div className="text-center py-16 px-4 bg-white/5 rounded-3xl border border-white/5 border-dashed">
                   <span className="material-symbols-outlined text-[48px] text-slate-600">grid_view</span>
@@ -388,6 +408,7 @@ export default function Profile() {
         onClose={() => setShowQR(false)}
         username={user?.username}
         name={user?.name}
+        anchorRef={qrButtonRef}
       />
     </div>
   );

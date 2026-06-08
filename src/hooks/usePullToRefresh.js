@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { hapticLight } from "@/lib/haptics";
 
 const THRESHOLD = 72;
 
@@ -8,6 +9,7 @@ export function usePullToRefresh(scrollRef, onRefresh, disabled = false) {
   const pulling = useRef(false);
   const offsetRef = useRef(0);
   const refreshingRef = useRef(false);
+  const hapticFired = useRef(false);
   const [offset, setOffset] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -38,6 +40,7 @@ export function usePullToRefresh(scrollRef, onRefresh, disabled = false) {
       if (refreshingRef.current || el.scrollTop > 0) return;
       startY.current = e.touches[0].clientY;
       pulling.current = true;
+      hapticFired.current = false;
     };
 
     const onTouchMove = (e) => {
@@ -47,7 +50,12 @@ export function usePullToRefresh(scrollRef, onRefresh, disabled = false) {
         setOffsetSafe(0);
         return;
       }
-      setOffsetSafe(Math.min(delta * 0.45, THRESHOLD + 24));
+      const next = Math.min(delta * 0.45, THRESHOLD + 24);
+      setOffsetSafe(next);
+      if (next >= THRESHOLD && !hapticFired.current) {
+        hapticFired.current = true;
+        hapticLight();
+      }
     };
 
     const onTouchEnd = async () => {

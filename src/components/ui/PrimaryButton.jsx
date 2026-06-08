@@ -14,7 +14,7 @@ const sizes = {
 
 export function getButtonClasses(variant = "primary", size = "md", className) {
   return cn(
-    "inline-block transition-colors disabled:opacity-60",
+    "inline-block transition-all active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100",
     variants[variant],
     sizes[size],
     className
@@ -27,22 +27,31 @@ export function PrimaryButton({
   type = "button",
   className,
   disabled,
+  isLoading = false,
+  loadingLabel = "Please wait…",
   children,
   ...props
 }) {
   return (
     <button
       type={type}
-      disabled={disabled}
+      disabled={disabled || isLoading}
       className={cn(
-        "transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
+        "transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100",
         variants[variant],
         sizes[size],
         className
       )}
       {...props}
     >
-      {children}
+      {isLoading ? (
+        <span className="inline-flex items-center justify-center gap-2">
+          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          {loadingLabel}
+        </span>
+      ) : (
+        children
+      )}
     </button>
   );
 }
