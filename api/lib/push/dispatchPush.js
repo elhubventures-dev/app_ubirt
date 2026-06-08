@@ -22,11 +22,29 @@ function formatPrivateKey(raw) {
   let key = cleanEnv(raw).replace(/\\n/g, "\n");
   if (!key) return "";
 
+  // Strip non-standard delimiter lines (e.g. pasted Firebase JSON artifacts).
+  key = key
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !/^-----[A-Fa-f0-9]{32,}-----$/.test(line))
+    .join("\n");
+
   if (!key.includes("BEGIN PRIVATE KEY")) {
     const bodyMatch = key.match(/(MII[A-Za-z0-9+/=\s\n]+-----END PRIVATE KEY-----)/);
     if (bodyMatch) {
       key = `-----BEGIN PRIVATE KEY-----\n${bodyMatch[1].trim()}`;
+    } else {
+      const miiMatch = key.match(/(MII[A-Za-z0-9+/=\s]+)/);
+      if (miiMatch) {
+        const body = miiMatch[1].replace(/\s+/g, "");
+        const lines = body.match(/.{1,64}/g) || [];
+        key = `-----BEGIN PRIVATE KEY-----\n${lines.join("\n")}\n-----END PRIVATE KEY-----`;
+      }
     }
+  }
+
+  if (key.includes("BEGIN PRIVATE KEY") && !key.includes("END PRIVATE KEY")) {
+    key = `${key.trim()}\n-----END PRIVATE KEY-----`;
   }
 
   return key;
@@ -242,6 +260,28 @@ function getSupabaseAdmin() {
   return createClient(supabaseUrl, serviceKey);
 }
 
+function isUnregisteredTokenResult(result) {
+  const details = result?.response?.error?.details;
+  if (!Array.isArray(details)) return false;
+  return details.some((detail) => detail?.errorCode === "UNREGISTERED");
+}
+
+async function disableUnregisteredTokens(supabase, sendResults) {
+  const staleTokens = sendResults
+    .filter((result) => !result.ok && isUnregisteredTokenResult(result))
+    .map((result) => result.token)
+    .filter(Boolean);
+  if (!staleTokens.length) return;
+
+  const { error } = await supabase
+    .from("push_tokens")
+    .update({ enabled: false })
+    .in("token", staleTokens);
+  if (error) {
+    console.warn("Failed to disable stale push tokens:", error.message);
+  }
+}
+
 export function buildPushPayloadData({ type, notificationId, data }) {
   const payloadData = {
     ...(data || {}),
@@ -312,6 +352,8 @@ export async function dispatchPushToUser({ userId, title, body, type, notificati
       };
     })
   );
+
+  await disableUnregisteredTokens(supabase, sendResults);
 
   return {
     sent: sendResults.some((r) => r.ok),
