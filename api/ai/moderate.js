@@ -2,9 +2,16 @@
  * Vercel serverless: OpenAI Moderation API
  * POST /api/ai/moderate  { "input": "text to moderate" }
  */
+import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const ip = getClientIp(req);
+  if (!applyRateLimit(req, res, `ai-moderate:${ip}`, { limit: 120, windowMs: 60_000 })) {
+    return;
   }
 
   const apiKey = process.env.OPENAI_API_KEY;

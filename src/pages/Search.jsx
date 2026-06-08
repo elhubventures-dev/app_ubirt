@@ -162,6 +162,17 @@ export default function Search() {
 
         {!debouncedTerm && (
           <div className="mt-6">
+            <Link
+              to="/explore"
+              className="mb-6 flex items-center justify-between bg-gradient-to-r from-[#3b82f6]/20 to-purple-500/20 border border-white/10 rounded-2xl p-4 hover:border-[#3b82f6]/40 transition-colors"
+            >
+              <div>
+                <p className="font-bold text-white">Explore trending</p>
+                <p className="text-xs text-slate-400 mt-0.5">Discover posts, sounds, and locations</p>
+              </div>
+              <span className="material-symbols-outlined text-[#3b82f6]">explore</span>
+            </Link>
+
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Trending Tags</h2>
             <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2 -mx-4 px-4">
               {trendingTags.map((tag) => (
@@ -179,7 +190,7 @@ export default function Search() {
                   .map((track) => (
                     <Link
                       key={track.id}
-                      to={`/upload?sound=${track.id}`}
+                      to={`/sound/${track.id}`}
                       className="bg-white/5 border border-white/10 p-3 rounded-2xl flex items-center gap-3 hover:bg-white/10 transition-colors"
                     >
                       <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#3b82f6] to-purple-500 flex items-center justify-center shrink-0">

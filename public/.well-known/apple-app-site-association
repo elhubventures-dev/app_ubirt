@@ -1,0 +1,25 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.ubirtai.app",
+        "paths": [
+          "/feed*",
+          "/u/*",
+          "/user/*",
+          "/sound/*",
+          "/explore*",
+          "/tag/*",
+          "/chat/*",
+          "/group/*",
+          "/messages",
+          "/notifications",
+          "/search",
+          "/wallet",
+          "/settings"
+        ]
+      }
+    ]
+  }
+}

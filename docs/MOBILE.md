@@ -227,3 +227,58 @@ Configured:
 - iOS push entitlements: `ios/App/App/App.entitlements` (debug), `ios/App/App/AppRelease.entitlements` (release)
 
 Note: you must still enable the **Push Notifications** capability once in Xcode (Signing & Capabilities).
+
+## 8) Tier 6 — Mobile-native polish
+
+### Pull-to-refresh
+
+Feed (`/feed`), Messages, and Notifications support pull-down refresh on touch devices.
+
+### Haptic feedback
+
+Likes, gifts, and sent messages trigger light haptics on native iOS/Android when **Settings → Haptic feedback** is on.
+
+- Helper: `src/lib/haptics.js`
+
+### Offline upload queue
+
+If post upload fails due to connectivity, the draft is stored in IndexedDB and synced when the device is back online.
+
+- Queue: `src/lib/offlineUploadQueue.js`
+- Hook: `src/hooks/useOfflineUploadQueue.js`
+
+### Biometric app lock
+
+Enable **Face ID / fingerprint app lock** in Settings. When on, returning to the app prompts biometrics.
+
+- UI: `src/components/mobile/BiometricGate.jsx`
+- Requires `NSFaceIDUsageDescription` in `Info.plist` (already set).
+
+### Deep links
+
+Universal links open in the native app:
+
+| URL | Route |
+|-----|-------|
+| `https://app.ubirtai.site/feed?post=ID` | Feed post |
+| `https://app.ubirtai.site/u/username` | Profile |
+| `https://app.ubirtai.site/sound/ID` | Sound trends |
+
+Files:
+
+- Parser: `src/lib/deepLinks.js`
+- Hook: `src/hooks/useDeepLinks.js`
+- iOS: `public/.well-known/apple-app-site-association` + Associated Domains in entitlements
+- Android: `public/.well-known/assetlinks.json` + HTTPS intent filter in `AndroidManifest.xml`
+
+**Setup:** Replace `TEAMID` in the AASA file with your Apple Team ID and add your release SHA-256 fingerprint to `assetlinks.json`.
+
+### In-app update prompt
+
+Native builds compare `App.getInfo().version` against `public/app-version.json`. Bump the version there and set store URLs when shipping a new build.
+
+### Profile QR code
+
+Tap the QR icon on any profile to show a scannable code and share the public profile link (`/u/username`).
+
+Picture-in-picture is deferred until video playback ships (Mux).

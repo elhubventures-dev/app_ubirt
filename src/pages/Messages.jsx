@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import PullToRefresh from "@/components/mobile/PullToRefresh";
 import { useConversations } from "@/hooks/useMessages";
 import { SkeletonRow } from "@/components/ui/SkeletonRow";
 import { motion, AnimatePresence } from "framer-motion";
@@ -53,7 +55,12 @@ export default function Messages() {
 
   const isNative = isNativePlatform();
 
+  const refreshInbox = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  };
+
   return (
+    <PullToRefresh onRefresh={refreshInbox} className="min-h-full">
     <div className="flex flex-col min-h-full pb-24 pt-2 px-2 sm:px-4">
       <div className="px-2 mb-4">
         <div className="flex gap-2 mb-3 px-2">
@@ -234,5 +241,6 @@ export default function Messages() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   );
 }

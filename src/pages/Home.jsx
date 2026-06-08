@@ -1,16 +1,20 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
-import { useFeed } from "@/hooks/useFeed";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
 import { formatCount } from "@/lib/formatStats";
 import { motion } from "framer-motion";
 import NotificationBell from "@/components/layout/NotificationBell";
-import { feedPostPath } from "@/lib/feedLinks";
+import SuggestedCreators from "@/components/discovery/SuggestedCreators";
+import { useQuery } from "@tanstack/react-query";
+import { dataProvider } from "@/api/dataProvider";
 
 export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data: posts = [], isLoading: isLoadingFeed } = useFeed();
+  const { data: trendingPosts = [], isLoading: isLoadingTrending } = useQuery({
+    queryKey: ["trending-posts"],
+    queryFn: () => dataProvider.getTrendingPosts(5),
+  });
   const { data: stats } = useCreatorStudio();
 
   const greeting = new Date().getHours() < 12 ? "Good Morning" : new Date().getHours() < 18 ? "Good Afternoon" : "Good Evening";
@@ -97,38 +101,31 @@ export default function Home() {
                  <p className="text-xs text-slate-400 mt-0.5">Your uploads</p>
                </div>
              </Link>
-             <Link to="/search" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
+             <Link to="/explore" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
                <div className="p-2 bg-orange-500/20 text-orange-400 rounded-full">
                   <span className="material-symbols-outlined text-[24px]">explore</span>
                </div>
                <div>
-                 <h3 className="font-bold text-white text-base">Discover</h3>
-                 <p className="text-xs text-slate-400 mt-0.5">Find creators</p>
-               </div>
-             </Link>
-             <Link to="/ai-chat" className="bg-white/5 border border-white/10 p-4 rounded-3xl hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-start gap-3 backdrop-blur-sm">
-               <div className="p-2 bg-violet-500/20 text-violet-400 rounded-full">
-                  <span className="material-symbols-outlined text-[24px]">smart_toy</span>
-               </div>
-               <div>
-                 <h3 className="font-bold text-white text-base">AI Assistant</h3>
-                 <p className="text-xs text-slate-400 mt-0.5">Caption & content help</p>
+                 <h3 className="font-bold text-white text-base">Explore</h3>
+                 <p className="text-xs text-slate-400 mt-0.5">Trending & sounds</p>
                </div>
              </Link>
           </div>
         </section>
 
+        <SuggestedCreators title="Creators to follow" limit={4} />
+
         {/* Trending Snippet */}
         <section>
           <div className="flex justify-between items-end mb-3 px-1">
              <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Trending on UBIRT</h2>
-             <Link to="/feed" className="text-xs font-bold text-[#3b82f6] flex items-center hover:text-white transition-colors">See all <span className="material-symbols-outlined text-[14px]">chevron_right</span></Link>
+             <Link to="/explore" className="text-xs font-bold text-[#3b82f6] flex items-center hover:text-white transition-colors">Explore <span className="material-symbols-outlined text-[14px]">chevron_right</span></Link>
           </div>
           <div className="flex gap-3 overflow-x-auto snap-x hide-scrollbar pb-4 -mx-4 px-4">
-             {isLoadingFeed ? (
+             {isLoadingTrending ? (
                 [1,2,3].map(i => <div key={i} className="w-32 h-48 shrink-0 bg-white/5 rounded-2xl animate-pulse" />)
              ) : (
-                posts.slice(0, 5).map((post) => (
+                trendingPosts.map((post) => (
                   <button
                     key={post.id}
                     type="button"

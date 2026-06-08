@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useFeed, useFeedComments } from "@/hooks/useFeed";
@@ -16,6 +16,11 @@ import { isImagePost } from "@/lib/media";
 import NotificationBell from "@/components/layout/NotificationBell";
 import MentionText from "@/components/feed/MentionText";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
+import PollCard from "@/components/discovery/PollCard";
+import GiftAnimation from "@/components/monetization/GiftAnimation";
+import { calculateGiftSplit } from "@/lib/giftSplit";
+import { hapticLike, hapticGift } from "@/lib/haptics";
+import { usePullToRefresh, PullToRefreshIndicator } from "@/hooks/usePullToRefresh";
 
 function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isMutating, onAutoScroll, setOptionsPostId, setGiftPostId }) {
   const videoRef = useRef(null);
@@ -118,6 +123,17 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
         </div>
       )}
 
+      {post.locked ? (
+        <div className="absolute inset-0 z-20 bg-black/75 backdrop-blur-md flex flex-col items-center justify-center px-8 text-center pointer-events-auto">
+          <span className="material-symbols-outlined text-violet-400 text-[48px] mb-3">lock</span>
+          <p className="text-white font-bold text-lg">Subscribers only</p>
+          <p className="text-slate-400 text-sm mt-2">Subscribe to @{profileSlug} to unlock this post.</p>
+          <Link to={`/user/${profileSlug}`} className="mt-4 px-6 py-2.5 rounded-full bg-violet-600 text-white font-semibold text-sm">
+            View profile
+          </Link>
+        </div>
+      ) : null}
+
       {/* Double Tap Heart Animation */}
       <AnimatePresence>
         {showHeart && (
@@ -159,6 +175,9 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
             Repost from @{post.originalUsername}
           </p>
         ) : null}
+        {post.isPromoted ? (
+          <p className="text-amber-400 text-[10px] font-bold uppercase tracking-wider mb-1">Promoted</p>
+        ) : null}
         <Link to={`/user/${profileSlug}`} className="text-white font-bold text-lg drop-shadow-md hover:underline inline-flex items-center gap-1">
           @{profileSlug}
           {post.authorVerified ? <VerifiedBadge /> : null}
@@ -166,6 +185,35 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
         <p className="text-slate-200 text-sm mt-1 drop-shadow-md line-clamp-3">
           <MentionText text={post.caption} />
         </p>
+        {post.coAuthorUsername ? (
+          <p className="text-xs text-violet-300 mt-1">
+            with{" "}
+            <Link to={`/user/${post.coAuthorUsername}`} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">
+              @{post.coAuthorUsername}
+            </Link>
+          </p>
+        ) : null}
+        {post.locationTag ? (
+          <Link
+            to={`/explore/location/${encodeURIComponent(post.locationTag)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-0.5 text-xs text-emerald-400 mt-1 hover:underline"
+          >
+            <span className="material-symbols-outlined text-[14px]">location_on</span>
+            {post.locationTag}
+          </Link>
+        ) : null}
+        {post.soundId ? (
+          <Link
+            to={`/sound/${post.soundId}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-0.5 text-xs text-violet-400 mt-1 hover:underline"
+          >
+            <span className="material-symbols-outlined text-[14px]">music_note</span>
+            Sound
+          </Link>
+        ) : null}
+        {post.poll ? <PollCard postId={post.id} poll={post.poll} compact /> : null}
         {post.tags && post.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2">
             {post.tags.map((tag, i) => (
@@ -207,12 +255,14 @@ function VideoPost({ post, isVisible, onLike, onBookmark, setExpandedPostId, isM
         </button>
 
         {/* Gift */}
+        {!post.locked ? (
         <button onClick={() => setGiftPostId(post.id)} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
           <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-amber-500 group-hover:bg-white/20">
             <span className="material-symbols-outlined fill-1">featured_seasonal_and_gifts</span>
           </div>
           <span className="text-white text-xs font-semibold drop-shadow-md">Gift</span>
         </button>
+        ) : null}
 
         {/* More Options */}
         <button onClick={() => setOptionsPostId(post.id)} className="flex flex-col items-center gap-1 group transition-transform active:scale-90">
@@ -233,6 +283,7 @@ export default function VideoFeed() {
   const [optionsPostId, setOptionsPostId] = useState("");
   const [sharePostId, setSharePostId] = useState("");
   const [giftPostId, setGiftPostId] = useState("");
+  const [giftAnimation, setGiftAnimation] = useState(null);
   const [reportTarget, setReportTarget] = useState(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [activePostIndex, setActivePostIndex] = useState(0);
@@ -243,6 +294,7 @@ export default function VideoFeed() {
   const {
     data: posts = [],
     isLoading,
+    refetch,
     toggleLike,
     toggleBookmark,
     addComment,
@@ -270,6 +322,10 @@ export default function VideoFeed() {
   const { data: comments = [], isLoading: isLoadingComments } = useFeedComments(expandedPostId);
   const { toast } = useToast();
   const containerRef = useRef(null);
+  const refreshFeed = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
+  const { offset: pullOffset, refreshing: isRefreshingFeed } = usePullToRefresh(containerRef, refreshFeed);
 
   useEffect(() => {
     if (!targetPostId || !isFeedReady || !displayPosts.length) return;
@@ -327,7 +383,9 @@ export default function VideoFeed() {
 
   const handleLike = async (postId) => {
     try {
+      const wasLiked = displayPosts.find((p) => p.id === postId)?.liked;
       await toggleLike(postId);
+      if (!wasLiked) hapticLike();
     } catch (error) {
       toast({ title: "Like failed", description: error.message, variant: "destructive" });
     }
@@ -372,6 +430,7 @@ export default function VideoFeed() {
 
   return (
     <div className="relative w-full h-[100dvh] bg-black">
+      <PullToRefreshIndicator offset={pullOffset} refreshing={isRefreshingFeed} />
       {/* Top Navigation Toggle */}
       <div className="absolute top-0 left-0 right-0 z-10 pt-12 pb-4 flex justify-center items-start gap-6 pointer-events-auto bg-gradient-to-b from-black/60 to-transparent">
         <div className="absolute top-12 right-4 pointer-events-auto">
@@ -503,6 +562,21 @@ export default function VideoFeed() {
                       </button>
                       {isAuthor ? (
                         <>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await dataProvider.promotePost(optionsPostId, 100);
+                              toast({ title: "Post promoted", description: "Boosted for 24 hours with 100 coins." });
+                              setOptionsPostId("");
+                            } catch (err) {
+                              toast({ title: "Promote failed", description: err.message, variant: "destructive" });
+                            }
+                          }}
+                          className="flex items-center gap-3 text-amber-400 hover:bg-white/5 p-4 rounded-2xl transition-colors font-semibold"
+                        >
+                          <span className="material-symbols-outlined">campaign</span> Promote (100 coins)
+                        </button>
                         <button
                           type="button"
                           onClick={async () => {
@@ -656,11 +730,13 @@ export default function VideoFeed() {
                             } else if (updateUserSession) {
                               updateUserSession({ coins: (user?.coins || 0) - gift.cost });
                             }
+                            setGiftPostId("");
+                            setGiftAnimation(gift);
+                            hapticGift();
                             toast({
                               title: "Gift sent!",
                               description: `${gift.name} sent · Creator receives ${result.receiverAmount ?? receiverAmount} gift coins`,
                             });
-                            setGiftPostId("");
                           } catch (err) {
                             toast({ title: "Failed", description: err.message, variant: "destructive" });
                           }
@@ -684,6 +760,8 @@ export default function VideoFeed() {
             </>
           )}
         </AnimatePresence>
+
+        <GiftAnimation gift={giftAnimation} onDone={() => setGiftAnimation(null)} />
       </div>
     );
   }

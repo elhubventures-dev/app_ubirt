@@ -1,8 +1,15 @@
 import { dispatchPushToUser } from "../lib/push/dispatchPush.js";
+import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const ip = getClientIp(req);
+  const userId = req.body?.userId;
+  if (!applyRateLimit(req, res, `push:${userId || ip}`, { limit: 60, windowMs: 60_000 })) {
+    return;
   }
 
   try {

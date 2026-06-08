@@ -7,6 +7,9 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import ReportSheet from "@/components/safety/ReportSheet";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
+import CreatorSupportSheet from "@/components/monetization/CreatorSupportSheet";
+import ProfileQASection from "@/components/discovery/ProfileQASection";
+import ProfileQRSheet from "@/components/profile/ProfileQRSheet";
 import { feedPostPath } from "@/lib/feedLinks";
 import { getProfileCoverUrl } from "@/lib/profileDefaults";
 
@@ -18,6 +21,8 @@ export default function UserProfile() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("grid");
   const [showReport, setShowReport] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   const { data: profile, isLoading, isError } = useQuery({
     queryKey: ["public-profile", username],
@@ -91,6 +96,14 @@ export default function UserProfile() {
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
+        <button
+          type="button"
+          onClick={() => setShowQR(true)}
+          className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white"
+          aria-label="Share profile QR"
+        >
+          <span className="material-symbols-outlined">qr_code_2</span>
+        </button>
       </div>
 
       <div className="relative h-48 sm:h-56 rounded-b-[2rem] overflow-hidden shadow-2xl shrink-0">
@@ -133,6 +146,7 @@ export default function UserProfile() {
                   href={profile.website.startsWith("http") ? profile.website : `https://${profile.website}`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => dataProvider.recordProfileLinkClick?.(profile.id)}
                   className="flex items-center gap-1 text-[#3b82f6] hover:underline"
                 >
                   <span className="material-symbols-outlined text-[14px]">link</span>
@@ -187,6 +201,13 @@ export default function UserProfile() {
                 ) : (
                   <span className="material-symbols-outlined text-[20px] text-white">mail</span>
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSupport(true)}
+                className="px-4 h-10 rounded-full bg-violet-600/80 text-white font-bold text-sm hover:bg-violet-600 transition-colors"
+              >
+                Support
               </button>
               </div>
               <div className="flex gap-2">
@@ -279,6 +300,12 @@ export default function UserProfile() {
                         <span className="material-symbols-outlined text-white text-[14px]">push_pin</span>
                       </span>
                     ) : null}
+                    {post.locked ? (
+                      <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center z-10">
+                        <span className="material-symbols-outlined text-violet-400 text-[28px]">lock</span>
+                        <p className="text-[10px] text-white font-semibold mt-1">Subscribers only</p>
+                      </div>
+                    ) : null}
                     <img
                       src={
                         post.media_url ||
@@ -301,6 +328,8 @@ export default function UserProfile() {
         </AnimatePresence>
       </div>
 
+      <ProfileQASection profileId={profile.id} username={profile.username} isSelf={isSelf} />
+
       <AnimatePresence>
         {showReport && profile?.id && (
           <ReportSheet
@@ -313,7 +342,16 @@ export default function UserProfile() {
             onClose={() => setShowReport(false)}
           />
         )}
+        {showSupport && profile && (
+          <CreatorSupportSheet profile={profile} onClose={() => setShowSupport(false)} />
+        )}
       </AnimatePresence>
+      <ProfileQRSheet
+        open={showQR}
+        onClose={() => setShowQR(false)}
+        username={profile?.username}
+        name={profile?.name}
+      />
     </div>
   );
 }

@@ -1,0 +1,12 @@
+{
+  "android": {
+    "version": "1.0.0",
+    "storeUrl": "https://play.google.com/store/apps/details?id=ubirtai.app",
+    "message": "Update UBIRT for the latest features and fixes."
+  },
+  "ios": {
+    "version": "1.0.0",
+    "storeUrl": "https://apps.apple.com/app/id0000000000",
+    "message": "Update UBIRT for the latest features and fixes."
+  }
+}

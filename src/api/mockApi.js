@@ -382,7 +382,7 @@ export const mockApi = {
       }));
     return { users, posts: postResults, tags: [`#${q}`] };
   },
-  async getSuggestedCreators() {
+  async getSuggestedCreators(limit = 4) {
     await wait();
     return [1, 2, 3, 4].map((i) => ({
       id: `creator-${i}`,
@@ -1015,5 +1015,141 @@ export const mockApi = {
   async getPostIdForUpload() {
     await wait();
     return null;
+  },
+
+  async getCreatorEarnings() {
+    await wait();
+    return {
+      giftCoins: 120,
+      referralCode: "creator",
+      totals: { gifts: 80, tips: 30, subscriptions: 10, all: 120 },
+      topGifters: [{ id: "u1", name: "Fan One", total: 50 }],
+      conversions: [],
+      linkClicks: 12,
+      recentTips: [],
+      chartData: [20, 40, 30, 60, 45, 80, 55],
+    };
+  },
+
+  async getCreatorMonetizationSettings() {
+    await wait();
+    return {
+      subscriptionPrice: 200,
+      subscriptionDescription: "Exclusive posts and early access",
+      tipMinCoins: 10,
+      paidDmPrice: 50,
+      referralCode: "creator",
+    };
+  },
+
+  async updateCreatorMonetization() {
+    await wait();
+    return true;
+  },
+
+  async subscribeToCreator() {
+    await wait();
+    return { success: true, price: 200, expires_at: new Date(Date.now() + 30 * 86400000).toISOString() };
+  },
+
+  async sendCreatorTip({ amount }) {
+    await wait();
+    return { success: true, amount, receiver_amount: Math.floor(amount * 0.8), conversation_id: null };
+  },
+
+  async promotePost(_postId, coins) {
+    await wait();
+    return { success: true, coins_spent: coins };
+  },
+
+  async applyReferralCode() {
+    await wait();
+    return { success: true, bonus_coins: 50 };
+  },
+
+  async recordProfileLinkClick() {
+    return true;
+  },
+
+  async hasCompletedPurchase() {
+    await wait();
+    return false;
+  },
+
+  async getTrendingPosts(limit = 20) {
+    await wait();
+    return feedPosts.slice(0, limit);
+  },
+
+  async getExploreFeed() {
+    await wait();
+    const tags = await this.getTrendingTags(8);
+    return {
+      trendingPosts: feedPosts.slice(0, 8),
+      trendingTags: tags,
+      soundTrends: [],
+      locationTags: [],
+    };
+  },
+
+  async getPostsBySound(soundId) {
+    await wait();
+    return feedPosts.filter((p) => p.soundId === soundId);
+  },
+
+  async getPostsByLocation(locationTag) {
+    await wait();
+    return feedPosts.filter((p) => p.locationTag === locationTag);
+  },
+
+  async votePoll() {
+    await wait();
+    return { success: true };
+  },
+
+  async getProfileQuestions() {
+    await wait();
+    return [];
+  },
+
+  async submitProfileQuestion() {
+    await wait();
+    return "q-mock";
+  },
+
+  async answerProfileQuestion() {
+    await wait();
+    return true;
+  },
+
+  async confirmAgeGate() {
+    await wait();
+    localStorage.setItem("ubirt.pref.ageConfirmed", "true");
+    return new Date().toISOString();
+  },
+
+  async getAgeConfirmedAt() {
+    await wait();
+    return localStorage.getItem("ubirt.pref.ageConfirmed") ? new Date().toISOString() : null;
+  },
+
+  async getIsAdmin() {
+    await wait();
+    return false;
+  },
+
+  async getModerationQueue(status = "pending") {
+    await wait();
+    return [];
+  },
+
+  async reviewReport() {
+    await wait();
+    return true;
+  },
+
+  async getWalletAuditLog() {
+    await wait();
+    return [];
   },
 };

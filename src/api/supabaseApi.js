@@ -9,6 +9,8 @@ import { sendPushNotification } from "@/lib/sendPush";
 import { validateImageFile } from "@/lib/uploadPolicy";
 import { extractMentionUsernames, resolveMentionUserIds } from "@/lib/mentions";
 import { isVerifiedCreator } from "@/lib/verifiedBadge";
+import { SOUND_LIBRARY } from "@/lib/soundLibrary";
+import { assertCleanText } from "@/lib/profanityFilter";
 
 async function getUserId() {
   const supabase = getSupabase();
@@ -242,7 +244,81 @@ function mapPost(row, profile, liked, bookmarked, extras = {}) {
     originalUsername: extras.originalUsername ?? null,
     isPinned: Boolean(extras.isPinned),
     authorVerified: Boolean(extras.authorVerified),
+    subscribersOnly: Boolean(row.subscribers_only),
+    isPromoted: Boolean(extras.isPromoted),
+    locked: Boolean(extras.locked),
+    soundId: row.sound_id ?? null,
+    locationTag: row.location_tag ?? null,
+    coAuthorId: row.co_author_id ?? null,
+    coAuthorUsername: extras.coAuthorUsername ?? null,
+    coAuthorName: extras.coAuthorName ?? null,
+    poll: extras.poll ?? null,
   };
+}
+
+async function fetchPollsForPosts(supabase, postIds, userId) {
+  if (!postIds.length) return {};
+  const { data: polls } = await supabase.from("post_polls").select("id, post_id").in("post_id", postIds);
+  if (!polls?.length) return {};
+
+  const pollIds = polls.map((p) => p.id);
+  const pollByPost = Object.fromEntries(polls.map((p) => [p.post_id, p.id]));
+
+  const [{ data: options }, { data: votes }] = await Promise.all([
+    supabase.from("poll_options").select("id, poll_id, label, votes_count, sort_order").in("poll_id", pollIds),
+    userId
+      ? supabase.from("poll_votes").select("poll_id, option_id").eq("user_id", userId).in("poll_id", pollIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const voteByPoll = Object.fromEntries((votes ?? []).map((v) => [v.poll_id, v.option_id]));
+  const optionsByPoll = {};
+  for (const opt of options ?? []) {
+    if (!optionsByPoll[opt.poll_id]) optionsByPoll[opt.poll_id] = [];
+    optionsByPoll[opt.poll_id].push(opt);
+  }
+
+  const result = {};
+  for (const postId of postIds) {
+    const pollId = pollByPost[postId];
+    if (!pollId) continue;
+    const opts = (optionsByPoll[pollId] ?? []).sort((a, b) => a.sort_order - b.sort_order);
+    result[postId] = {
+      id: pollId,
+      userVoteId: voteByPoll[pollId] ?? null,
+      options: opts.map((o) => ({ id: o.id, label: o.label, votes: o.votes_count ?? 0 })),
+    };
+  }
+  return result;
+}
+
+async function mapPostsWithExtras(supabase, rows, userId, likedSet, bookmarkedSet, extrasMap = {}) {
+  const coAuthorIds = [...new Set(rows.map((r) => r.co_author_id).filter(Boolean))];
+  let coAuthorMap = {};
+  if (coAuthorIds.length) {
+    const { data: coAuthors } = await supabase
+      .from("profiles")
+      .select("id, username, display_name")
+      .in("id", coAuthorIds);
+    coAuthorMap = Object.fromEntries((coAuthors ?? []).map((p) => [p.id, p]));
+  }
+
+  const pollMap = await fetchPollsForPosts(
+    supabase,
+    rows.map((r) => r.id),
+    userId
+  );
+
+  return rows.map((p) => {
+    const co = p.co_author_id ? coAuthorMap[p.co_author_id] : null;
+    const extra = extrasMap[p.id] ?? {};
+    return mapPost(p, p.profiles ?? extra.profile, likedSet.has(p.id), bookmarkedSet.has(p.id), {
+      ...extra,
+      coAuthorUsername: co?.username ?? null,
+      coAuthorName: co?.display_name ?? null,
+      poll: pollMap[p.id] ?? null,
+    });
+  });
 }
 
 async function getOrCreateAiConversation(userId) {
@@ -303,17 +379,61 @@ export const supabaseApi = {
       originalMap = Object.fromEntries((originals ?? []).map((o) => [o.id, o.profiles]));
     }
 
+    const creatorIds = [...new Set(filteredPosts.map((p) => p.user_id))];
+    const { data: subs } = await supabase
+      .from("creator_subscriptions")
+      .select("creator_id")
+      .eq("subscriber_id", userId)
+      .gt("expires_at", new Date().toISOString())
+      .in("creator_id", creatorIds.length ? creatorIds : ["00000000-0000-0000-0000-000000000000"]);
+    const subscribedCreators = new Set((subs ?? []).map((s) => s.creator_id));
+
+    const postIds = filteredPosts.map((p) => p.id);
+    const { data: promos } = postIds.length
+      ? await supabase
+          .from("post_promotions")
+          .select("post_id, boost_score")
+          .in("post_id", postIds)
+          .gt("expires_at", new Date().toISOString())
+      : { data: [] };
+    const promoMap = Object.fromEntries((promos ?? []).map((p) => [p.post_id, p.boost_score]));
+
+    const mapped = filteredPosts.map((p) => {
+      const original = p.repost_of ? originalMap[p.repost_of] : null;
+      const isOwner = p.user_id === userId;
+      const isSubscribed = subscribedCreators.has(p.user_id);
+      const locked = Boolean(p.subscribers_only) && !isOwner && !isSubscribed;
+      return {
+        row: p,
+        profile: p.profiles,
+        extras: {
+          originalAuthor: original?.display_name ?? null,
+          originalUsername: original?.username ?? null,
+          isPromoted: Boolean(promoMap[p.id]),
+          locked,
+        },
+      };
+    });
+
     const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", userId);
     const { data: bookmarks } = await supabase.from("post_bookmarks").select("post_id").eq("user_id", userId);
-    const likedSet = new Set((likes || []).map((l) => l.post_id));
-    const bookmarkedSet = new Set((bookmarks || []).map((b) => b.post_id));
+    const likedSet = new Set((likes ?? []).map((l) => l.post_id));
+    const bookmarkedSet = new Set((bookmarks ?? []).map((b) => b.post_id));
 
-    return filteredPosts.map((p) => {
-      const original = p.repost_of ? originalMap[p.repost_of] : null;
-      return mapPost(p, p.profiles, likedSet.has(p.id), bookmarkedSet.has(p.id), {
-        originalAuthor: original?.display_name ?? null,
-        originalUsername: original?.username ?? null,
-      });
+    const withPolls = await mapPostsWithExtras(
+      supabase,
+      mapped.map((m) => m.row),
+      userId,
+      likedSet,
+      bookmarkedSet,
+      Object.fromEntries(mapped.map((m) => [m.row.id, m.extras]))
+    );
+
+    return withPolls.sort((a, b) => {
+      const boostA = promoMap[a.id] ?? 0;
+      const boostB = promoMap[b.id] ?? 0;
+      if (boostA !== boostB) return boostB - boostA;
+      return 0;
     });
   },
 
@@ -463,7 +583,9 @@ export const supabaseApi = {
 
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("id, username, display_name, avatar_url, cover_url, bio, website, location, pinned_post_id")
+      .select(
+        "id, username, display_name, avatar_url, cover_url, bio, website, location, pinned_post_id, subscription_price_coins, subscription_description, tip_min_coins, paid_dm_price_coins, referral_code"
+      )
       .eq("username", username)
       .maybeSingle();
     if (error) throw error;
@@ -479,6 +601,7 @@ export const supabaseApi = {
       { data: posts },
       followRow,
       viewCountResult,
+      subscriptionRow,
     ] = await Promise.all([
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", profile.id),
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", profile.id),
@@ -498,12 +621,22 @@ export const supabaseApi = {
       viewerId === profile.id
         ? supabase.rpc("get_profile_view_count", { p_profile_id: profile.id, p_days: 28 })
         : Promise.resolve({ data: null }),
+      viewerId && viewerId !== profile.id
+        ? supabase
+            .from("creator_subscriptions")
+            .select("expires_at")
+            .eq("creator_id", profile.id)
+            .eq("subscriber_id", viewerId)
+            .gt("expires_at", new Date().toISOString())
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
 
     const totalLikes = (posts ?? []).reduce((sum, p) => sum + (p.likes_count ?? 0), 0);
     const postCount = posts?.length ?? 0;
     const verified = isVerifiedCreator({ followers: followersCount ?? 0, postCount });
     const pinnedId = profile.pinned_post_id;
+    const isSubscribed = Boolean(subscriptionRow?.data);
     const sortedPosts = [...(posts ?? [])].sort((a, b) => {
       if (a.id === pinnedId) return -1;
       if (b.id === pinnedId) return 1;
@@ -526,9 +659,20 @@ export const supabaseApi = {
       pinnedPostId: pinnedId,
       profileViews28d: viewerId === profile.id ? viewCountResult?.data ?? 0 : null,
       isFollowing: !!followRow?.data,
-      posts: sortedPosts.map((p) =>
-        mapPost(p, profile, false, false, { isPinned: p.id === pinnedId, authorVerified: verified })
-      ),
+      subscriptionPrice: profile.subscription_price_coins ?? null,
+      subscriptionDescription: profile.subscription_description ?? "",
+      tipMinCoins: profile.tip_min_coins ?? 10,
+      paidDmPrice: profile.paid_dm_price_coins ?? null,
+      isSubscribed,
+      subscriptionExpiresAt: subscriptionRow?.data?.expires_at ?? null,
+      posts: sortedPosts.map((p) => {
+        const locked = Boolean(p.subscribers_only) && viewerId !== profile.id && !isSubscribed;
+        return mapPost(p, profile, false, false, {
+          isPinned: p.id === pinnedId,
+          authorVerified: verified,
+          locked,
+        });
+      }),
     };
   },
 
@@ -857,7 +1001,7 @@ export const supabaseApi = {
     return { users, posts, tags };
   },
 
-  async getSuggestedCreators() {
+  async getSuggestedCreators(limit = 4) {
     const userId = await getUserId();
     const supabase = getSupabase();
     const { data: following } = await supabase
@@ -865,20 +1009,180 @@ export const supabaseApi = {
       .select("following_id")
       .eq("follower_id", userId);
     const exclude = new Set([userId, ...(following ?? []).map((f) => f.following_id)]);
-    const { data } = await supabase
+
+    const { data: profiles } = await supabase
       .from("profiles")
       .select("id, username, display_name, avatar_url")
-      .limit(12);
+      .limit(40);
 
-    return (data ?? [])
-      .filter((p) => !exclude.has(p.id))
-      .slice(0, 4)
+    const candidates = (profiles ?? []).filter((p) => !exclude.has(p.id)).slice(0, 20);
+    const withCounts = await Promise.all(
+      candidates.map(async (p) => {
+        const { count } = await supabase
+          .from("follows")
+          .select("*", { count: "exact", head: true })
+          .eq("following_id", p.id);
+        return { ...p, followers: count ?? 0 };
+      })
+    );
+
+    return withCounts
+      .sort((a, b) => b.followers - a.followers)
+      .slice(0, limit)
       .map((u) => ({
         id: u.id,
         username: u.username,
         name: u.display_name ?? u.username,
         avatar: u.avatar_url,
+        followers: u.followers,
       }));
+  },
+
+  async getTrendingPosts(limit = 20) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const since = new Date();
+    since.setDate(since.getDate() - 7);
+
+    const { data: posts, error } = await supabase
+      .from("posts")
+      .select("*, profiles:user_id (id, username, display_name, avatar_url)")
+      .gte("created_at", since.toISOString())
+      .order("views_count", { ascending: false })
+      .limit(limit * 2);
+    if (error) throw error;
+
+    const sorted = [...(posts ?? [])].sort(
+      (a, b) =>
+        (b.views_count ?? 0) + (b.likes_count ?? 0) * 3 - ((a.views_count ?? 0) + (a.likes_count ?? 0) * 3)
+    );
+
+    const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", userId);
+    const { data: bookmarks } = await supabase.from("post_bookmarks").select("post_id").eq("user_id", userId);
+    const likedSet = new Set((likes ?? []).map((l) => l.post_id));
+    const bookmarkedSet = new Set((bookmarks ?? []).map((b) => b.post_id));
+
+    const mapped = await mapPostsWithExtras(supabase, sorted.slice(0, limit), userId, likedSet, bookmarkedSet);
+    return mapped;
+  },
+
+  async getExploreFeed() {
+    const supabase = getSupabase();
+    const [trendingPosts, trendingTags] = await Promise.all([
+      this.getTrendingPosts(12),
+      this.getTrendingTags(8),
+    ]);
+
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const { data: recentPosts } = await supabase
+      .from("posts")
+      .select("sound_id, location_tag")
+      .gte("created_at", since.toISOString());
+
+    const soundCounts = {};
+    const locationCounts = {};
+    for (const p of recentPosts ?? []) {
+      if (p.sound_id) soundCounts[p.sound_id] = (soundCounts[p.sound_id] ?? 0) + 1;
+      if (p.location_tag) locationCounts[p.location_tag] = (locationCounts[p.location_tag] ?? 0) + 1;
+    }
+
+    const soundTrends = Object.entries(soundCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([id, postCount]) => {
+        const meta = SOUND_LIBRARY.find((s) => s.id === id);
+        return { id, name: meta?.name ?? id, author: meta?.author ?? "UBIRT", postCount };
+      });
+
+    const locationTags = Object.entries(locationCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([tag, count]) => ({ tag, count }));
+
+    return { trendingPosts, trendingTags, soundTrends, locationTags };
+  },
+
+  async getPostsBySound(soundId) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*, profiles:user_id (username, display_name, avatar_url)")
+      .eq("sound_id", soundId)
+      .order("created_at", { ascending: false })
+      .limit(40);
+    if (error) throw error;
+    const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", userId);
+    const likedSet = new Set((likes ?? []).map((l) => l.post_id));
+    return mapPostsWithExtras(supabase, data ?? [], userId, likedSet, new Set());
+  },
+
+  async getPostsByLocation(locationTag) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*, profiles:user_id (username, display_name, avatar_url)")
+      .eq("location_tag", locationTag)
+      .order("created_at", { ascending: false })
+      .limit(40);
+    if (error) throw error;
+    const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", userId);
+    const likedSet = new Set((likes ?? []).map((l) => l.post_id));
+    return mapPostsWithExtras(supabase, data ?? [], userId, likedSet, new Set());
+  },
+
+  async votePoll(postId, optionId) {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc("vote_poll", {
+      p_post_id: postId,
+      p_option_id: optionId,
+    });
+    if (error) throw error;
+    return typeof data === "string" ? JSON.parse(data) : data;
+  },
+
+  async getProfileQuestions(profileId) {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("profile_questions")
+      .select("*, asker:asker_id (username, display_name)")
+      .eq("profile_id", profileId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    return (data ?? []).map((q) => ({
+      id: q.id,
+      question: q.question,
+      answer: q.answer,
+      answeredAt: q.answered_at,
+      askerName: q.asker?.display_name ?? q.asker?.username ?? "User",
+      askerUsername: q.asker?.username ?? null,
+    }));
+  },
+
+  async submitProfileQuestion(profileId, question) {
+    await assertCleanText(question, "Question");
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc("submit_profile_question", {
+      p_profile_id: profileId,
+      p_question: question,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async answerProfileQuestion(questionId, answer) {
+    await assertCleanText(answer, "Answer");
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc("answer_profile_question", {
+      p_question_id: questionId,
+      p_answer: answer,
+    });
+    if (error) throw error;
+    return true;
   },
 
   async getComments(postId) {
@@ -900,6 +1204,7 @@ export const supabaseApi = {
   },
 
   async addComment(postId, text) {
+    await assertCleanText(text, "Comment");
     const userId = await getUserId();
     const supabase = getSupabase();
     const { data, error } = await supabase
@@ -1576,6 +1881,10 @@ export const supabaseApi = {
       throw new Error("Message cannot be empty.");
     }
 
+    if (content) {
+      await assertCleanText(content, "Message");
+    }
+
     const { data, error } = await supabase
       .from("messages")
       .insert({
@@ -1762,9 +2071,15 @@ export const supabaseApi = {
 
     let assistantText;
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const res = await fetch(getApiUrl("/api/ai/chat"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ prompt }),
       });
       if (!res.ok) throw new Error("AI API unavailable");
@@ -1820,6 +2135,9 @@ export const supabaseApi = {
 
   async saveUpload(payload, file = null) {
     const userId = await getUserId();
+    if (payload.title) await assertCleanText(payload.title, "Title");
+    if (payload.description) await assertCleanText(payload.description, "Description");
+    if (payload.locationTag) await assertCleanText(payload.locationTag, "Location");
     let mediaUrl = null;
     let storagePath = null;
     let muxAssetId = null;
@@ -1847,6 +2165,13 @@ export const supabaseApi = {
         media_url: mediaUrl,
         mux_asset_id: muxAssetId,
         mux_playback_id: muxPlaybackId,
+        sound_id: payload.audio && payload.audio !== "original" ? payload.audio : null,
+        location_tag: payload.locationTag?.trim() || null,
+        co_author_username: payload.coAuthorUsername?.trim()?.replace(/^@/, "") || null,
+        poll_options:
+          Array.isArray(payload.pollOptions) && payload.pollOptions.filter(Boolean).length >= 2
+            ? payload.pollOptions.filter(Boolean).slice(0, 4)
+            : null,
       })
       .select()
       .single();
@@ -2076,6 +2401,17 @@ export const supabaseApi = {
     const supabase = getSupabase();
     const { data: upload } = await supabase.from("uploads").select("*").eq("id", uploadId).single();
     if (!upload) throw new Error("Upload not found");
+
+    let coAuthorId = null;
+    if (upload.co_author_username) {
+      const { data: coAuthor } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", upload.co_author_username.toLowerCase())
+        .maybeSingle();
+      coAuthorId = coAuthor?.id ?? null;
+    }
+
     const { data, error } = await supabase
       .from("posts")
       .insert({
@@ -2086,13 +2422,31 @@ export const supabaseApi = {
         category: (upload.category ?? "general").toLowerCase(),
         mux_asset_id: upload.mux_asset_id,
         mux_playback_id: upload.mux_playback_id,
+        sound_id: upload.sound_id ?? null,
+        location_tag: upload.location_tag ?? null,
+        co_author_id: coAuthorId,
       })
       .select()
       .single();
     if (error) throw error;
+
+    const pollOptions = upload.poll_options;
+    if (Array.isArray(pollOptions) && pollOptions.filter(Boolean).length >= 2) {
+      await supabase.rpc("create_post_poll", {
+        p_post_id: data.id,
+        p_options: pollOptions.filter(Boolean).slice(0, 4),
+      });
+    }
+
     await supabase.rpc("add_user_xp", { p_user_id: userId, p_amount: 50 });
     const caption = upload.description || upload.title || "";
     await notifyMentionedUsers(caption, { postId: data.id, actorId: userId });
+    if (coAuthorId && coAuthorId !== userId) {
+      const actorName = await getActorDisplayName(userId);
+      await notifyUser(coAuthorId, "mention", `${actorName} tagged you as co-creator on a post`, {
+        postId: data.id,
+      });
+    }
     return data;
   },
 
@@ -2414,6 +2768,310 @@ export const supabaseApi = {
       .eq("media_url", upload.media_url)
       .maybeSingle();
     return post?.id ?? null;
+  },
+
+  async getCreatorEarnings(days = 28) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const [
+      { data: gifts },
+      { data: tips },
+      { data: subs },
+      { data: conversions },
+      { count: linkClicks },
+      { data: profile },
+    ] = await Promise.all([
+      supabase
+        .from("gifts")
+        .select("amount, receiver_amount, created_at, sender_id, profiles:sender_id (display_name, username)")
+        .eq("receiver_id", userId)
+        .gte("created_at", since.toISOString())
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("creator_tips")
+        .select("amount, receiver_amount, tip_type, created_at, sender_id, profiles:sender_id (display_name, username)")
+        .eq("receiver_id", userId)
+        .gte("created_at", since.toISOString())
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("creator_subscriptions")
+        .select("price_paid, created_at, subscriber_id, profiles:subscriber_id (display_name, username)")
+        .eq("creator_id", userId)
+        .gte("created_at", since.toISOString())
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("wallet_conversions")
+        .select("amount, created_at")
+        .eq("user_id", userId)
+        .gte("created_at", since.toISOString())
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("profile_link_clicks")
+        .select("*", { count: "exact", head: true })
+        .eq("profile_id", userId)
+        .gte("created_at", since.toISOString()),
+      supabase.from("profiles").select("gift_coins, referral_code").eq("id", userId).single(),
+    ]);
+
+    const giftTotal = (gifts ?? []).reduce((s, g) => s + (g.receiver_amount ?? 0), 0);
+    const tipTotal = (tips ?? []).reduce((s, t) => s + (t.receiver_amount ?? 0), 0);
+    const subTotal = (subs ?? []).reduce((s, t) => s + Math.floor((t.price_paid ?? 0) * 0.8), 0);
+
+    const gifterMap = {};
+    for (const g of gifts ?? []) {
+      const key = g.sender_id;
+      if (!gifterMap[key]) {
+        gifterMap[key] = {
+          id: key,
+          name: g.profiles?.display_name ?? g.profiles?.username ?? "Fan",
+          total: 0,
+        };
+      }
+      gifterMap[key].total += g.receiver_amount ?? 0;
+    }
+    for (const t of tips ?? []) {
+      const key = t.sender_id;
+      if (!gifterMap[key]) {
+        gifterMap[key] = {
+          id: key,
+          name: t.profiles?.display_name ?? t.profiles?.username ?? "Fan",
+          total: 0,
+        };
+      }
+      gifterMap[key].total += t.receiver_amount ?? 0;
+    }
+
+    const topGifters = Object.values(gifterMap)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+
+    const earningsByDay = [];
+    for (let i = Math.min(days, 14) - 1; i >= 0; i -= 1) {
+      const dayStart = new Date();
+      dayStart.setHours(0, 0, 0, 0);
+      dayStart.setDate(dayStart.getDate() - i);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      const dayTotal =
+        (gifts ?? [])
+          .filter((g) => {
+            const d = new Date(g.created_at);
+            return d >= dayStart && d < dayEnd;
+          })
+          .reduce((s, g) => s + (g.receiver_amount ?? 0), 0) +
+        (tips ?? [])
+          .filter((t) => {
+            const d = new Date(t.created_at);
+            return d >= dayStart && d < dayEnd;
+          })
+          .reduce((s, t) => s + (t.receiver_amount ?? 0), 0);
+      earningsByDay.push(dayTotal);
+    }
+    const maxDay = Math.max(...earningsByDay, 1);
+
+    return {
+      giftCoins: profile?.gift_coins ?? 0,
+      referralCode: profile?.referral_code ?? null,
+      totals: {
+        gifts: giftTotal,
+        tips: tipTotal,
+        subscriptions: subTotal,
+        all: giftTotal + tipTotal + subTotal,
+      },
+      topGifters,
+      conversions: (conversions ?? []).map((c) => ({
+        amount: c.amount,
+        createdAt: c.created_at,
+      })),
+      linkClicks: linkClicks ?? 0,
+      recentTips: (tips ?? []).slice(0, 5).map((t) => ({
+        amount: t.amount,
+        type: t.tip_type,
+        name: t.profiles?.display_name ?? t.profiles?.username ?? "Fan",
+        createdAt: t.created_at,
+      })),
+      chartData: earningsByDay.map((v) => Math.max(8, Math.round((v / maxDay) * 100))),
+    };
+  },
+
+  async getCreatorMonetizationSettings() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "subscription_price_coins, subscription_description, tip_min_coins, paid_dm_price_coins, referral_code"
+      )
+      .eq("id", userId)
+      .single();
+    if (error) throw error;
+    return {
+      subscriptionPrice: data?.subscription_price_coins ?? null,
+      subscriptionDescription: data?.subscription_description ?? "",
+      tipMinCoins: data?.tip_min_coins ?? 10,
+      paidDmPrice: data?.paid_dm_price_coins ?? null,
+      referralCode: data?.referral_code ?? null,
+    };
+  },
+
+  async updateCreatorMonetization(settings) {
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc("update_creator_monetization", {
+      p_subscription_price: settings.subscriptionPrice ?? null,
+      p_subscription_description: settings.subscriptionDescription ?? null,
+      p_tip_min: settings.tipMinCoins ?? null,
+      p_paid_dm_price: settings.paidDmPrice ?? null,
+    });
+    if (error) throw error;
+    return true;
+  },
+
+  async subscribeToCreator(creatorId) {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc("subscribe_to_creator", { p_creator_id: creatorId });
+    if (error) throw error;
+    return typeof data === "string" ? JSON.parse(data) : data;
+  },
+
+  async sendCreatorTip({ receiverId, amount, message, tipType = "tip" }) {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc("send_creator_tip", {
+      p_receiver_id: receiverId,
+      p_amount: amount,
+      p_message: message ?? null,
+      p_tip_type: tipType,
+    });
+    if (error) throw error;
+    return typeof data === "string" ? JSON.parse(data) : data;
+  },
+
+  async promotePost(postId, coins, hours = 24) {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc("promote_post", {
+      p_post_id: postId,
+      p_coins: coins,
+      p_hours: hours,
+    });
+    if (error) throw error;
+    return typeof data === "string" ? JSON.parse(data) : data;
+  },
+
+  async applyReferralCode(code) {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc("apply_referral_code", { p_code: code });
+    if (error) throw error;
+    return typeof data === "string" ? JSON.parse(data) : data;
+  },
+
+  async recordProfileLinkClick(profileId) {
+    const supabase = getSupabase();
+    await supabase.rpc("record_profile_link_click", { p_profile_id: profileId }).catch(() => {});
+    return true;
+  },
+
+  async hasCompletedPurchase() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { count, error } = await supabase
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "success");
+    if (error) throw error;
+    return (count ?? 0) > 0;
+  },
+
+  async confirmAgeGate() {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc("confirm_age_gate");
+    if (error) throw error;
+    return data;
+  },
+
+  async getAgeConfirmedAt() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("age_confirmed_at")
+      .eq("id", userId)
+      .single();
+    if (error) throw error;
+    return data?.age_confirmed_at ?? null;
+  },
+
+  async getIsAdmin() {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", userId)
+      .single();
+    if (error) throw error;
+    return Boolean(data?.is_admin);
+  },
+
+  async getModerationQueue(status = "pending") {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("reports")
+      .select("*, reporter:reporter_id (username, display_name)")
+      .eq("status", status)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      targetType: row.target_type,
+      targetId: row.target_id,
+      reason: row.reason,
+      details: row.details,
+      status: row.status,
+      createdAt: row.created_at,
+      reporterName: row.reporter?.display_name ?? row.reporter?.username ?? "User",
+      reporterUsername: row.reporter?.username ?? null,
+      resolutionNote: row.resolution_note,
+      actionTaken: row.action_taken,
+    }));
+  },
+
+  async reviewReport(reportId, { status, resolutionNote, actionTaken }) {
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc("review_report", {
+      p_report_id: reportId,
+      p_status: status,
+      p_resolution_note: resolutionNote ?? null,
+      p_action_taken: actionTaken ?? null,
+    });
+    if (error) throw error;
+    return true;
+  },
+
+  async getWalletAuditLog(limit = 50) {
+    const userId = await getUserId();
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("wallet_audit_log")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      action: row.action,
+      walletType: row.wallet_type,
+      amount: row.amount,
+      balanceAfter: row.balance_after,
+      referenceType: row.reference_type,
+      referenceId: row.reference_id,
+      metadata: row.metadata,
+      createdAt: row.created_at,
+    }));
   },
 };
 

@@ -14,6 +14,11 @@ import ResetPassword from "./pages/ResetPassword";
 import PageTracker from "@/components/PageTracker";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useNativeShell } from "@/hooks/useNativeShell";
+import { useDeepLinks } from "@/hooks/useDeepLinks";
+import { useOfflineUploadQueue } from "@/hooks/useOfflineUploadQueue";
+import { useAppUpdatePrompt, AppUpdateBanner } from "@/hooks/useAppUpdatePrompt";
+import BiometricGate from "@/components/mobile/BiometricGate";
+import { useState } from "react";
 import { useLastSeenHeartbeat } from "@/hooks/useLastSeenHeartbeat";
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 
@@ -38,7 +43,10 @@ import CommunityChat from "./pages/CommunityChat";
 import JoinGroup from "./pages/JoinGroup";
 import AIChat from "./pages/AIChat";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
-import TermsOfService from "./pages/TermsOfService";
+import Explore from "./pages/Explore";
+import SoundTrends from "./pages/SoundTrends";
+import AdminModeration from "./pages/AdminModeration";
+import AgeGateGuard from "@/components/safety/AgeGateGuard";
 
 const LOGO_URL = "/pwa-192x192.png";
 
@@ -46,6 +54,23 @@ const LOGO_URL = "/pwa-192x192.png";
 function NativeBootstrap() {
   useNativeShell();
   return null;
+}
+
+/** Deep links, offline queue, update prompt, biometric lock. */
+function MobileShell({ children }) {
+  useDeepLinks();
+  useOfflineUploadQueue();
+  const update = useAppUpdatePrompt();
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+
+  return (
+    <BiometricGate>
+      {!updateDismissed && update ? (
+        <AppUpdateBanner update={update} onDismiss={() => setUpdateDismissed(true)} />
+      ) : null}
+      {children}
+    </BiometricGate>
+  );
 }
 
 const AuthenticatedApp = () => {
@@ -115,6 +140,8 @@ const AuthenticatedApp = () => {
   }
 
   return (
+    <AgeGateGuard>
+    <MobileShell>
     <Routes>
       <Route element={<MainLayout />}>
         <Route path="/" element={<Home />} />
@@ -124,13 +151,18 @@ const AuthenticatedApp = () => {
         <Route path="/profile" element={<Profile />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/search" element={<Search />} />
+        <Route path="/explore" element={<Explore />} />
       </Route>
+
+      <Route path="/sound/:soundId" element={<SoundTrends />} />
+      <Route path="/explore/location/:tag" element={<LocationFeed />} />
 
       <Route path="/chat/:id" element={<ChatDetail />} />
       <Route path="/group/join/:code" element={<JoinGroup />} />
       <Route path="/group/:id" element={<CommunityChat />} />
       <Route path="/community/:id" element={<CommunityChat />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/admin/moderation" element={<AdminModeration />} />
       <Route path="/upload" element={<Upload />} />
       <Route path="/create" element={<Camera />} />
       <Route path="/creator-studio" element={<CreatorStudio />} />
@@ -140,10 +172,13 @@ const AuthenticatedApp = () => {
       <Route path="/user/:username/followers" element={<FollowList />} />
       <Route path="/user/:username/following" element={<FollowList />} />
       <Route path="/user/:username" element={<UserProfile />} />
+      <Route path="/u/:username" element={<UserProfile />} />
       <Route path="/tag/:tag" element={<HashtagFeed />} />
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </MobileShell>
+    </AgeGateGuard>
   );
 };
 

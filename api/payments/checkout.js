@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { applyCors, handleCorsPreflight } from "../lib/cors.js";
 import { authenticateRequest, getAdminSupabase } from "../lib/payment/auth.js";
+import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
 import {
   createFincraCheckout,
   formatFincraCustomerName,
@@ -31,6 +32,11 @@ export default async function handler(req, res) {
   const auth = await authenticateRequest(req);
   if (auth.error) {
     return res.status(auth.error.status).json({ error: auth.error.message });
+  }
+
+  const ip = getClientIp(req);
+  if (!applyRateLimit(req, res, `checkout:${auth.user.id}:${ip}`, { limit: 10, windowMs: 60_000 })) {
+    return;
   }
 
   const gateway = (process.env.PAYMENT_GATEWAY || "fincra").toLowerCase();

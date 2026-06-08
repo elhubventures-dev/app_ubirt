@@ -49,6 +49,14 @@ export default function Wallet() {
     queryFn: () => dataProvider.getTransactions(),
   });
 
+  const { data: hasPurchased } = useQuery({
+    queryKey: ["has-purchased"],
+    queryFn: () => dataProvider.hasCompletedPurchase?.() ?? false,
+  });
+
+  const [referralCode, setReferralCode] = useState("");
+  const [applyingReferral, setApplyingReferral] = useState(false);
+
   const platformCoins = wallet.platformCoins ?? user?.coins ?? 0;
   const giftCoins = wallet.giftCoins ?? user?.giftCoins ?? 0;
   const gatewayLabel = getActiveGatewayLabel();
@@ -181,6 +189,21 @@ export default function Wallet() {
       });
     } finally {
       setIsConverting(false);
+    }
+  };
+
+  const handleApplyReferral = async () => {
+    if (!referralCode.trim()) return;
+    setApplyingReferral(true);
+    try {
+      const result = await dataProvider.applyReferralCode(referralCode.trim());
+      syncWalletSession(await dataProvider.getWalletBalance());
+      setReferralCode("");
+      toast({ title: "Referral applied", description: `+${result.bonus_coins ?? 50} platform coins for you and your friend.` });
+    } catch (err) {
+      toast({ title: "Referral failed", description: err.message, variant: "destructive" });
+    } finally {
+      setApplyingReferral(false);
     }
   };
 
@@ -386,6 +409,29 @@ export default function Wallet() {
           transition={{ delay: 0.15 }}
           className="flex flex-col gap-4"
         >
+          {!hasPurchased ? (
+            <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/30 p-4">
+              <p className="text-sm font-bold text-emerald-300">First purchase bonus</p>
+              <p className="text-xs text-slate-300 mt-1">Get 20% extra coins on your first coin purchase.</p>
+            </div>
+          ) : null}
+
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex flex-col gap-3">
+            <h2 className="text-lg font-bold">Refer a friend</h2>
+            <p className="text-xs text-slate-400">You and your friend each get 50 platform coins.</p>
+            <div className="flex gap-2">
+              <input
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value)}
+                placeholder="Enter referral code"
+                className="flex-1 rounded-xl bg-[#0d1420] border border-white/10 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none"
+              />
+              <PrimaryButton onClick={handleApplyReferral} disabled={applyingReferral} className="rounded-xl px-5">
+                {applyingReferral ? "..." : "Apply"}
+              </PrimaryButton>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold">Buy Platform Coins</h2>
             <span className="text-xs text-slate-400">via {gatewayLabel}</span>

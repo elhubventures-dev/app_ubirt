@@ -177,5 +177,10 @@ Run every file in `supabase/migrations/` in numeric order in the **SQL Editor** 
 | 029 | `029_tier1_trust_prefs_withdrawals.sql` | Block/report, notification prefs, withdrawal requests |
 | 030 | `030_tier2_social.sql` | Reposts, pinned posts, profile views, mention prefs |
 | 031 | `031_tier3_messaging.sql` | Reactions, replies, post shares, mute/archive, chat themes, read-receipt pref |
+| 032 | `032_tier4_monetization.sql` | Subscriptions, tips, paid DMs, promotions, referrals, link analytics |
+| 033 | `033_tier5_discovery.sql` | Location tags, sounds on posts, collabs, polls, profile Q&A |
+| 034 | `034_tier7_trust_ops.sql` | Admin moderation, age gate, wallet audit log, report review RPC |
 
-**Minimum for current app features:** through `031`. Skipping `013` breaks DMs; skipping `015`–`022` degrades live chat, voice, deletes, and notification deep links.
+**Minimum for current app features:** through `034`. Skipping `013` breaks DMs; skipping `015`–`022` degrades live chat, voice, deletes, and notification deep links.
+
+**Grant moderation admin (after 034):** In Supabase SQL Editor, run `update public.profiles set is_admin = true where username = 'your_username';` then open **Settings → Moderation queue** or `/admin/moderation`.

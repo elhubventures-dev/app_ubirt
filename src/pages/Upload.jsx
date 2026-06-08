@@ -10,6 +10,7 @@ import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoFilters, getFilterClass } from "@/components/studio/VideoFilters";
 import { getSoundById } from "@/lib/soundLibrary";
+import { enqueueOfflineUpload, isLikelyNetworkError } from "@/lib/offlineUploadQueue";
 
 const selectClass = "w-full rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-white focus:bg-white/10 transition-colors outline-none";
 
@@ -36,6 +37,9 @@ export default function Upload() {
   const [filter, setFilter] = useState(savedDraft?.filter ?? "none");
   const [audio, setAudio] = useState(savedDraft?.audio ?? "original");
   const [captions, setCaptions] = useState(savedDraft?.captions ?? []);
+  const [locationTag, setLocationTag] = useState(savedDraft?.locationTag ?? "");
+  const [coAuthorUsername, setCoAuthorUsername] = useState(savedDraft?.coAuthorUsername ?? "");
+  const [pollOptions, setPollOptions] = useState(savedDraft?.pollOptions ?? ["", ""]);
   const fileInputRef = useRef(null);
 
   const { saveUpload, isSavingUpload, publishUpload, isPublishingUpload } = useCreatorStudio();
@@ -64,9 +68,9 @@ export default function Upload() {
   useEffect(() => {
     localStorage.setItem(
       UPLOAD_DRAFT_KEY,
-      JSON.stringify({ step, title, description, category, visibility, filter, audio, captions })
+      JSON.stringify({ step, title, description, category, visibility, filter, audio, captions, locationTag, coAuthorUsername, pollOptions })
     );
-  }, [step, title, description, category, visibility, filter, audio, captions]);
+  }, [step, title, description, category, visibility, filter, audio, captions, locationTag, coAuthorUsername, pollOptions]);
 
   const handleFileChange = (e) => {
     const selected = e.target.files?.[0];
@@ -88,13 +92,52 @@ export default function Upload() {
     }
     try {
       const result = await saveUpload({
-        payload: { title, description, category, visibility, filter, audio, captions },
+        payload: {
+          title,
+          description,
+          category,
+          visibility,
+          filter,
+          audio,
+          captions,
+          locationTag,
+          coAuthorUsername,
+          pollOptions: pollOptions.filter((o) => o.trim()).length >= 2 ? pollOptions.map((o) => o.trim()).filter(Boolean) : null,
+        },
         file,
       });
       toast({ title: "Draft saved", description: `Upload ${result.id} has been stored successfully.` });
       localStorage.removeItem(UPLOAD_DRAFT_KEY);
       navigate("/creator-studio");
     } catch (error) {
+      if (isLikelyNetworkError(error)) {
+        try {
+          await enqueueOfflineUpload({
+            payload: {
+              title,
+              description,
+              category,
+              visibility,
+              filter,
+              audio,
+              captions,
+              locationTag,
+              coAuthorUsername,
+              pollOptions: pollOptions.filter((o) => o.trim()).length >= 2 ? pollOptions.map((o) => o.trim()).filter(Boolean) : null,
+            },
+            file,
+          });
+          toast({
+            title: "Saved offline",
+            description: "Your draft will upload automatically when you're back online.",
+          });
+          localStorage.removeItem(UPLOAD_DRAFT_KEY);
+          navigate("/creator-studio");
+          return;
+        } catch {
+          // Fall through to generic error.
+        }
+      }
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
     }
   };
@@ -286,6 +329,51 @@ export default function Upload() {
               </div>
 
               <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-1 block">Location tag</label>
+                  <InputField
+                    value={locationTag}
+                    onChange={(e) => setLocationTag(e.target.value)}
+                    placeholder="e.g. Lagos, Nigeria"
+                    className="py-3 px-4 rounded-2xl bg-white/5 border-white/10"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-1 block">Co-creator username</label>
+                  <InputField
+                    value={coAuthorUsername}
+                    onChange={(e) => setCoAuthorUsername(e.target.value)}
+                    placeholder="@username (optional)"
+                    className="py-3 px-4 rounded-2xl bg-white/5 border-white/10"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-1 block">Poll options (optional, 2–4)</label>
+                  <div className="space-y-2">
+                    {pollOptions.map((opt, i) => (
+                      <InputField
+                        key={i}
+                        value={opt}
+                        onChange={(e) => {
+                          const next = [...pollOptions];
+                          next[i] = e.target.value;
+                          setPollOptions(next);
+                        }}
+                        placeholder={`Option ${i + 1}`}
+                        className="py-2 px-4 rounded-xl bg-white/5 border-white/10"
+                      />
+                    ))}
+                    {pollOptions.length < 4 && (
+                      <button
+                        type="button"
+                        onClick={() => setPollOptions([...pollOptions, ""])}
+                        className="text-xs text-[#3b82f6] font-semibold pl-1"
+                      >
+                        + Add option
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-1 block">Category</label>
                   <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectClass}>

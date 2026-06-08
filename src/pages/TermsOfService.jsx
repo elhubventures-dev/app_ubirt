@@ -63,8 +63,8 @@ export default function TermsOfService() {
           <h2 className="text-lg font-bold text-white mb-2">Contact</h2>
           <p className="text-slate-300">
             Legal inquiries:{" "}
-            <a href="mailto:hello@ubirtai.site" className="text-[#3b82f6] hover:underline">
-              hello@ubirtai.site
+            <a href="mailto:info@ubirtai.site" className="text-[#3b82f6] hover:underline">
+              info@ubirtai.site
             </a>
           </p>
         </section>

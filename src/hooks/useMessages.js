@@ -3,6 +3,7 @@ import { dataProvider } from "@/api/dataProvider";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
 import { playNotificationSound } from "@/lib/notificationSound";
+import { hapticMessageSent } from "@/lib/haptics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useConversations(options = {}) {
@@ -154,6 +155,7 @@ export function useChatMessages(chatId) {
     mutationFn: ({ text, attachment, replyToId, sharedPostId }) =>
       dataProvider.sendMessage(chatId, text, attachment, { replyToId, sharedPostId }),
     onSuccess: (newMsg) => {
+      hapticMessageSent();
       queryClient.setQueryData(["messages", chatId], (old) => {
         if (!old) return [newMsg];
         if (old.some((m) => m.id === newMsg.id)) return old;

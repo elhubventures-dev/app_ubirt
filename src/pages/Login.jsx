@@ -4,7 +4,8 @@ import { useAuth } from "@/lib/AuthContext";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
 import { useToast } from "@/components/ui/use-toast";
-import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import { isSupabaseConfigured, getSupabase } from "@/lib/supabaseClient";
+import MfaChallengeModal from "@/components/safety/MfaChallengeModal";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Login() {
@@ -13,6 +14,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState(null);
   const { user, signIn, signUp, signInWithGoogle, resetPassword, isLiveAuth, isLoadingAuth } = useAuth();
   const { toast } = useToast();
 
@@ -65,7 +67,11 @@ export default function Login() {
         return;
       }
       if (mode === "signin") {
-        await signIn(email.trim(), password);
+        const result = await signIn(email.trim(), password);
+        if (result?.mfaRequired && result.factorId) {
+          setMfaFactorId(result.factorId);
+          return;
+        }
         toast({ title: "Welcome back" });
       } else {
         await signUp(email.trim(), password, username.trim());
@@ -86,8 +92,25 @@ export default function Login() {
 
   const isMock = !isSupabaseConfigured();
 
+  const finishMfaSignIn = async () => {
+    setMfaFactorId(null);
+    setLoading(false);
+    toast({ title: "Welcome back" });
+    window.location.assign("/");
+  };
+
   return (
     <div className="min-h-[100dvh] w-full bg-[#0a0f16] flex items-center justify-center relative overflow-hidden px-4">
+      {mfaFactorId ? (
+        <MfaChallengeModal
+          factorId={mfaFactorId}
+          onSuccess={finishMfaSignIn}
+          onCancel={() => {
+            setMfaFactorId(null);
+            getSupabase().auth.signOut();
+          }}
+        />
+      ) : null}
       {/* Immersive Background */}
       <div className="absolute inset-0 z-0">
         <motion.div 

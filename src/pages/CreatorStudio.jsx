@@ -8,8 +8,14 @@ import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { dataProvider } from "@/api/dataProvider";
 import { formatCount } from "@/lib/formatStats";
+import MonetizationSettings from "@/components/monetization/MonetizationSettings";
 
 export default function CreatorStudio() {
+  const { data: earnings, isLoading: isLoadingEarnings } = useQuery({
+    queryKey: ["creator-earnings", 28],
+    queryFn: () => dataProvider.getCreatorEarnings(28),
+  });
+
   const { data: analytics, isLoading: isLoadingAnalytics } = useQuery({
     queryKey: ["creator-analytics", 28],
     queryFn: () => dataProvider.getCreatorAnalytics(28),
@@ -130,6 +136,58 @@ export default function CreatorStudio() {
                <span>May 28</span>
              </div>
           </section>
+
+          {/* Earnings dashboard */}
+          <section className="bg-white/5 border border-white/10 p-5 md:p-6 rounded-3xl backdrop-blur-sm">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-base font-bold">Earnings (28 days)</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {isLoadingEarnings ? "—" : `${(earnings?.totals?.all ?? 0).toLocaleString()} gift coins earned`}
+                </p>
+              </div>
+              <Link to="/wallet" className="text-xs font-semibold text-[#3b82f6] hover:underline">
+                Wallet →
+              </Link>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <div className="rounded-xl bg-black/20 p-3 text-center">
+                <p className="text-[10px] text-slate-500 uppercase">Gifts</p>
+                <p className="text-lg font-bold">{isLoadingEarnings ? "—" : earnings?.totals?.gifts ?? 0}</p>
+              </div>
+              <div className="rounded-xl bg-black/20 p-3 text-center">
+                <p className="text-[10px] text-slate-500 uppercase">Tips</p>
+                <p className="text-lg font-bold">{isLoadingEarnings ? "—" : earnings?.totals?.tips ?? 0}</p>
+              </div>
+              <div className="rounded-xl bg-black/20 p-3 text-center">
+                <p className="text-[10px] text-slate-500 uppercase">Subs</p>
+                <p className="text-lg font-bold">{isLoadingEarnings ? "—" : earnings?.totals?.subscriptions ?? 0}</p>
+              </div>
+            </div>
+            <div className="h-24 flex items-end gap-1 mb-4">
+              {(earnings?.chartData ?? [8, 8, 8, 8, 8, 8, 8]).map((h, i) => (
+                <div key={i} className="flex-1 bg-violet-500 rounded-t-sm" style={{ height: `${h}%` }} />
+              ))}
+            </div>
+            {earnings?.topGifters?.length ? (
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-2">Top supporters</p>
+                <div className="space-y-2">
+                  {earnings.topGifters.map((g) => (
+                    <div key={g.id} className="flex justify-between text-sm">
+                      <span className="text-slate-200">{g.name}</span>
+                      <span className="text-violet-300 font-semibold">{g.total} coins</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {!isLoadingEarnings && earnings?.linkClicks != null ? (
+              <p className="text-xs text-slate-500 mt-3">{earnings.linkClicks} bio link clicks (28d)</p>
+            ) : null}
+          </section>
+
+          <MonetizationSettings />
 
           {/* Split Section: Demographics & Top Content */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

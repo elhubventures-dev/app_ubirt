@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import MfaSettings from "@/components/safety/MfaSettings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
@@ -7,6 +8,8 @@ import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { InputField } from "@/components/ui/InputField";
 import { getDataMode, dataProvider } from "@/api/dataProvider";
 import { getPreference, setPreference } from "@/lib/preferences";
+import { isBiometricLockEnabled, setBiometricLockEnabled } from "@/components/mobile/BiometricGate";
+import { BiometricAuth } from "@aparajita/capacitor-biometric-auth";
 import { DEFAULT_NOTIFICATION_PREFS } from "@/lib/notificationPreferences";
 import { ALLOWED_IMAGE_ACCEPT, validateImageFile } from "@/lib/uploadPolicy";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
@@ -52,6 +55,7 @@ export default function Settings() {
   const {
     user,
     signOut,
+    signOutAllSessions,
     deleteAccount,
     isLiveAuth,
     updateUserSession,
@@ -60,6 +64,8 @@ export default function Settings() {
   } = useAuth();
   const [autoplay, setAutoplay] = useState(() => getPreference("autoplay", true));
   const [notifications, setNotifications] = useState(() => getPreference("push", true));
+  const [haptics, setHaptics] = useState(() => getPreference("haptics", true));
+  const [biometricLock, setBiometricLock] = useState(() => isBiometricLockEnabled());
   const [notifPrefs, setNotifPrefs] = useState({ ...DEFAULT_NOTIFICATION_PREFS });
   const [isSavingNotifPrefs, setIsSavingNotifPrefs] = useState(false);
 
@@ -156,6 +162,38 @@ export default function Settings() {
     });
   };
 
+  const toggleHaptics = (next) => {
+    setHaptics(next);
+    setPreference("haptics", next);
+    toast({ title: "Haptics updated", description: next ? "Feedback enabled for likes and messages." : "Haptic feedback disabled." });
+  };
+
+  const toggleBiometricLock = async (next) => {
+    if (!Capacitor.isNativePlatform()) {
+      toast({ title: "Native only", description: "App lock requires the iOS or Android app.", variant: "destructive" });
+      return;
+    }
+    if (next) {
+      try {
+        const info = await BiometricAuth.checkBiometry();
+        if (!info.isAvailable) {
+          toast({ title: "Unavailable", description: "Biometrics are not set up on this device.", variant: "destructive" });
+          return;
+        }
+        await BiometricAuth.authenticate({ reason: "Confirm Face ID or fingerprint for app lock" });
+      } catch (error) {
+        toast({ title: "Could not enable", description: error.message || "Authentication cancelled.", variant: "destructive" });
+        return;
+      }
+    }
+    setBiometricLock(next);
+    setBiometricLockEnabled(next);
+    toast({
+      title: next ? "App lock enabled" : "App lock disabled",
+      description: next ? "UBIRT will ask for biometrics when you return to the app." : "App opens without extra authentication.",
+    });
+  };
+
   const toggleNotifPref = async (key, next) => {
     const updated = { ...notifPrefs, [key]: next };
     setNotifPrefs(updated);
@@ -188,7 +226,17 @@ export default function Settings() {
     }
   };
 
-  const [isSaving, setIsSaving] = useState(false);
+  const { data: isAdmin = false } = useQuery({
+    queryKey: ["is-admin"],
+    queryFn: () => dataProvider.getIsAdmin(),
+    enabled: isLiveAuth,
+  });
+
+  const { data: walletAudit = [] } = useQuery({
+    queryKey: ["wallet-audit"],
+    queryFn: () => dataProvider.getWalletAuditLog(20),
+    enabled: isLiveAuth,
+  });
   const [isSavingEmail, setIsSavingEmail] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -516,6 +564,10 @@ export default function Settings() {
             <div className="space-y-2">
               <Toggle checked={autoplay} onChange={toggleAutoplay} label="Autoplay feed posts" />
               <Toggle checked={notifications} onChange={togglePush} label="Push notifications (device)" />
+              <Toggle checked={haptics} onChange={toggleHaptics} label="Haptic feedback" />
+              {Capacitor.isNativePlatform() ? (
+                <Toggle checked={biometricLock} onChange={toggleBiometricLock} label="Face ID / fingerprint app lock" />
+              ) : null}
             </div>
           </section>
 
@@ -578,6 +630,69 @@ export default function Settings() {
               />
             </div>
           </section>
+
+          {isLiveAuth ? (
+            <section>
+              <SectionTitle>Two-factor authentication</SectionTitle>
+              <MfaSettings />
+            </section>
+          ) : null}
+
+          {isLiveAuth ? (
+            <section>
+              <SectionTitle>Sessions</SectionTitle>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await signOutAllSessions();
+                      toast({ title: "Signed out everywhere", description: "All active sessions were revoked." });
+                    } catch (error) {
+                      toast({ title: "Could not sign out", description: error.message, variant: "destructive" });
+                    }
+                  }}
+                  className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-left hover:bg-white/10 transition-colors"
+                >
+                  <p className="text-sm font-semibold text-white">Log out all devices</p>
+                  <p className="text-xs text-slate-400 mt-1">Revoke sessions on other phones and browsers.</p>
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {isLiveAuth && walletAudit.length ? (
+            <section>
+              <SectionTitle>Wallet activity log</SectionTitle>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {walletAudit.map((entry) => (
+                  <div key={entry.id} className="p-3 bg-white/5 border border-white/10 rounded-xl text-xs">
+                    <div className="flex justify-between gap-2">
+                      <span className="font-semibold text-white capitalize">{entry.action.replace(/_/g, " ")}</span>
+                      <span className={entry.amount >= 0 ? "text-emerald-400" : "text-red-400"}>
+                        {entry.amount >= 0 ? "+" : ""}
+                        {entry.amount} {entry.walletType}
+                      </span>
+                    </div>
+                    <p className="text-slate-500 mt-1">{new Date(entry.createdAt).toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {isAdmin ? (
+            <section>
+              <SectionTitle>Admin</SectionTitle>
+              <Link
+                to="/admin/moderation"
+                className="flex items-center justify-between p-4 bg-violet-500/10 border border-violet-500/20 rounded-2xl hover:bg-violet-500/20 transition-colors"
+              >
+                <span className="text-sm font-medium text-violet-200">Moderation queue</span>
+                <span className="material-symbols-outlined text-violet-300 text-[20px]">shield</span>
+              </Link>
+            </section>
+          ) : null}
 
           <section>
             <SectionTitle>Legal</SectionTitle>

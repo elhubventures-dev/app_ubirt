@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import PullToRefresh from "@/components/mobile/PullToRefresh";
 import { dataProvider } from "@/api/dataProvider";
 import { useNotifications } from "@/hooks/useNotifications";
 import { getNotificationPath } from "@/lib/notificationLinks";
@@ -16,8 +18,13 @@ const iconMap = {
 
 export default function Notifications() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: items = [], isLoading, markAllRead, markRead, isMarkingRead } = useNotifications();
   const unreadCount = items.filter((item) => !item.read).length;
+
+  const refreshNotifications = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  };
 
   const onMarkAllRead = async () => {
     if (!unreadCount) return;
@@ -35,6 +42,7 @@ export default function Notifications() {
   };
 
   return (
+    <PullToRefresh onRefresh={refreshNotifications} className="min-h-full">
     <div className="flex flex-col min-h-full pb-20 pt-4 px-2 sm:px-4 overflow-hidden relative">
       <div className="absolute inset-0 pointer-events-none bg-[#101822] z-0" />
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[40%] bg-[#3b82f6]/5 blur-[120px] rounded-full z-0 pointer-events-none" />
@@ -121,5 +129,6 @@ export default function Notifications() {
         )}
       </div>
     </div>
+    </PullToRefresh>
   );
 }

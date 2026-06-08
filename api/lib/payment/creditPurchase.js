@@ -19,6 +19,18 @@ export async function creditCoinPurchase(supabaseAdmin, {
     return { status: "already_processed" };
   }
 
+  let coinsFinal = parseInt(coinsToAdd, 10);
+  if (!existingTx) {
+    const { count } = await supabaseAdmin
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "success");
+    if ((count ?? 0) === 0) {
+      coinsFinal = Math.floor(coinsFinal * 1.2);
+    }
+  }
+
   if (existingTx) {
     const { error: updateErr } = await supabaseAdmin
       .from("transactions")
@@ -37,7 +49,7 @@ export async function creditCoinPurchase(supabaseAdmin, {
       gateway,
       amount,
       status: "success",
-      coins_added: coinsToAdd,
+      coins_added: coinsFinal,
       email: email ?? null,
     });
 
@@ -46,7 +58,7 @@ export async function creditCoinPurchase(supabaseAdmin, {
 
   const { data: newBalance, error: coinsErr } = await supabaseAdmin.rpc("add_user_coins", {
     p_user_id: userId,
-    p_amount: parseInt(coinsToAdd, 10),
+    p_amount: coinsFinal,
   });
 
   if (coinsErr) throw coinsErr;

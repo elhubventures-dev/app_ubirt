@@ -13,6 +13,7 @@ import { getProfileCoverUrl } from "@/lib/profileDefaults";
 import PostManageSheet from "@/components/profile/PostManageSheet";
 import { ACHIEVEMENT_BADGES } from "@/lib/achievementBadges";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
+import ProfileQRSheet from "@/components/profile/ProfileQRSheet";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -32,6 +33,7 @@ export default function Profile() {
   const [selectedUpload, setSelectedUpload] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [showQR, setShowQR] = useState(false);
   const { data: achievements } = useQuery({
     queryKey: ["achievements"],
     queryFn: () => dataProvider.getAchievements(),
@@ -177,6 +179,16 @@ export default function Profile() {
             <Link to="/settings" className={getButtonClasses("secondary", "sm", "rounded-full px-6")}>
               Edit Profile
             </Link>
+            {user?.username ? (
+              <button
+                type="button"
+                onClick={() => setShowQR(true)}
+                className={getButtonClasses("secondary", "sm", "rounded-full px-4")}
+                aria-label="Share profile QR"
+              >
+                <span className="material-symbols-outlined text-[18px]">qr_code_2</span>
+              </button>
+            ) : null}
             <Link to="/create" className={getButtonClasses("primary", "sm", "rounded-full px-6")}>
               Create
             </Link>
@@ -371,6 +383,12 @@ export default function Profile() {
           />
         )}
       </AnimatePresence>
+      <ProfileQRSheet
+        open={showQR}
+        onClose={() => setShowQR(false)}
+        username={user?.username}
+        name={user?.name}
+      />
     </div>
   );
 }

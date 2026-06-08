@@ -217,10 +217,21 @@ export function AuthProvider({ children }) {
       if (!data.session?.user) {
         throw new Error("Sign in failed. Please try again.");
       }
+
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal?.nextLevel === "aal2" && aal?.currentLevel !== "aal2") {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const verified = factors?.totp?.find((f) => f.status === "verified");
+        if (verified?.id) {
+          return { mfaRequired: true, factorId: verified.id };
+        }
+      }
+
       setUserFromSession(data.session, setUser, setAuthError);
       finishBootstrap();
       navigate("/", { replace: true });
       hydrateProfile(data.session.user);
+      return { mfaRequired: false };
     },
     [hydrateProfile, navigate, finishBootstrap]
   );
@@ -350,6 +361,16 @@ export function AuthProvider({ children }) {
     navigate("/login", { replace: true });
   }, [useLiveAuth, navigate]);
 
+  const signOutAllSessions = useCallback(async () => {
+    if (useLiveAuth) {
+      await getSupabase().auth.signOut({ scope: "global" });
+    }
+    resetAnalyticsUser();
+    setUser(null);
+    setAuthError({ type: "auth_required" });
+    navigate("/login", { replace: true });
+  }, [useLiveAuth, navigate]);
+
   const deleteAccount = useCallback(async () => {
     if (!useLiveAuth) {
       setUser(null);
@@ -408,6 +429,7 @@ export function AuthProvider({ children }) {
       changeEmail,
       changePassword,
       signOut,
+      signOutAllSessions,
       deleteAccount,
       updateUserSession,
       isLiveAuth: useLiveAuth,
@@ -428,6 +450,7 @@ export function AuthProvider({ children }) {
       changeEmail,
       changePassword,
       signOut,
+      signOutAllSessions,
       deleteAccount,
       updateUserSession,
       useLiveAuth,
