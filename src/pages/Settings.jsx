@@ -237,6 +237,7 @@ export default function Settings() {
     queryFn: () => dataProvider.getWalletAuditLog(20),
     enabled: isLiveAuth,
   });
+  const [isSaving, setIsSaving] = useState(false);
   const [isSavingEmail, setIsSavingEmail] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
