@@ -2,7 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 import http2 from "http2";
 
-export const PUSH_CHANNEL_ID = "ubirt_default";
+export const PUSH_CHANNEL_ID = "ubirt_alerts";
+export const PUSH_SOUND = "ubirt_notify";
 
 function base64url(input) {
   return Buffer.from(input)
@@ -132,8 +133,7 @@ async function sendFcmV1({ accessToken, projectId, token, title, body, data }) {
           collapse_key: data?.notificationId || data?.type || "ubirt",
           notification: {
             channel_id: PUSH_CHANNEL_ID,
-            sound: "default",
-            default_sound: true,
+            sound: PUSH_SOUND,
             notification_priority: "PRIORITY_HIGH",
             visibility: "PUBLIC",
             tag: data?.notificationId || undefined,
@@ -146,7 +146,7 @@ async function sendFcmV1({ accessToken, projectId, token, title, body, data }) {
           payload: {
             aps: {
               alert: { title, body: body || "" },
-              sound: "default",
+              sound: `${PUSH_SOUND}.wav`,
               badge: 1,
             },
           },
@@ -193,7 +193,7 @@ async function sendApns({ token, title, body, data }) {
   const payload = JSON.stringify({
     aps: {
       alert: { title, body: body || "" },
-      sound: "default",
+      sound: `${PUSH_SOUND}.wav`,
       badge: 1,
       "mutable-content": 1,
     },

@@ -9,17 +9,20 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { playNotificationSound } from "@/lib/notificationSound";
 
-const ANDROID_CHANNEL_ID = "ubirt_default";
+const ANDROID_CHANNEL_ID = "ubirt_alerts";
+const ANDROID_SOUND = "ubirt_notify";
 
 async function ensureAndroidChannel() {
   if (Capacitor.getPlatform() !== "android") return;
+  // Channels are immutable once created; remove legacy channel without sound.
+  await PushNotifications.deleteChannel({ id: "ubirt_default" }).catch(() => {});
   await PushNotifications.createChannel({
     id: ANDROID_CHANNEL_ID,
     name: "UBIRT notifications",
     description: "Likes, comments, messages, and follows",
     importance: 5,
     visibility: 1,
-    sound: "default",
+    sound: ANDROID_SOUND,
     vibration: true,
   }).catch(() => {});
 }

@@ -1,6 +1,8 @@
+import { Capacitor } from "@capacitor/core";
 import { getPreference } from "@/lib/preferences";
 
 let audioContext = null;
+let notifyAudio = null;
 
 function getAudioContext() {
   if (typeof window === "undefined") return null;
@@ -30,21 +32,47 @@ function playTone(ctx, frequency, start, duration, volume = 0.12) {
   oscillator.stop(start + duration);
 }
 
+function playWebAudioTone(variant = "default") {
+  const ctx = getAudioContext();
+  if (!ctx) return false;
+
+  const now = ctx.currentTime;
+  if (variant === "message") {
+    playTone(ctx, 740, now, 0.1, 0.1);
+    playTone(ctx, 988, now + 0.08, 0.14, 0.1);
+    return true;
+  }
+  playTone(ctx, 880, now, 0.11, 0.12);
+  playTone(ctx, 1174.66, now + 0.09, 0.16, 0.1);
+  return true;
+}
+
+function playBundledSound() {
+  if (typeof window === "undefined") return false;
+  if (!notifyAudio) {
+    notifyAudio = new Audio("/sounds/notify.wav");
+    notifyAudio.preload = "auto";
+  }
+  notifyAudio.currentTime = 0;
+  notifyAudio.volume = 1;
+  const playPromise = notifyAudio.play();
+  if (playPromise?.catch) {
+    playPromise.catch(() => playWebAudioTone());
+  }
+  return true;
+}
+
 export function playNotificationSound(variant = "default") {
   if (!getPreference("notificationSound", true)) return;
 
-  const ctx = getAudioContext();
-  if (!ctx) return;
-
   try {
-    const now = ctx.currentTime;
-    if (variant === "message") {
-      playTone(ctx, 740, now, 0.1, 0.1);
-      playTone(ctx, 988, now + 0.08, 0.14, 0.1);
+    if (Capacitor.isNativePlatform()) {
+      playBundledSound();
       return;
     }
-    playTone(ctx, 880, now, 0.11, 0.12);
-    playTone(ctx, 1174.66, now + 0.09, 0.16, 0.1);
+    if (!playWebAudioTone(variant)) {
+      playBundledSound();
+    }
   } catch (error) {
     console.warn("Notification sound failed:", error);
   }
@@ -53,6 +81,9 @@ export function playNotificationSound(variant = "default") {
 if (typeof window !== "undefined") {
   const unlock = () => {
     getAudioContext();
+    if (notifyAudio) {
+      notifyAudio.load();
+    }
   };
   window.addEventListener("pointerdown", unlock, { once: true });
   window.addEventListener("keydown", unlock, { once: true });
