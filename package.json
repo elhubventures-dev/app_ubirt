@@ -11,6 +11,7 @@
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios",
+    "android:clean": "cd android && gradlew clean",
     "preview": "vite preview",
     "test": "vitest run"
   },
@@ -27,6 +28,7 @@
     "@capacitor/push-notifications": "^8.1.1",
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
+    "@daily-co/daily-js": "^0.90.0",
     "@mozartec/capacitor-microphone": "^7.1.0",
     "@mux/mux-player-react": "^3.13.0",
     "@sentry/react": "^10.56.0",

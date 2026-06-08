@@ -58,6 +58,29 @@ npm run cap:android
 
 Rebuild/install the app on your phone. The first mic tap should show the system permission prompt.
 
+## 4) Audio/video calls (Daily.co)
+
+1:1 calls in DMs use [Daily.co](https://www.daily.co/) for WebRTC media. Signaling goes through Supabase Realtime on `call_sessions`.
+
+**Setup:**
+
+1. Create a Daily account → **Developers** → copy **API key**.
+2. Run migration `035_daily_calls.sql` in Supabase.
+3. Set on Vercel (server-only): `DAILY_API_KEY`. Optional: `DAILY_DOMAIN` if you use a custom subdomain.
+4. Redeploy Vercel so `/api/calls/start`, `/api/calls/join`, and `/api/calls/end` are live.
+
+**Usage:** Open a direct message → tap **call** (audio) or **videocam** (video) in the chat header.
+
+**Permissions:** Video calls need camera + microphone. Android already declares `CAMERA` and `RECORD_AUDIO`; iOS has `NSCameraUsageDescription` and `NSMicrophoneUsageDescription`. Users grant permissions on first use.
+
+**Limits:** Daily free tier includes 10,000 participant-minutes/month. Calls are 1:1 only for now; group calls are planned later.
+
+**Troubleshooting:**
+
+- `DAILY_API_KEY is not configured` → add the key on Vercel and redeploy.
+- Callee never rings → confirm migration `035` ran and Realtime is enabled for `call_sessions`.
+- No audio on native → check mic permission in device settings; rebuild after manifest/plist changes.
+
 ## 4) Native camera
 
 Native camera capture is implemented in:

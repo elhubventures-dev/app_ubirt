@@ -10,6 +10,7 @@ import { formatPresenceStatus } from "@/lib/presence";
 import { getChatTheme } from "@/lib/chatThemes";
 import { useToast } from "@/components/ui/use-toast";
 import { dataProvider } from "@/api/dataProvider";
+import { useCall } from "@/context/CallContext";
 
 const QUICK_EMOJIS = ["😀", "😂", "❤️", "🔥", "👍", "🎉", "😮", "🙏", "💯", "✨"];
 
@@ -41,6 +42,7 @@ export default function ChatDetail() {
     updateTyping,
   } = useChatMessages(id);
   const { toast } = useToast();
+  const { placeCall, isBusy: isCallBusy } = useCall();
   const theme = getChatTheme(conversation?.chatTheme);
   const presence = useMemo(
     () => formatPresenceStatus(conversation?.lastSeenAt, peerPresent),
@@ -177,6 +179,16 @@ export default function ChatDetail() {
     }
   };
 
+  const handleStartCall = async (callType) => {
+    try {
+      await placeCall(id, callType);
+    } catch (err) {
+      toast({ title: "Call failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const isDirectChat = conversation?.type === "direct";
+
   return (
     <div className={`flex flex-col h-[100dvh] ${theme.page} text-white overflow-hidden relative`}>
       <header className={`shrink-0 grid grid-cols-[auto_1fr_auto] items-center gap-2 px-2 pt-[calc(env(safe-area-inset-top)+0.25rem)] pb-2 ${theme.header} backdrop-blur-xl border-b border-white/5 z-10 shadow-sm`}>
@@ -206,13 +218,37 @@ export default function ChatDetail() {
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={() => setShowOptions(true)}
-          className="min-w-9 min-h-9 flex items-center justify-center text-slate-400 hover:bg-white/5 rounded-full transition-colors"
-        >
-          <span className="material-symbols-outlined text-[22px]">more_horiz</span>
-        </button>
+        <div className="flex items-center gap-0.5">
+          {isDirectChat ? (
+            <>
+              <button
+                type="button"
+                disabled={isCallBusy}
+                onClick={() => handleStartCall("audio")}
+                className="min-w-9 min-h-9 flex items-center justify-center text-slate-300 hover:bg-white/5 rounded-full transition-colors disabled:opacity-40"
+                aria-label="Audio call"
+              >
+                <span className="material-symbols-outlined text-[22px]">call</span>
+              </button>
+              <button
+                type="button"
+                disabled={isCallBusy}
+                onClick={() => handleStartCall("video")}
+                className="min-w-9 min-h-9 flex items-center justify-center text-slate-300 hover:bg-white/5 rounded-full transition-colors disabled:opacity-40"
+                aria-label="Video call"
+              >
+                <span className="material-symbols-outlined text-[22px]">videocam</span>
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setShowOptions(true)}
+            className="min-w-9 min-h-9 flex items-center justify-center text-slate-400 hover:bg-white/5 rounded-full transition-colors"
+          >
+            <span className="material-symbols-outlined text-[22px]">more_horiz</span>
+          </button>
+        </div>
       </header>
 
       {showSearch && (

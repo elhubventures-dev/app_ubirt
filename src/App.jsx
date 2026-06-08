@@ -48,6 +48,9 @@ import Explore from "./pages/Explore";
 import SoundTrends from "./pages/SoundTrends";
 import AdminModeration from "./pages/AdminModeration";
 import AgeGateGuard from "@/components/safety/AgeGateGuard";
+import LocationFeed from "./pages/LocationFeed";
+import TermsOfService from "./pages/TermsOfService";
+import { CallProvider } from "@/context/CallContext";
 
 const LOGO_URL = "/pwa-192x192.png";
 
@@ -141,6 +144,7 @@ const AuthenticatedApp = () => {
   }
 
   return (
+    <CallProvider>
     <AgeGateGuard>
     <MobileShell>
     <Routes>
@@ -180,6 +184,7 @@ const AuthenticatedApp = () => {
     </Routes>
     </MobileShell>
     </AgeGateGuard>
+    </CallProvider>
   );
 };
 

@@ -8,12 +8,16 @@
       (function () {
         var search = window.location.search || "";
         var hash = window.location.hash || "";
-        var target = "ubirtai.app://login" + search + hash;
-        window.location.replace(target);
+        var hasAuth = search.indexOf("code=") !== -1 || hash.indexOf("access_token=") !== -1;
+        if (!hasAuth) {
+          window.location.replace("/");
+          return;
+        }
+        var deepLink = "ubirtai.app://login" + search + hash;
+        window.location.replace(deepLink);
         setTimeout(function () {
-          document.getElementById("hint").textContent =
-            "If the app did not open, close this tab and try signing in again.";
-        }, 2500);
+          window.location.replace("/" + search + hash);
+        }, 1200);
       })();
     </script>
     <style>

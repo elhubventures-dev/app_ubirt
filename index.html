@@ -11,6 +11,17 @@
         Loading UBIRT...
       </div>
     </div>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var hash = window.location.hash || "";
+        if (!params.has("code") && hash.indexOf("access_token=") === -1) return;
+        var path = window.location.pathname || "/";
+        if (path === "/oauth-return.html") return;
+        var target = "/oauth-return.html" + window.location.search + hash;
+        window.location.replace(target);
+      })();
+    </script>
     <script type="module" src="./src/main.jsx"></script>
   </body>
 </html>
