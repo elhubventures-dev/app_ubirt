@@ -1,7 +1,7 @@
 import Ably from "ably";
-import { applyCors, handleCorsPreflight } from "../lib/cors.js";
-import { authenticateRequest } from "../lib/payment/auth.js";
-import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
+import { applyCors, handleCorsPreflight } from "../cors.js";
+import { authenticateRequest } from "../payment/auth.js";
+import { applyRateLimit, getClientIp } from "../rateLimit.js";
 
 export default async function handler(req, res) {
   if (handleCorsPreflight(req, res)) return;

@@ -35,7 +35,7 @@ export function getSupabase() {
 
 /**
  * Data client used by supabaseApi / neon cutover.
- * Neon mode returns a PostgREST-shaped client over /api/neon/rest.
+ * Neon mode returns a PostgREST-shaped client over /api/platform/neon-rest.
  */
 export function getDataClient() {
   if (getDataBackend() === "neon") {

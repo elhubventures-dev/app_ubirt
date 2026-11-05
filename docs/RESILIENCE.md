@@ -31,7 +31,7 @@ During migration, keep Supabase credentials until Neon + Clerk + Ably are verifi
 ## Phases
 
 1. **Redis + Blob** — live alongside Supabase (reduces rate-limit gaps; alternate media path). **Implemented.**
-2. **Neon schema** — apply `neon/migrations`, dual-run health checks via `/api/platform/health`. **Implemented** (apply SQL in Neon console).
+2. **Neon schema** — apply `neon/migrations`, dual-run health checks via `/api/platform/health`. **Implemented** (apply SQL in Neon console). Platform routes are bundled under `/api/platform/[action]` for Vercel Hobby’s 12-function limit.
 3. **Clerk + Ably** — auth and realtime without Supabase. **Implemented** (enable via env).
 4. **Cutover** — flip env flags per [neon/CUTOVER.md](../neon/CUTOVER.md), then decommission Supabase.
 

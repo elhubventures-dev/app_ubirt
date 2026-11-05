@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { dispatchPushToUser } from "../lib/push/dispatchPush.js";
+import { dispatchPushToUser } from "../push/dispatchPush.js";
 
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;

@@ -6,7 +6,7 @@ async function neonRequest(body) {
   if (!token) {
     return { data: null, error: { message: "Not authenticated" } };
   }
-  const res = await fetch(getApiUrl("/api/neon/rest"), {
+  const res = await fetch(getApiUrl("/api/platform/neon-rest"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -190,7 +190,7 @@ export function createNeonDataClient() {
       async getUser() {
         const token = await getAccessToken();
         if (!token) return { data: { user: null }, error: null };
-        const res = await fetch(getApiUrl("/api/me"), {
+        const res = await fetch(getApiUrl("/api/platform/me"), {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json().catch(() => ({}));

@@ -30,7 +30,7 @@ async function uploadViaBlob(file, { kind, chatId } = {}) {
   if (!token) throw new Error("Not authenticated.");
 
   const dataBase64 = await fileToBase64(file);
-  const res = await fetch(getApiUrl("/api/blob/upload"), {
+  const res = await fetch(getApiUrl("/api/platform/blob-upload"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

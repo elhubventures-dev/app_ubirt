@@ -1,6 +1,6 @@
 import { getNeonSql } from "./neon.js";
 
-/** Tables the SPA may touch via /api/neon/rest (expand as needed). */
+/** Tables the SPA may touch via /api/platform/neon-rest (expand as needed). */
 export const ALLOWED_TABLES = new Set([
   "profiles",
   "posts",

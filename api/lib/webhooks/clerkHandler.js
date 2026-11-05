@@ -1,6 +1,6 @@
 import { Webhook } from "svix";
-import { syncClerkUserToNeon, isClerkConfigured } from "../lib/clerkAuth.js";
-import { isNeonConfigured } from "../lib/neon.js";
+import { syncClerkUserToNeon, isClerkConfigured } from "../clerkAuth.js";
+import { isNeonConfigured } from "../neon.js";
 
 export const config = {
   api: {

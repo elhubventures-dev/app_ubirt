@@ -1,8 +1,8 @@
-import { applyCors, handleCorsPreflight } from "../lib/cors.js";
-import { authenticateRequest } from "../lib/payment/auth.js";
-import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
-import { isNeonConfigured } from "../lib/neon.js";
-import { runNeonRest, runNeonRpc } from "../lib/neonRest.js";
+import { applyCors, handleCorsPreflight } from "../cors.js";
+import { authenticateRequest } from "../payment/auth.js";
+import { applyRateLimit, getClientIp } from "../rateLimit.js";
+import { isNeonConfigured } from "../neon.js";
+import { runNeonRest, runNeonRpc } from "../neonRest.js";
 
 export default async function handler(req, res) {
   if (handleCorsPreflight(req, res)) return;

@@ -52,7 +52,7 @@ export function ClerkAuthBridge({ children }) {
       let profile = null;
       if (token) {
         try {
-          const res = await fetch(getApiUrl("/api/me"), {
+          const res = await fetch(getApiUrl("/api/platform/me"), {
             headers: { Authorization: `Bearer ${token}` },
           });
           const json = await res.json();

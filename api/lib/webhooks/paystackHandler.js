@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
-import { creditCoinPurchase } from "../lib/payment/creditPurchase.js";
+import { creditCoinPurchase } from "../payment/creditPurchase.js";
 
 /**
  * Vercel serverless: Paystack Webhook Listener

@@ -1,7 +1,7 @@
-import { applyCors, handleCorsPreflight } from "../lib/cors.js";
-import { isNeonConfigured, pingNeon, getNeonSql } from "../lib/neon.js";
-import { isRedisConfigured, getRedis } from "../lib/redis.js";
-import { isBlobConfigured } from "../lib/blob.js";
+import { applyCors, handleCorsPreflight } from "../cors.js";
+import { isNeonConfigured, pingNeon, getNeonSql } from "../neon.js";
+import { isRedisConfigured, getRedis } from "../redis.js";
+import { isBlobConfigured } from "../blob.js";
 
 const COUNT_TABLES = ["profiles", "posts", "messages", "conversations"];
 

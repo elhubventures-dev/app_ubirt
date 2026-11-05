@@ -1,7 +1,7 @@
-import { applyCors, handleCorsPreflight } from "../lib/cors.js";
-import { authenticateRequest } from "../lib/payment/auth.js";
-import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
-import { isBlobConfigured, putBlob } from "../lib/blob.js";
+import { applyCors, handleCorsPreflight } from "../cors.js";
+import { authenticateRequest } from "../payment/auth.js";
+import { applyRateLimit, getClientIp } from "../rateLimit.js";
+import { isBlobConfigured, putBlob } from "../blob.js";
 
 const ALLOWED_PREFIXES = new Set(["uploads", "avatars", "covers", "voice"]);
 

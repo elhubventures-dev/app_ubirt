@@ -36,7 +36,7 @@ Also set `VITE_APP_URL` (local or production URL) and optionally `SUPABASE_SERVI
 | Step | What | Accounts |
 |------|------|----------|
 | 1 | Auth + database | Supabase (default) → **Neon + Clerk** cutover |
-| 2 | Live API | Supabase / Neon REST (`/api/neon/rest`) |
+| 2 | Live API | Supabase / Neon REST (`/api/platform/neon-rest`) |
 | 3 | Deploy | Vercel + GitHub |
 | 4 | File storage | Supabase Storage or **Vercel Blob** |
 | 5 | AI chat | OpenAI |

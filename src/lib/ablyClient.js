@@ -23,7 +23,7 @@ export async function getAblyClient() {
               callback(new Error("Not authenticated"), null);
               return;
             }
-            const res = await fetch(getApiUrl("/api/ably/token"), {
+            const res = await fetch(getApiUrl("/api/platform/ably-token"), {
               headers: { Authorization: `Bearer ${access}` },
             });
             const body = await res.json();

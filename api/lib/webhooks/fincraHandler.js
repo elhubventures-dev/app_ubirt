@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
-import { creditCoinPurchase } from "../lib/payment/creditPurchase.js";
+import { creditCoinPurchase } from "../payment/creditPurchase.js";
 
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.VITE_SUPABASE_URL;

@@ -81,7 +81,7 @@ async function notifyUser(recipientId, type, text, options = {}) {
           data: { session },
         } = await getDataClient().auth.getSession();
         if (session?.access_token) {
-          await fetch(getApiUrl("/api/realtime/publish"), {
+          await fetch(getApiUrl("/api/platform/realtime-publish"), {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -2264,7 +2264,7 @@ export const supabaseApi = {
     if (error) throw new Error(error.message || "Failed to save upload");
     if (!data?.id) {
       throw new Error(
-        "Upload saved without an id. Check Neon API (/api/neon/rest) is reachable on this origin."
+        "Upload saved without an id. Check Neon API (/api/platform/neon-rest) is reachable on this origin."
       );
     }
     return { id: data.id, ...payload, media_url: mediaUrl };
