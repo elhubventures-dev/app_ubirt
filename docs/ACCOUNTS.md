@@ -15,7 +15,7 @@ Use this list so nothing is missed. Match each row to a variable in `.env.local`
 | **Neon** | [console.neon.tech](https://console.neon.tech) | `DATABASE_URL` | Primary Postgres after cutover |
 | **Upstash Redis** | [upstash.com](https://upstash.com) | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Shared API rate limits |
 | **Vercel Blob** | Vercel → Storage → Blob | `BLOB_READ_WRITE_TOKEN`, `BLOB_STORE_ID` | Media uploads |
-| **Clerk** | [clerk.com](https://clerk.com) | `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET` | Auth replacing Supabase Auth |
+| **Clerk** | [clerk.com](https://clerk.com) | `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET` | Auth replacing Supabase Auth. Webhook: `POST /api/webhooks/clerk` (`user.created`, `user.updated`). Local backfill: `node scripts/sync-clerk-users-to-neon.mjs` |
 | **Ably** | [ably.com](https://ably.com) | `ABLY_API_KEY`, `VITE_ABLY_KEY` | Realtime replacing Supabase Realtime |
 
 Cutover flags: `VITE_DATA_BACKEND=neon`, `VITE_AUTH_PROVIDER=clerk`, `VITE_REALTIME_PROVIDER=ably`, `VITE_STORAGE_PROVIDER=blob`.

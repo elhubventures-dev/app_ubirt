@@ -13,13 +13,23 @@ export default function NewConversationSheet({ onClose, onSelectUser, isStarting
     return () => clearTimeout(timer);
   }, [term]);
 
-  const { data: suggested = [], isLoading: isLoadingSuggested } = useQuery({
+  const {
+    data: suggested = [],
+    isLoading: isLoadingSuggested,
+    isError: isSuggestedError,
+    error: suggestedError,
+  } = useQuery({
     queryKey: ["suggested-creators"],
     queryFn: () => dataProvider.getSuggestedCreators(),
     enabled: !debouncedTerm,
   });
 
-  const { data: searchResults, isLoading: isSearching } = useQuery({
+  const {
+    data: searchResults,
+    isLoading: isSearching,
+    isError: isSearchError,
+    error: searchError,
+  } = useQuery({
     queryKey: ["new-chat-search", debouncedTerm],
     queryFn: () => dataProvider.search(debouncedTerm),
     enabled: debouncedTerm.length > 0,
@@ -27,6 +37,13 @@ export default function NewConversationSheet({ onClose, onSelectUser, isStarting
 
   const users = debouncedTerm ? (searchResults?.users ?? []) : suggested;
   const isLoading = debouncedTerm ? isSearching : isLoadingSuggested;
+  const loadError = debouncedTerm
+    ? isSearchError
+      ? searchError
+      : null
+    : isSuggestedError
+      ? suggestedError
+      : null;
 
   const content = (
     <>
@@ -75,6 +92,10 @@ export default function NewConversationSheet({ onClose, onSelectUser, isStarting
 
           {isLoading ? (
             <p className="text-center text-slate-400 py-8 text-sm">Loading...</p>
+          ) : loadError ? (
+            <p className="text-center text-red-400 py-8 text-sm px-4">
+              {loadError.message || "Could not load users. Try again."}
+            </p>
           ) : users.length === 0 ? (
             <p className="text-center text-slate-400 py-8 text-sm">No users found.</p>
           ) : (

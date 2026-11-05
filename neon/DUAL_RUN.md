@@ -59,4 +59,8 @@ Expect `neon.ok: true` and table counts when `DUAL_RUN_VALIDATE=true`.
 1. Configure Clerk + Ably + Blob.
 2. Set `VITE_DATA_BACKEND=neon`, `VITE_AUTH_PROVIDER=clerk`, `VITE_REALTIME_PROVIDER=ably`, `VITE_STORAGE_PROVIDER=blob`.
 3. Sync users via Clerk webhook → `app_users` / `profiles`.
+   - Clerk Dashboard → Webhooks → `https://<your-api-host>/api/webhooks/clerk` for `user.created` and `user.updated`.
+   - Set `CLERK_WEBHOOK_SECRET` on that same host (must match the Clerk instance: Dev keys ↔ Dev webhook).
+   - Localhost cannot receive Clerk webhooks; backfill with `node scripts/sync-clerk-users-to-neon.mjs` and verify with `node scripts/check-neon-users.mjs`.
+   - Lazy auth sync only upserts the **signed-in** user — other Clerk users stay invisible until webhook or backfill.
 4. Decommission Supabase after freeze window.

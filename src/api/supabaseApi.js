@@ -11,7 +11,8 @@ import { extractMentionUsernames, resolveMentionUserIds } from "@/lib/mentions";
 import { isVerifiedCreator } from "@/lib/verifiedBadge";
 import { SOUND_LIBRARY } from "@/lib/soundLibrary";
 import { assertCleanText } from "@/lib/profanityFilter";
-import { getRealtimeProvider } from "@/lib/platformConfig";
+import { getDataBackend, getRealtimeProvider } from "@/lib/platformConfig";
+import { getAccessToken } from "@/lib/authToken";
 import { subscribeAblyChat } from "@/lib/ablyClient";
 
 async function getUserId() {
@@ -1012,15 +1013,33 @@ export const supabaseApi = {
 
     if (options.since) postsQuery = postsQuery.gte("created_at", options.since);
 
-    const [{ data: postsRaw }, { data: usersRaw }] = await Promise.all([
-      postsQuery,
-      supabase
-        .from("profiles")
-        .select("id, username, display_name, avatar_url")
-        .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
-        .neq("id", userId)
-        .limit(10),
-    ]);
+    // Phrase + underscore + per-token matches so "Daniel Tover" hits display_name or daniel_tover
+    const tokens = q.split(/\s+/).filter(Boolean).slice(0, 5);
+    const underscorePhrase = q.replace(/\s+/g, "_");
+    let usersQuery = supabase
+      .from("profiles")
+      .select("id, username, display_name, avatar_url")
+      .or(
+        `username.ilike.%${q}%,display_name.ilike.%${q}%,username.ilike.%${underscorePhrase}%`
+      )
+      .neq("id", userId)
+      .limit(10);
+
+    // Multi-word: each token must match username or display_name (AND of OR-groups)
+    if (tokens.length > 1) {
+      for (const token of tokens) {
+        const u = token.replace(/\s+/g, "_");
+        usersQuery = usersQuery.or(
+          `username.ilike.%${token}%,display_name.ilike.%${token}%,username.ilike.%${u}%`
+        );
+      }
+    }
+
+    const [{ data: postsRaw, error: postsError }, { data: usersRaw, error: usersError }] =
+      await Promise.all([postsQuery, usersQuery]);
+
+    if (usersError) throw new Error(usersError.message || "User search failed");
+    if (postsError) throw new Error(postsError.message || "Post search failed");
 
     const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", userId);
     const likedSet = new Set((likes ?? []).map((l) => l.post_id));
@@ -1042,16 +1061,18 @@ export const supabaseApi = {
   async getSuggestedCreators(limit = 4) {
     const userId = await getUserId();
     const supabase = getDataClient();
-    const { data: following } = await supabase
+    const { data: following, error: followingError } = await supabase
       .from("follows")
       .select("following_id")
       .eq("follower_id", userId);
+    if (followingError) throw new Error(followingError.message || "Failed to load follows");
     const exclude = new Set([userId, ...(following ?? []).map((f) => f.following_id)]);
 
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
       .select("id, username, display_name, avatar_url")
       .limit(40);
+    if (profilesError) throw new Error(profilesError.message || "Failed to load creators");
 
     const candidates = (profiles ?? []).filter((p) => !exclude.has(p.id)).slice(0, 20);
     const withCounts = await Promise.all(
@@ -1469,6 +1490,25 @@ export const supabaseApi = {
       throw new Error("You cannot message yourself.");
     }
     const supabase = getDataClient();
+
+    // Neon: RPC needs auth.uid() (unset over REST) — use Clerk-aware API instead.
+    if (getDataBackend() === "neon") {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch(getApiUrl("/api/conversations/start"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetUserId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to start conversation");
+      }
+      return json;
+    }
 
     const { data: convId, error: rpcError } = await supabase.rpc("create_direct_conversation", {
       p_other_user_id: targetUserId,

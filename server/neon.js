@@ -41,6 +41,6 @@ export async function countPublicTable(table) {
   if (!safe) throw new Error("Invalid table name");
   const client = getNeonSql();
   // Table identifier cannot be parameterized; whitelisted via sanitize above.
-  const rows = await client(`select count(*)::int as count from public.${safe}`);
+  const rows = await client.query(`select count(*)::int as count from public.${safe}`);
   return rows?.[0]?.count ?? 0;
 }

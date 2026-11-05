@@ -132,9 +132,9 @@ export async function syncClerkUserToNeon({
   const userId = users[0].id;
 
   // Avoid unique username collisions across Clerk users
-  let username = safeUsername;
+  let resolvedUsername = safeUsername;
   for (let i = 0; i < 5; i += 1) {
-    const candidate = i === 0 ? username : `${safeUsername}_${i + 1}`;
+    const candidate = i === 0 ? resolvedUsername : `${safeUsername}_${i + 1}`;
     try {
       await sql`
         insert into public.profiles (id, username, display_name, avatar_url)
@@ -148,7 +148,7 @@ export async function syncClerkUserToNeon({
           display_name = coalesce(excluded.display_name, public.profiles.display_name),
           avatar_url = coalesce(excluded.avatar_url, public.profiles.avatar_url)
       `;
-      username = candidate;
+      resolvedUsername = candidate;
       break;
     } catch (error) {
       const msg = String(error?.message || error);
@@ -156,5 +156,5 @@ export async function syncClerkUserToNeon({
     }
   }
 
-  return { id: userId, email: users[0].email };
+  return { id: userId, email: users[0].email, username: resolvedUsername };
 }

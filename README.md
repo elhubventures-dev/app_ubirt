@@ -91,20 +91,21 @@ Copy **all** keys from `.env.example` into Vercel → Project → Settings → E
 
 4. Deploy. SPA routing is configured in `vercel.json`.
 
-**Local API routes (AI, Mux, payment webhooks):** use Vercel’s dev server so `/api/*` works:
+**Local API routes (platform/blob, Neon REST, AI, Mux, payment webhooks):** run both processes:
 
 ```bash
-npm run dev:api
+npm run dev        # Vite on :3030 (proxies /api → :3040)
+npm run dev:api    # Local Node API on :3040
 ```
 
-This runs `vercel dev`, which serves the Vite app **and** serverless routes under `api/`. Plain `npm run dev` only starts Vite — AI chat, video ingest, and payment webhooks will **not** work locally without `dev:api`.
+`npm run dev` alone cannot serve `/api/*`. `npm run dev:vercel` still runs `vercel dev` for production-parity checks.
 
-Ensure `.env.local` includes server keys (`OPENAI_API_KEY`, `MUX_*`, `FINCRA_*` or `PAYSTACK_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) when testing those routes.
+Ensure `.env.local` includes server keys (`BLOB_READ_WRITE_TOKEN`, `OPENAI_API_KEY`, `MUX_*`, `FINCRA_*` or `PAYSTACK_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) when testing those routes.
 
 ## 4. Storage
 
-- Buckets `uploads` and `avatars` are created by the migration.
-- Upload page accepts **JPG/PNG images** in live mode → Supabase Storage (Mux video ingest is optional via API).
+- With `VITE_STORAGE_PROVIDER=blob`, JPG/PNG uploads go through `/api/platform/blob-upload` → Vercel Blob.
+- Legacy Supabase Storage buckets remain available when storage provider is `supabase`. Mux video ingest is optional via API.
 
 ## 5. AI proxy
 

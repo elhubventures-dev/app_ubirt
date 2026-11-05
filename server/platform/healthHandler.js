@@ -28,7 +28,7 @@ async function neonCounts() {
   const counts = {};
   for (const table of COUNT_TABLES) {
     try {
-      const rows = await sql(`select count(*)::int as count from public.${table}`);
+      const rows = await sql.query(`select count(*)::int as count from public.${table}`);
       counts[table] = rows?.[0]?.count ?? null;
     } catch {
       counts[table] = null;

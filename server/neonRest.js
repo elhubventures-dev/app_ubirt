@@ -153,8 +153,8 @@ export async function runNeonRest(payload) {
       .filter(Boolean)
       .map((c) => {
         if (c === "*") return "*";
-        // allow alias profiles!inner(id) style lightly by stripping — fallback *
-        if (c.includes("(") || c.includes("!") || c.includes(".")) return null;
+        // PostgREST embeds / aliases unsupported — skip fragments from nested selects
+        if (c.includes("(") || c.includes("!") || c.includes(".") || c.includes(")")) return null;
         return assertIdent(c, "select column");
       })
       .filter(Boolean)
@@ -168,7 +168,7 @@ export async function runNeonRest(payload) {
     if (payload.limit) {
       q += ` limit ${Math.min(Number(payload.limit) || 50, 500)}`;
     }
-    const rows = await sql(q, values);
+    const rows = await sql.query(q, values);
     if (payload.single) {
       return {
         data: rows?.[0] ?? null,
@@ -207,7 +207,7 @@ export async function runNeonRest(payload) {
       q += ` on conflict (${conflict}) do update set ${updates}`;
     }
     q += " returning *";
-    const rows = await sql(q, insertValues);
+    const rows = await sql.query(q, insertValues);
     if (payload.single) return { data: rows?.[0] ?? null, error: null };
     return { data: rows ?? [], error: null };
   }
@@ -223,7 +223,7 @@ export async function runNeonRest(payload) {
     });
     const whereSql2 = buildWhere(filters, updateValues);
     const q = `update public.${table} set ${setParts.join(", ")}${whereSql2} returning *`;
-    const rows = await sql(q, updateValues);
+    const rows = await sql.query(q, updateValues);
     if (payload.single) return { data: rows?.[0] ?? null, error: null };
     return { data: rows ?? [], error: null };
   }
@@ -231,7 +231,7 @@ export async function runNeonRest(payload) {
   if (action === "delete") {
     if (!filters.length) throw new Error("delete requires filters");
     const q = `delete from public.${table}${whereSql} returning *`;
-    const rows = await sql(q, values);
+    const rows = await sql.query(q, values);
     return { data: rows ?? [], error: null };
   }
 
@@ -257,6 +257,6 @@ export async function runNeonRpc(name, args = {}) {
   const q = keys.length
     ? `select * from public.${fn}(${argList})`
     : `select * from public.${fn}()`;
-  const rows = await sql(q, values);
+  const rows = await sql.query(q, values);
   return { data: rows?.[0] ?? rows, error: null };
 }

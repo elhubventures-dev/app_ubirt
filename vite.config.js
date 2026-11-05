@@ -43,5 +43,13 @@ export default defineConfig({
   ],
   server: {
     port: 3030,
+    // vercel CLI currently hands the whole port to Vite and never invokes api/*
+    // Local serverless handlers run via `npm run dev:api` on 3040.
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:3040',
+        changeOrigin: true,
+      },
+    },
   }
 });

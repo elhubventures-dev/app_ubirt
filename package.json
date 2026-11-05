@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:api": "vercel dev",
+    "dev:api": "node scripts/dev-api.mjs",
+    "dev:vercel": "vercel dev",
     "build": "vite build",
     "build:mobile": "vite build && npx cap sync",
     "cap:sync": "npx cap sync",

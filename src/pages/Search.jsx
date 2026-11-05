@@ -36,7 +36,12 @@ export default function Search() {
     };
   }, [dateFilter, sortBy]);
 
-  const { data: searchResults, isLoading: isSearching } = useQuery({
+  const {
+    data: searchResults,
+    isLoading: isSearching,
+    isError: isSearchError,
+    error: searchError,
+  } = useQuery({
     queryKey: ["search", debouncedTerm, searchOptions],
     queryFn: () => dataProvider.search(debouncedTerm, searchOptions),
     enabled: debouncedTerm.length > 0,
@@ -252,6 +257,13 @@ export default function Search() {
             <div className="space-y-3">
               {isSearching ? (
                 <p className="text-center text-slate-400 py-10">Searching...</p>
+              ) : isSearchError ? (
+                <div className="text-center py-10 px-4">
+                  <span className="material-symbols-outlined text-[48px] text-red-400/80">error</span>
+                  <p className="text-red-400 mt-2 text-sm">
+                    {searchError?.message || "Search failed. Try again."}
+                  </p>
+                </div>
               ) : (
                 <AnimatePresence mode="popLayout">
                   {activeResults.length === 0 ? (

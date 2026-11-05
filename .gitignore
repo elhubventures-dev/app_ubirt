@@ -11,3 +11,5 @@ dist/
 firebase-service-account.json
 *-firebase-adminsdk-*.json
 android/app/google-services.json
+.vercel
+.env*
