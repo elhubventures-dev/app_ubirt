@@ -1,6 +1,6 @@
-import { handleStartCall } from "../lib/calls/startHandler.js";
-import { handleJoinCall } from "../lib/calls/joinHandler.js";
-import { handleEndCall } from "../lib/calls/endHandler.js";
+import { handleStartCall } from "../../server/calls/startHandler.js";
+import { handleJoinCall } from "../../server/calls/joinHandler.js";
+import { handleEndCall } from "../../server/calls/endHandler.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

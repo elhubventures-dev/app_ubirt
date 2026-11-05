@@ -39,14 +39,15 @@ During migration, keep Supabase credentials until Neon + Clerk + Ably are verifi
 
 | Area | Location |
 |------|----------|
-| Redis rate limit | `api/lib/rateLimit.js`, `api/lib/redis.js` |
-| Blob uploads | `api/blob/upload.js`, `src/api/storage.js` |
-| Neon client + REST | `api/lib/neon.js`, `api/neon/rest.js`, `src/lib/neonDataClient.js` |
+| Redis rate limit | `server/rateLimit.js`, `server/redis.js` |
+| Blob uploads | `/api/platform/blob-upload`, `src/api/storage.js` |
+| Neon client + REST | `server/neon.js`, `/api/platform/neon-rest`, `src/lib/neonDataClient.js` |
 | Migrations | `neon/migrations/*`, `npm run neon:port-migrations` |
-| Health / dual-run | `api/platform/health.js` |
-| Clerk auth | `src/lib/PlatformAuthProvider.jsx`, `api/webhooks/clerk.js`, `api/lib/clerkAuth.js` |
-| Ably realtime | `src/lib/ablyClient.js`, `api/ably/token.js`, `api/realtime/publish.js` |
+| Health / dual-run | `/api/platform/health` |
+| Clerk auth | `src/lib/PlatformAuthProvider.jsx`, `/api/webhooks/clerk`, `server/clerkAuth.js` |
+| Ably realtime | `src/lib/ablyClient.js`, `/api/platform/ably-token`, `/api/platform/realtime-publish` |
 | Cutover flags | `src/lib/platformConfig.js`, `.env.example` |
+| Hobby limit | Shared code lives in `server/` (outside `api/`) so Vercel does not count helpers as functions |
 
 ## Why not “stabilize paid Supabase only”
 

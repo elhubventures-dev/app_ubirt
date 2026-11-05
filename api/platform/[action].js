@@ -1,9 +1,9 @@
-import handleMe from "../lib/platform/meHandler.js";
-import handleHealth from "../lib/platform/healthHandler.js";
-import handleNeonRest from "../lib/platform/neonRestHandler.js";
-import handleBlobUpload from "../lib/platform/blobUploadHandler.js";
-import handleAblyToken from "../lib/platform/ablyTokenHandler.js";
-import handleRealtimePublish from "../lib/platform/realtimePublishHandler.js";
+import handleMe from "../../server/platform/meHandler.js";
+import handleHealth from "../../server/platform/healthHandler.js";
+import handleNeonRest from "../../server/platform/neonRestHandler.js";
+import handleBlobUpload from "../../server/platform/blobUploadHandler.js";
+import handleAblyToken from "../../server/platform/ablyTokenHandler.js";
+import handleRealtimePublish from "../../server/platform/realtimePublishHandler.js";
 
 /**
  * Hobby-plan safe router for resilience endpoints (counts as 1 serverless function).

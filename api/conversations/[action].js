@@ -1,6 +1,6 @@
-import { applyCors, handleCorsPreflight } from "../lib/cors.js";
-import { handleGroupConversation } from "../lib/conversations/groupHandler.js";
-import { handleStartConversation } from "../lib/conversations/startHandler.js";
+import { applyCors, handleCorsPreflight } from "../../server/cors.js";
+import { handleGroupConversation } from "../../server/conversations/groupHandler.js";
+import { handleStartConversation } from "../../server/conversations/startHandler.js";
 
 export default async function handler(req, res) {
   if (handleCorsPreflight(req, res)) return;

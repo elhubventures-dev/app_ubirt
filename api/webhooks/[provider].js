@@ -1,7 +1,7 @@
-import handleFincra from "../lib/webhooks/fincraHandler.js";
-import handlePaystack from "../lib/webhooks/paystackHandler.js";
-import handleNotificationPush from "../lib/webhooks/notificationPushHandler.js";
-import handleClerk from "../lib/webhooks/clerkHandler.js";
+import handleFincra from "../../server/webhooks/fincraHandler.js";
+import handlePaystack from "../../server/webhooks/paystackHandler.js";
+import handleNotificationPush from "../../server/webhooks/notificationPushHandler.js";
+import handleClerk from "../../server/webhooks/clerkHandler.js";
 
 /**
  * Hobby-plan safe webhook router (counts as 1 serverless function).

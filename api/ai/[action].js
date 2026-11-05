@@ -1,6 +1,6 @@
-import { handleAiChat } from "../lib/ai/chatHandler.js";
-import { handleAiCaptions } from "../lib/ai/captionsHandler.js";
-import { handleAiModerate } from "../lib/ai/moderateHandler.js";
+import { handleAiChat } from "../../server/ai/chatHandler.js";
+import { handleAiCaptions } from "../../server/ai/captionsHandler.js";
+import { handleAiModerate } from "../../server/ai/moderateHandler.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

@@ -1,12 +1,12 @@
 import crypto from "crypto";
-import { applyCors, handleCorsPreflight } from "../lib/cors.js";
-import { authenticateRequest, getAdminSupabase } from "../lib/payment/auth.js";
-import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
+import { applyCors, handleCorsPreflight } from "../../server/cors.js";
+import { authenticateRequest, getAdminSupabase } from "../../server/payment/auth.js";
+import { applyRateLimit, getClientIp } from "../../server/rateLimit.js";
 import {
   createFincraCheckout,
   formatFincraCustomerName,
   getFincraRedirectBase,
-} from "../lib/payment/fincra.js";
+} from "../../server/payment/fincra.js";
 
 const SUPPORTED_GATEWAYS = new Set(["fincra"]);
 

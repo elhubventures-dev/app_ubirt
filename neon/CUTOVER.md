@@ -32,5 +32,5 @@ Redeploy Vercel. Smoke-test: login, feed, upload avatar, send DM, notifications.
 
 ## Notes
 
-- Nested PostgREST selects (`profiles(*)`) are flattened by the Neon REST shim; expand `api/lib/neonRest.js` / client as you hit gaps.
+- Nested PostgREST selects (`profiles(*)`) are flattened by the Neon REST shim; expand `server/neonRest.js` / client as you hit gaps.
 - RLS is not the trust boundary on Neon — `/api/platform/neon-rest` authenticates via Clerk/Supabase JWT and allowlists tables.

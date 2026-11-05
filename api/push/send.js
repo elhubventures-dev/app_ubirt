@@ -1,5 +1,5 @@
-import { dispatchPushToUser } from "../lib/push/dispatchPush.js";
-import { applyRateLimit, getClientIp } from "../lib/rateLimit.js";
+import { dispatchPushToUser } from "../../server/push/dispatchPush.js";
+import { applyRateLimit, getClientIp } from "../../server/rateLimit.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
