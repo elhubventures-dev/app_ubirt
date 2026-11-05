@@ -8,6 +8,38 @@ import { playNotificationSound } from "@/lib/notificationSound";
 import { getPreference } from "@/lib/preferences";
 import { shouldShowInAppNotification } from "@/lib/notificationPreferences";
 import { dataProvider } from "@/api/dataProvider";
+import { getRealtimeProvider } from "@/lib/platformConfig";
+import { subscribeAblyNotifications } from "@/lib/ablyClient";
+
+function handleNotificationEvent({
+  payload,
+  location,
+  queryClient,
+  toast,
+  notificationPrefs,
+}) {
+  const type = payload?.type;
+  const conversationId = payload?.conversation_id;
+  const inThisChat =
+    type === "message" &&
+    conversationId &&
+    (location.pathname === `/chat/${conversationId}` ||
+      location.pathname === `/group/${conversationId}`);
+
+  queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  if (type === "message") {
+    queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  }
+
+  if (inThisChat) return;
+  if (!shouldShowInAppNotification(notificationPrefs, type)) return;
+
+  playNotificationSound(type === "message" ? "message" : "default");
+  toast({
+    title: type === "message" ? "New message" : "New notification",
+    description: payload?.text || "Someone interacted with you.",
+  });
+}
 
 export function useRealtimeNotifications() {
   const location = useLocation();
@@ -23,8 +55,25 @@ export function useRealtimeNotifications() {
   });
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured()) return undefined;
-    if (!getPreference("push", true)) return undefined;
+    if (!user || !getPreference("push", true)) return undefined;
+
+    if (getRealtimeProvider() === "ably") {
+      let unsub = () => {};
+      subscribeAblyNotifications(user.id, (payload) => {
+        handleNotificationEvent({
+          payload,
+          location,
+          queryClient,
+          toast,
+          notificationPrefs,
+        });
+      }).then((fn) => {
+        unsub = fn;
+      });
+      return () => unsub();
+    }
+
+    if (!isSupabaseConfigured()) return undefined;
 
     const supabase = getSupabase();
     const channel = supabase
@@ -38,26 +87,12 @@ export function useRealtimeNotifications() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          const type = payload.new?.type;
-          const conversationId = payload.new?.conversation_id;
-          const inThisChat =
-            type === "message" &&
-            conversationId &&
-            (location.pathname === `/chat/${conversationId}` ||
-              location.pathname === `/group/${conversationId}`);
-
-          queryClient.invalidateQueries({ queryKey: ["notifications"] });
-          if (type === "message") {
-            queryClient.invalidateQueries({ queryKey: ["conversations"] });
-          }
-
-          if (inThisChat) return;
-          if (!shouldShowInAppNotification(notificationPrefs, type)) return;
-
-          playNotificationSound(type === "message" ? "message" : "default");
-          toast({
-            title: type === "message" ? "New message" : "New notification",
-            description: payload.new.text || "Someone interacted with you.",
+          handleNotificationEvent({
+            payload: payload.new,
+            location,
+            queryClient,
+            toast,
+            notificationPrefs,
           });
         }
       )

@@ -17,7 +17,7 @@ export async function handleStartCall(req, res) {
   }
 
   const ip = getClientIp(req);
-  if (!applyRateLimit(req, res, `call-start:${auth.user.id}:${ip}`, { limit: 15, windowMs: 60_000 })) {
+  if (!(await applyRateLimit(req, res, `call-start:${auth.user.id}:${ip}`, { limit: 15, windowMs: 60_000 }))) {
     return;
   }
 

@@ -4,7 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClientInstance } from "@/lib/query-client";
 import { BrowserRouter as Router, Route, Routes, Navigate } from "react-router-dom";
 import PageNotFound from "./lib/PageNotFound";
-import { AuthProvider, useAuth } from "@/lib/AuthContext";
+import { useAuth } from "@/lib/AuthContext";
+import { PlatformAuthProvider } from "@/lib/PlatformAuthProvider";
 import UserNotRegisteredError from "@/components/UserNotRegisteredError";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import MainLayout from "@/components/layout/MainLayout";
@@ -192,7 +193,7 @@ function App() {
   return (
     <ErrorBoundary>
       <Router>
-        <AuthProvider>
+        <PlatformAuthProvider>
           <NativeBootstrap />
           <PageTracker />
           <ToastProvider>
@@ -207,7 +208,7 @@ function App() {
               <Toaster />
             </QueryClientProvider>
           </ToastProvider>
-        </AuthProvider>
+        </PlatformAuthProvider>
       </Router>
     </ErrorBoundary>
   );

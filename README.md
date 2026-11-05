@@ -35,14 +35,17 @@ Also set `VITE_APP_URL` (local or production URL) and optionally `SUPABASE_SERVI
 
 | Step | What | Accounts |
 |------|------|----------|
-| 1 | Auth + database | Supabase |
-| 2 | Live API | Supabase |
+| 1 | Auth + database | Supabase (default) → **Neon + Clerk** cutover |
+| 2 | Live API | Supabase / Neon REST (`/api/neon/rest`) |
 | 3 | Deploy | Vercel + GitHub |
-| 4 | File storage | Supabase Storage |
+| 4 | File storage | Supabase Storage or **Vercel Blob** |
 | 5 | AI chat | OpenAI |
-| 6 | Realtime chat | Supabase Realtime |
+| 6 | Realtime chat | Supabase Realtime or **Ably** |
 | 7 | Video streaming | Mux (optional) |
+| — | Rate limits | In-memory or **Upstash Redis** |
 | — | Email | Resend (+ Supabase SMTP for auth emails) |
+
+Resilience / multi-store cutover: [docs/RESILIENCE.md](docs/RESILIENCE.md) · [neon/DUAL_RUN.md](neon/DUAL_RUN.md)
 
 ---
 

@@ -6,9 +6,21 @@ Use this list so nothing is missed. Match each row to a variable in `.env.local`
 
 | Service | Sign up | Env variables | Purpose |
 |---------|---------|---------------|---------|
-| **Supabase** | [supabase.com](https://supabase.com) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Auth, database, storage, realtime |
+| **Supabase** | [supabase.com](https://supabase.com) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Auth, database, storage, realtime (default until cutover) |
 
-Run all SQL migrations in order in the Supabase SQL Editor: `001` → `022`. See [Supabase migrations](#supabase-migrations) below.
+### Resilience stack (Neon cutover — see [RESILIENCE.md](./RESILIENCE.md))
+
+| Service | Sign up | Env variables | Purpose |
+|---------|---------|---------------|---------|
+| **Neon** | [console.neon.tech](https://console.neon.tech) | `DATABASE_URL` | Primary Postgres after cutover |
+| **Upstash Redis** | [upstash.com](https://upstash.com) | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Shared API rate limits |
+| **Vercel Blob** | Vercel → Storage → Blob | `BLOB_READ_WRITE_TOKEN`, `BLOB_STORE_ID` | Media uploads |
+| **Clerk** | [clerk.com](https://clerk.com) | `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET` | Auth replacing Supabase Auth |
+| **Ably** | [ably.com](https://ably.com) | `ABLY_API_KEY`, `VITE_ABLY_KEY` | Realtime replacing Supabase Realtime |
+
+Cutover flags: `VITE_DATA_BACKEND=neon`, `VITE_AUTH_PROVIDER=clerk`, `VITE_REALTIME_PROVIDER=ably`, `VITE_STORAGE_PROVIDER=blob`.
+
+Run all SQL migrations in order in the Supabase SQL Editor: `001` → `035`. For Neon, use `neon/migrations` (see [neon/DUAL_RUN.md](../neon/DUAL_RUN.md)).
 
 | **GitHub** | [github.com](https://github.com) | — | Source code |
 | **Vercel** | [vercel.com](https://vercel.com) | (paste all env vars from `.env.local`) | Host SPA + `/api/*` serverless |

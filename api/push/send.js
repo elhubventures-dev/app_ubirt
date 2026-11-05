@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
   const ip = getClientIp(req);
   const userId = req.body?.userId;
-  if (!applyRateLimit(req, res, `push:${userId || ip}`, { limit: 60, windowMs: 60_000 })) {
+  if (!(await applyRateLimit(req, res, `push:${userId || ip}`, { limit: 60, windowMs: 60_000 }))) {
     return;
   }
 

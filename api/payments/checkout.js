@@ -35,7 +35,7 @@ export default async function handler(req, res) {
   }
 
   const ip = getClientIp(req);
-  if (!applyRateLimit(req, res, `checkout:${auth.user.id}:${ip}`, { limit: 10, windowMs: 60_000 })) {
+  if (!(await applyRateLimit(req, res, `checkout:${auth.user.id}:${ip}`, { limit: 10, windowMs: 60_000 }))) {
     return;
   }
 

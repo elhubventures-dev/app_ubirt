@@ -22,8 +22,19 @@ export function getAppBaseUrl() {
   return PRODUCTION_APP_URL;
 }
 
-/** Base URL for serverless API routes. Native apps always hit the deployed backend. */
+/**
+ * Base URL for serverless API routes.
+ * In the browser (local vercel/vite), always use the current origin so Blob/Neon/Ably
+ * hit the same host/port as the page (e.g. localhost:3030), not VITE_APP_URL.
+ * Native apps use the configured production URL.
+ */
 export function getApiBaseUrl() {
+  if (Capacitor.isNativePlatform()) {
+    return getAppBaseUrl();
+  }
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return cleanBaseUrl(window.location.origin);
+  }
   return getAppBaseUrl();
 }
 

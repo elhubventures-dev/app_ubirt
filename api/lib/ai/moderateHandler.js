@@ -2,7 +2,7 @@ import { applyRateLimit, getClientIp } from "../rateLimit.js";
 
 export async function handleAiModerate(req, res) {
   const ip = getClientIp(req);
-  if (!applyRateLimit(req, res, `ai-moderate:${ip}`, { limit: 120, windowMs: 60_000 })) {
+  if (!(await applyRateLimit(req, res, `ai-moderate:${ip}`, { limit: 120, windowMs: 60_000 }))) {
     return;
   }
 

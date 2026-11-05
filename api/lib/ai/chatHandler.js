@@ -8,7 +8,7 @@ export async function handleAiChat(req, res) {
   }
 
   const ip = getClientIp(req);
-  if (!applyRateLimit(req, res, `ai-chat:${auth.user.id}:${ip}`, { limit: 20, windowMs: 60_000 })) {
+  if (!(await applyRateLimit(req, res, `ai-chat:${auth.user.id}:${ip}`, { limit: 20, windowMs: 60_000 }))) {
     return;
   }
 

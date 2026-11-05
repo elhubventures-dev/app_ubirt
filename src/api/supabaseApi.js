@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabaseClient";
+import { getDataClient } from "@/lib/supabaseClient";
 import { uploadAvatar, uploadCover, uploadVoiceFile } from "@/api/storage";
 import { normalizeNotificationPrefs } from "@/lib/notificationPreferences";
 import { getApiUrl } from "@/lib/apiBase";
@@ -11,19 +11,27 @@ import { extractMentionUsernames, resolveMentionUserIds } from "@/lib/mentions";
 import { isVerifiedCreator } from "@/lib/verifiedBadge";
 import { SOUND_LIBRARY } from "@/lib/soundLibrary";
 import { assertCleanText } from "@/lib/profanityFilter";
+import { getRealtimeProvider } from "@/lib/platformConfig";
+import { subscribeAblyChat } from "@/lib/ablyClient";
 
 async function getUserId() {
-  const supabase = getSupabase();
+  const supabase = getDataClient();
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser();
   if (error || !user) throw new Error("Not authenticated");
+  // Neon profiles use UUIDs. A Clerk id (user_…) means /api/me sync has not run yet.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user.id)) {
+    throw new Error(
+      "Your profile is not synced to Neon yet. Use npm run dev:api, then sign out and sign in again."
+    );
+  }
   return user.id;
 }
 
 async function getHiddenMessageIds(userId) {
-  const supabase = getSupabase();
+  const supabase = getDataClient();
   const { data, error } = await supabase
     .from("message_hides")
     .select("message_id")
@@ -39,7 +47,7 @@ function applyHiddenMessageFilter(query, hiddenIds) {
 
 async function notifyUser(recipientId, type, text, options = {}) {
   if (!recipientId) return;
-  const supabase = getSupabase();
+  const supabase = getDataClient();
   const actorId = options.actorId ?? (await getUserId());
   const { data: notificationId, error } = await supabase.rpc("create_notification", {
     p_recipient_id: recipientId,
@@ -66,13 +74,43 @@ async function notifyUser(recipientId, type, text, options = {}) {
       body: text,
       data: Object.keys(pushData).length ? pushData : undefined,
     });
+
+    if (getRealtimeProvider() === "ably") {
+      try {
+        const {
+          data: { session },
+        } = await getDataClient().auth.getSession();
+        if (session?.access_token) {
+          await fetch(getApiUrl("/api/realtime/publish"), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              kind: "notification",
+              userId: recipientId,
+              data: {
+                id: notificationId,
+                type,
+                text,
+                conversation_id: options.conversationId ?? options.chatId ?? null,
+                post_id: options.postId ?? null,
+              },
+            }),
+          });
+        }
+      } catch (err) {
+        console.warn("Ably notification publish skipped:", err?.message || err);
+      }
+    }
   }
 
   return notificationId;
 }
 
 async function getActorDisplayName(userId) {
-  const supabase = getSupabase();
+  const supabase = getDataClient();
   const { data } = await supabase
     .from("profiles")
     .select("display_name, username")
@@ -84,7 +122,7 @@ async function getActorDisplayName(userId) {
 async function notifyMentionedUsers(text, { postId, actorId, skipUserIds = [] }) {
   const usernames = extractMentionUsernames(text);
   if (!usernames.length) return;
-  const supabase = getSupabase();
+  const supabase = getDataClient();
   const actor = actorId ?? (await getUserId());
   const mentioned = await resolveMentionUserIds(supabase, usernames, actor);
   const skip = new Set([actor, ...skipUserIds]);
@@ -195,7 +233,7 @@ async function fetchProfilesForSenders(supabase, senderIds) {
 }
 
 async function callGroupApi(body) {
-  const supabase = getSupabase();
+  const supabase = getDataClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -322,7 +360,7 @@ async function mapPostsWithExtras(supabase, rows, userId, likedSet, bookmarkedSe
 }
 
 async function getOrCreateAiConversation(userId) {
-  const supabase = getSupabase();
+  const supabase = getDataClient();
   const { data: existing } = await supabase
     .from("ai_conversations")
     .select("*")
@@ -345,7 +383,7 @@ async function getOrCreateAiConversation(userId) {
 export const supabaseApi = {
   async getFeed(feedType = "foryou", hashtag = null) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     
     let query = supabase
       .from("posts")
@@ -439,7 +477,7 @@ export const supabaseApi = {
 
   async getFeedPost(postId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("posts")
       .select("*, profiles:user_id (id, username, display_name, avatar_url)")
@@ -456,7 +494,7 @@ export const supabaseApi = {
   },
 
   async toggleFollow(username) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: targetProfile } = await supabase.from("profiles").select("id").eq("username", username).single();
     if (!targetProfile) return false;
     const { data, error } = await supabase.rpc("toggle_follow", { p_following_id: targetProfile.id });
@@ -475,7 +513,7 @@ export const supabaseApi = {
   },
   async isFollowing(username) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: targetProfile } = await supabase.from("profiles").select("id").eq("username", username).single();
     if (!targetProfile) return false;
     const { data } = await supabase.from("follows").select("*").eq("follower_id", userId).eq("following_id", targetProfile.id).maybeSingle();
@@ -483,7 +521,7 @@ export const supabaseApi = {
   },
 
   async getFollowers(username) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     let viewerId = null;
     try {
       viewerId = await getUserId();
@@ -528,7 +566,7 @@ export const supabaseApi = {
   },
 
   async getFollowing(username) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     let viewerId = null;
     try {
       viewerId = await getUserId();
@@ -573,7 +611,7 @@ export const supabaseApi = {
   },
 
   async getPublicProfile(username) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     let viewerId = null;
     try {
       viewerId = await getUserId();
@@ -678,7 +716,7 @@ export const supabaseApi = {
 
   async getOwnProfile() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("profiles")
       .select("id, username, display_name, avatar_url, cover_url, bio, phone, website, location")
@@ -690,7 +728,7 @@ export const supabaseApi = {
 
   async getTransactions() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("transactions")
       .select("*")
@@ -711,7 +749,7 @@ export const supabaseApi = {
 
   async getWalletBalance() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("profiles")
       .select("coins, gift_coins")
@@ -730,7 +768,7 @@ export const supabaseApi = {
       throw new Error("Enter a valid amount to convert.");
     }
 
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.rpc("convert_gift_coins", {
       p_amount: parsedAmount,
     });
@@ -752,7 +790,7 @@ export const supabaseApi = {
   },
 
   async getTrendingTags(limit = 6) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: posts } = await supabase
       .from("posts")
       .select("caption, category")
@@ -782,7 +820,7 @@ export const supabaseApi = {
 
   async toggleLike(postId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: existing, error: readError } = await supabase
       .from("post_likes")
       .select("post_id")
@@ -821,7 +859,7 @@ export const supabaseApi = {
 
   async toggleBookmark(postId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: existing, error: readError } = await supabase
       .from("post_bookmarks")
       .select("post_id")
@@ -848,7 +886,7 @@ export const supabaseApi = {
   },
   async deletePost(postId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     // Only author can delete. Supabase RLS will enforce this if configured.
     const { error } = await supabase.from("posts").delete().eq("id", postId).eq("user_id", userId);
     if (error) throw error;
@@ -856,7 +894,7 @@ export const supabaseApi = {
   },
 
   async sendGift(postId, amount) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const giftAmount = Math.floor(Number(amount) || 0);
     if (giftAmount <= 0) {
       throw new Error("Invalid gift amount.");
@@ -898,7 +936,7 @@ export const supabaseApi = {
 
   async getCreatorAnalytics(days = 28) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const since = new Date();
     since.setDate(since.getDate() - days);
     const prevSince = new Date(since);
@@ -959,7 +997,7 @@ export const supabaseApi = {
     const q = query.trim();
     if (!q) return { users: [], posts: [], tags: [] };
 
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const userId = await getUserId();
 
     let postsQuery = supabase
@@ -1003,7 +1041,7 @@ export const supabaseApi = {
 
   async getSuggestedCreators(limit = 4) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: following } = await supabase
       .from("follows")
       .select("following_id")
@@ -1040,7 +1078,7 @@ export const supabaseApi = {
 
   async getTrendingPosts(limit = 20) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const since = new Date();
     since.setDate(since.getDate() - 7);
 
@@ -1067,7 +1105,7 @@ export const supabaseApi = {
   },
 
   async getExploreFeed() {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const [trendingPosts, trendingTags] = await Promise.all([
       this.getTrendingPosts(12),
       this.getTrendingTags(8),
@@ -1106,7 +1144,7 @@ export const supabaseApi = {
 
   async getPostsBySound(soundId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("posts")
       .select("*, profiles:user_id (username, display_name, avatar_url)")
@@ -1121,7 +1159,7 @@ export const supabaseApi = {
 
   async getPostsByLocation(locationTag) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("posts")
       .select("*, profiles:user_id (username, display_name, avatar_url)")
@@ -1135,7 +1173,7 @@ export const supabaseApi = {
   },
 
   async votePoll(postId, optionId) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.rpc("vote_poll", {
       p_post_id: postId,
       p_option_id: optionId,
@@ -1145,7 +1183,7 @@ export const supabaseApi = {
   },
 
   async getProfileQuestions(profileId) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("profile_questions")
       .select("*, asker:asker_id (username, display_name)")
@@ -1165,7 +1203,7 @@ export const supabaseApi = {
 
   async submitProfileQuestion(profileId, question) {
     await assertCleanText(question, "Question");
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.rpc("submit_profile_question", {
       p_profile_id: profileId,
       p_question: question,
@@ -1176,7 +1214,7 @@ export const supabaseApi = {
 
   async answerProfileQuestion(questionId, answer) {
     await assertCleanText(answer, "Answer");
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase.rpc("answer_profile_question", {
       p_question_id: questionId,
       p_answer: answer,
@@ -1187,7 +1225,7 @@ export const supabaseApi = {
 
   async getComments(postId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("comments")
       .select("*, profiles:user_id (display_name)")
@@ -1206,7 +1244,7 @@ export const supabaseApi = {
   async addComment(postId, text) {
     await assertCleanText(text, "Comment");
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("comments")
       .insert({ post_id: postId, user_id: userId, text })
@@ -1230,7 +1268,7 @@ export const supabaseApi = {
 
   async getConversation(chatId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: conv, error: convError } = await supabase
       .from("conversations")
       .select("id, title, type, invite_code, avatar_url, created_by")
@@ -1315,7 +1353,7 @@ export const supabaseApi = {
 
   async updateLastSeen() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("profiles")
       .update({ last_seen_at: new Date().toISOString() })
@@ -1327,7 +1365,7 @@ export const supabaseApi = {
   async getConversations(options = {}) {
     const { includeArchived = false } = options;
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: memberships, error } = await supabase
       .from("conversation_members")
       .select("conversation_id, last_read_at, archived_at, muted_until, conversations(*)")
@@ -1415,7 +1453,7 @@ export const supabaseApi = {
 
   async markConversationRead(chatId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("conversation_members")
       .update({ last_read_at: new Date().toISOString() })
@@ -1430,7 +1468,7 @@ export const supabaseApi = {
     if (targetUserId === userId) {
       throw new Error("You cannot message yourself.");
     }
-    const supabase = getSupabase();
+    const supabase = getDataClient();
 
     const { data: convId, error: rpcError } = await supabase.rpc("create_direct_conversation", {
       p_other_user_id: targetUserId,
@@ -1474,7 +1512,7 @@ export const supabaseApi = {
   },
 
   async createGroupConversation(title, memberIds = []) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: convId, error: rpcError } = await supabase.rpc("create_group_conversation", {
       p_title: title,
       p_member_ids: memberIds,
@@ -1499,7 +1537,7 @@ export const supabaseApi = {
   },
 
   async joinGroupViaInvite(inviteCode) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: convId, error: rpcError } = await supabase.rpc("join_group_via_invite", {
       p_invite_code: inviteCode,
     });
@@ -1523,7 +1561,7 @@ export const supabaseApi = {
   },
 
   async addGroupMembers(conversationId, memberIds) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error: rpcError } = await supabase.rpc("add_group_members", {
       p_conversation_id: conversationId,
       p_member_ids: memberIds,
@@ -1534,7 +1572,7 @@ export const supabaseApi = {
   },
 
   async updateGroupMemberRole(conversationId, userId, role) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error: rpcError } = await supabase.rpc("update_group_member_role", {
       p_conversation_id: conversationId,
       p_user_id: userId,
@@ -1546,7 +1584,7 @@ export const supabaseApi = {
   },
 
   async removeGroupMember(conversationId, userId) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error: rpcError } = await supabase.rpc("remove_group_member", {
       p_conversation_id: conversationId,
       p_user_id: userId,
@@ -1557,7 +1595,7 @@ export const supabaseApi = {
   },
 
   async regenerateGroupInvite(conversationId) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: inviteCode, error } = await supabase.rpc("regenerate_group_invite", {
       p_conversation_id: conversationId,
     });
@@ -1567,7 +1605,7 @@ export const supabaseApi = {
 
   async getMessages(chatId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const hiddenIds = await getHiddenMessageIds(userId);
     let query = supabase
       .from("messages")
@@ -1589,7 +1627,7 @@ export const supabaseApi = {
     const q = query?.trim();
     if (!q || q.length < 2) return [];
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const hiddenIds = await getHiddenMessageIds(userId);
     let dbQuery = supabase
       .from("messages")
@@ -1616,7 +1654,29 @@ export const supabaseApi = {
   subscribeToMessages(chatId, handlers) {
     const onInsert = typeof handlers === "function" ? handlers : handlers?.onInsert;
     const onDelete = typeof handlers === "function" ? undefined : handlers?.onDelete;
-    const supabase = getSupabase();
+
+    if (getRealtimeProvider() === "ably") {
+      let unsub = () => {};
+      subscribeAblyChat(chatId, {
+        onMessage: async (m) => {
+          if (!onInsert || !m) return;
+          const supabase = getDataClient();
+          const userId = await getUserId();
+          const profileMap = await fetchProfilesForSenders(supabase, [m.sender_id]);
+          const [enriched] = await enrichMessageRows(supabase, [m], userId, profileMap);
+          onInsert(enriched);
+        },
+        onDelete: (payload) => {
+          const id = payload?.id || payload;
+          if (id && onDelete) onDelete(id);
+        },
+      }).then((fn) => {
+        unsub = fn;
+      });
+      return () => unsub();
+    }
+
+    const supabase = getDataClient();
     const userIdPromise = getUserId();
     const channel = supabase.channel(`messages:${chatId}`);
 
@@ -1664,7 +1724,7 @@ export const supabaseApi = {
 
   async deleteMessage(messageId, scope = "me") {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
 
     if (scope === "everyone") {
       const { error } = await supabase
@@ -1685,7 +1745,15 @@ export const supabaseApi = {
   },
 
   subscribeToPresence(chatId, onPresenceChange) {
-    const supabase = getSupabase();
+    if (getRealtimeProvider() === "ably") {
+      let unsub = () => {};
+      subscribeAblyChat(chatId, { onPresence: onPresenceChange }).then((fn) => {
+        unsub = fn;
+      });
+      return () => unsub();
+    }
+
+    const supabase = getDataClient();
     let disposed = false;
     let channel = null;
 
@@ -1722,7 +1790,11 @@ export const supabaseApi = {
   },
 
   async updateTypingStatus(chatId, isTyping) {
-    const supabase = getSupabase();
+    if (getRealtimeProvider() === "ably") {
+      // Presence enter/leave is handled by subscribeAblyChat; typing can publish later.
+      return;
+    }
+    const supabase = getDataClient();
     const channel = supabase.channel(`presence:${chatId}`);
     const userId = await getUserId();
     if (isTyping) {
@@ -1733,7 +1805,14 @@ export const supabaseApi = {
   },
 
   subscribeToReadReceipts(chatId, onUpdate) {
-    const supabase = getSupabase();
+    if (getRealtimeProvider() === "ably") {
+      let unsub = () => {};
+      subscribeAblyChat(chatId, { onReceipt: () => onUpdate?.() }).then((fn) => {
+        unsub = fn;
+      });
+      return () => unsub();
+    }
+    const supabase = getDataClient();
     const channel = supabase
       .channel(`read-receipts:${chatId}`)
       .on(
@@ -1751,7 +1830,14 @@ export const supabaseApi = {
   },
 
   subscribeToMessageReactions(chatId, onChange) {
-    const supabase = getSupabase();
+    if (getRealtimeProvider() === "ably") {
+      let unsub = () => {};
+      subscribeAblyChat(chatId, { onReaction: () => onChange?.() }).then((fn) => {
+        unsub = fn;
+      });
+      return () => unsub();
+    }
+    const supabase = getDataClient();
     const channel = supabase
       .channel(`reactions:${chatId}`)
       .on(
@@ -1765,7 +1851,7 @@ export const supabaseApi = {
 
   async toggleMessageReaction(messageId, emoji) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: existing } = await supabase
       .from("message_reactions")
       .select("emoji")
@@ -1793,7 +1879,7 @@ export const supabaseApi = {
 
   async setConversationMuted(chatId, hours) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const mutedUntil =
       hours > 0 ? new Date(Date.now() + hours * 60 * 60 * 1000).toISOString() : null;
     const { error } = await supabase
@@ -1807,7 +1893,7 @@ export const supabaseApi = {
 
   async setConversationArchived(chatId, archived = true) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("conversation_members")
       .update({ archived_at: archived ? new Date().toISOString() : null })
@@ -1819,7 +1905,7 @@ export const supabaseApi = {
 
   async updateChatTheme(chatId, theme) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("conversation_members")
       .update({ chat_theme: theme })
@@ -1831,7 +1917,7 @@ export const supabaseApi = {
 
   async updateShowReadReceipts(show) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("profiles")
       .update({ show_read_receipts: show })
@@ -1842,7 +1928,7 @@ export const supabaseApi = {
 
   async getShowReadReceipts() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("profiles")
       .select("show_read_receipts")
@@ -1854,7 +1940,7 @@ export const supabaseApi = {
 
   async sendMessage(chatId, text, attachment, options = {}) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { replyToId, sharedPostId } = options;
     let content = text?.trim() ?? "";
     let mediaUrl = null;
@@ -1947,7 +2033,7 @@ export const supabaseApi = {
   async getAiMessages() {
     const userId = await getUserId();
     const conv = await getOrCreateAiConversation(userId);
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("ai_messages")
       .select("*")
@@ -1966,7 +2052,7 @@ export const supabaseApi = {
   async renameAiConversation(title) {
     const userId = await getUserId();
     const conv = await getOrCreateAiConversation(userId);
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("ai_conversations")
       .update({ title })
@@ -1979,7 +2065,7 @@ export const supabaseApi = {
 
   async deleteComment(postId, commentId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("comments")
       .delete()
@@ -2008,7 +2094,7 @@ export const supabaseApi = {
   },
 
   async deleteAiMessage(messageId) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase.from("ai_messages").delete().eq("id", messageId);
     if (error) throw error;
     return true;
@@ -2016,7 +2102,7 @@ export const supabaseApi = {
 
   async updateDeviceToken(token, meta = {}) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const platform = meta.platform ?? "unknown";
     const provider = meta.provider ?? (platform === "ios" ? "apns" : "fcm");
 
@@ -2044,7 +2130,7 @@ export const supabaseApi = {
   async clearAiConversation() {
     const userId = await getUserId();
     const conv = await getOrCreateAiConversation(userId);
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     await supabase.from("ai_messages").delete().eq("conversation_id", conv.id);
     const { data } = await supabase
       .from("ai_messages")
@@ -2060,7 +2146,7 @@ export const supabaseApi = {
   async askAi(prompt) {
     const userId = await getUserId();
     const conv = await getOrCreateAiConversation(userId);
-    const supabase = getSupabase();
+    const supabase = getDataClient();
 
     const { data: userMsg, error: userErr } = await supabase
       .from("ai_messages")
@@ -2112,7 +2198,7 @@ export const supabaseApi = {
 
   async getCreatorStats() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const [{ count: followers }, { count: following }] = await Promise.all([
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", userId),
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", userId),
@@ -2151,7 +2237,7 @@ export const supabaseApi = {
       muxPlaybackId = processed.muxPlaybackId;
     }
 
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("uploads")
       .insert({
@@ -2175,13 +2261,18 @@ export const supabaseApi = {
       })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw new Error(error.message || "Failed to save upload");
+    if (!data?.id) {
+      throw new Error(
+        "Upload saved without an id. Check Neon API (/api/neon/rest) is reachable on this origin."
+      );
+    }
     return { id: data.id, ...payload, media_url: mediaUrl };
   },
 
   async getUploads() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("uploads")
       .select("*")
@@ -2193,7 +2284,7 @@ export const supabaseApi = {
 
   async updateUpload(uploadId, patch) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: before } = await supabase
       .from("uploads")
       .select("media_url, status")
@@ -2223,7 +2314,7 @@ export const supabaseApi = {
 
   async deleteUpload(uploadId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: upload, error: fetchError } = await supabase
       .from("uploads")
       .select("media_url")
@@ -2256,7 +2347,7 @@ export const supabaseApi = {
 
   async getNotifications() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("notifications")
       .select("*, actor:actor_id (username, display_name, avatar_url)")
@@ -2278,7 +2369,7 @@ export const supabaseApi = {
 
   async findDirectConversationWithUser(nameOrUsername) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     let profile = null;
     const { data: byName } = await supabase
       .from("profiles")
@@ -2317,7 +2408,7 @@ export const supabaseApi = {
   async resolveNotificationLink(item) {
     const type = String(item?.type || "").toLowerCase();
     if (type === "message" && item.conversationId) {
-      const supabase = getSupabase();
+      const supabase = getDataClient();
       const { data: conv } = await supabase
         .from("conversations")
         .select("type")
@@ -2330,7 +2421,7 @@ export const supabaseApi = {
     const directPath = getNotificationPath(item);
     if (directPath) return directPath;
 
-    const supabase = getSupabase();
+    const supabase = getDataClient();
 
     const lookupUsername = async (name) => {
       const { data: byName } = await supabase
@@ -2374,7 +2465,7 @@ export const supabaseApi = {
 
   async markNotificationRead(notificationId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("notifications")
       .update({ read: true })
@@ -2386,7 +2477,7 @@ export const supabaseApi = {
 
   async markAllNotificationsRead() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("notifications")
       .update({ read: true })
@@ -2398,7 +2489,7 @@ export const supabaseApi = {
 
   async createPostFromUpload(uploadId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: upload } = await supabase.from("uploads").select("*").eq("id", uploadId).single();
     if (!upload) throw new Error("Upload not found");
 
@@ -2452,7 +2543,7 @@ export const supabaseApi = {
 
   async getAchievements() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: profile } = await supabase.from("profiles").select("xp, level").eq("id", userId).single();
     const xp = profile?.xp ?? 0;
     const level = profile?.level ?? 1;
@@ -2519,13 +2610,13 @@ export const supabaseApi = {
   },
 
   async recordVideoView(postId) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     await supabase.rpc("increment_post_views", { p_post_id: postId });
   },
 
   async updateProfile({ name, username, bio, phone, website, location, avatarFile, coverFile }) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
 
     const normalizedUsername = String(username || "")
       .trim()
@@ -2567,7 +2658,7 @@ export const supabaseApi = {
 
   async getBlockedUserIds() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.from("blocked_users").select("blocked_id").eq("blocker_id", userId);
     if (error) throw error;
     return (data ?? []).map((row) => row.blocked_id);
@@ -2576,7 +2667,7 @@ export const supabaseApi = {
   async blockUser(blockedId) {
     const userId = await getUserId();
     if (blockedId === userId) throw new Error("You cannot block yourself.");
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase.from("blocked_users").upsert(
       { blocker_id: userId, blocked_id: blockedId },
       { onConflict: "blocker_id,blocked_id" }
@@ -2587,7 +2678,7 @@ export const supabaseApi = {
 
   async unblockUser(blockedId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("blocked_users")
       .delete()
@@ -2599,7 +2690,7 @@ export const supabaseApi = {
 
   async isUserBlocked(blockedId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("blocked_users")
       .select("id")
@@ -2612,7 +2703,7 @@ export const supabaseApi = {
 
   async submitReport({ targetType, targetId, reason, details }) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase.from("reports").insert({
       reporter_id: userId,
       target_type: targetType,
@@ -2626,7 +2717,7 @@ export const supabaseApi = {
 
   async getNotificationPreferences() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("profiles")
       .select("notification_preferences")
@@ -2638,7 +2729,7 @@ export const supabaseApi = {
 
   async updateNotificationPreferences(prefs) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const normalized = normalizeNotificationPrefs(prefs);
     const { error } = await supabase
       .from("profiles")
@@ -2649,7 +2740,7 @@ export const supabaseApi = {
   },
 
   async requestWithdrawal({ amount, payoutMethod, payoutDetails }) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.rpc("request_gift_coin_withdrawal", {
       p_amount: amount,
       p_payout_method: payoutMethod,
@@ -2661,7 +2752,7 @@ export const supabaseApi = {
 
   async getWithdrawalRequests() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("withdrawal_requests")
       .select("*")
@@ -2683,7 +2774,7 @@ export const supabaseApi = {
     validateImageFile(avatarFile);
     const userId = await getUserId();
     const avatarUrl = await uploadAvatar(avatarFile, userId);
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase
       .from("conversations")
       .update({ avatar_url: avatarUrl })
@@ -2694,7 +2785,7 @@ export const supabaseApi = {
 
   async repostPost(postId, repostCaption = "") {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: original, error: fetchError } = await supabase
       .from("posts")
       .select("*")
@@ -2740,7 +2831,7 @@ export const supabaseApi = {
 
   async pinPost(postId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: post } = await supabase.from("posts").select("id").eq("id", postId).eq("user_id", userId).maybeSingle();
     if (!post) throw new Error("Post not found or not yours.");
     const { error } = await supabase.from("profiles").update({ pinned_post_id: postId }).eq("id", userId);
@@ -2750,7 +2841,7 @@ export const supabaseApi = {
 
   async unpinPost() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase.from("profiles").update({ pinned_post_id: null }).eq("id", userId);
     if (error) throw error;
     return true;
@@ -2758,7 +2849,7 @@ export const supabaseApi = {
 
   async getPostIdForUpload(uploadId) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data: upload } = await supabase.from("uploads").select("media_url, status").eq("id", uploadId).eq("user_id", userId).maybeSingle();
     if (!upload?.media_url || upload.status !== "published") return null;
     const { data: post } = await supabase
@@ -2772,7 +2863,7 @@ export const supabaseApi = {
 
   async getCreatorEarnings(days = 28) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const since = new Date();
     since.setDate(since.getDate() - days);
 
@@ -2899,7 +2990,7 @@ export const supabaseApi = {
 
   async getCreatorMonetizationSettings() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("profiles")
       .select(
@@ -2918,7 +3009,7 @@ export const supabaseApi = {
   },
 
   async updateCreatorMonetization(settings) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase.rpc("update_creator_monetization", {
       p_subscription_price: settings.subscriptionPrice ?? null,
       p_subscription_description: settings.subscriptionDescription ?? null,
@@ -2930,14 +3021,14 @@ export const supabaseApi = {
   },
 
   async subscribeToCreator(creatorId) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.rpc("subscribe_to_creator", { p_creator_id: creatorId });
     if (error) throw error;
     return typeof data === "string" ? JSON.parse(data) : data;
   },
 
   async sendCreatorTip({ receiverId, amount, message, tipType = "tip" }) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.rpc("send_creator_tip", {
       p_receiver_id: receiverId,
       p_amount: amount,
@@ -2949,7 +3040,7 @@ export const supabaseApi = {
   },
 
   async promotePost(postId, coins, hours = 24) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.rpc("promote_post", {
       p_post_id: postId,
       p_coins: coins,
@@ -2960,21 +3051,21 @@ export const supabaseApi = {
   },
 
   async applyReferralCode(code) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.rpc("apply_referral_code", { p_code: code });
     if (error) throw error;
     return typeof data === "string" ? JSON.parse(data) : data;
   },
 
   async recordProfileLinkClick(profileId) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     await supabase.rpc("record_profile_link_click", { p_profile_id: profileId }).catch(() => {});
     return true;
   },
 
   async hasCompletedPurchase() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { count, error } = await supabase
       .from("transactions")
       .select("id", { count: "exact", head: true })
@@ -2985,7 +3076,7 @@ export const supabaseApi = {
   },
 
   async confirmAgeGate() {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase.rpc("confirm_age_gate");
     if (error) throw error;
     return data;
@@ -2993,7 +3084,7 @@ export const supabaseApi = {
 
   async getAgeConfirmedAt() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("profiles")
       .select("age_confirmed_at")
@@ -3005,7 +3096,7 @@ export const supabaseApi = {
 
   async getIsAdmin() {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("profiles")
       .select("is_admin")
@@ -3016,7 +3107,7 @@ export const supabaseApi = {
   },
 
   async getModerationQueue(status = "pending") {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("reports")
       .select("*, reporter:reporter_id (username, display_name)")
@@ -3040,7 +3131,7 @@ export const supabaseApi = {
   },
 
   async reviewReport(reportId, { status, resolutionNote, actionTaken }) {
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { error } = await supabase.rpc("review_report", {
       p_report_id: reportId,
       p_status: status,
@@ -3053,7 +3144,7 @@ export const supabaseApi = {
 
   async getWalletAuditLog(limit = 50) {
     const userId = await getUserId();
-    const supabase = getSupabase();
+    const supabase = getDataClient();
     const { data, error } = await supabase
       .from("wallet_audit_log")
       .select("*")

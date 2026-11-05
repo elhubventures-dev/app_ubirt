@@ -7,7 +7,7 @@ import { getApiUrl } from "@/lib/apiBase";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { SIGNUP_BONUS_COINS } from "@/lib/wallet";
 
-const AuthContext = createContext(null);
+export const AuthContext = createContext(null);
 
 const demoUser = {
   id: "user-demo-1",
