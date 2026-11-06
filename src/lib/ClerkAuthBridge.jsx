@@ -90,13 +90,29 @@ export function ClerkAuthBridge({ children }) {
     };
   }, [isLoaded, isSignedIn, clerkUser, getToken]);
 
+  const waitForSignIn = useCallback(async () => {
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      if (signInLoaded && clerkSignIn) return clerkSignIn;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error("Auth is still loading. Please wait a moment and try again.");
+  }, [signInLoaded, clerkSignIn]);
+
+  const waitForSignUp = useCallback(async () => {
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      if (signUpLoaded && clerkSignUp) return clerkSignUp;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error("Auth is still loading. Please wait a moment and try again.");
+  }, [signUpLoaded, clerkSignUp]);
+
   const signIn = useCallback(
     async (email, password) => {
-      if (!signInLoaded || !clerkSignIn) {
-        throw new Error("Auth is still loading. Please try again.");
-      }
+      const readySignIn = await waitForSignIn();
 
-      const result = await clerkSignIn.create({
+      const result = await readySignIn.create({
         identifier: email,
         password,
       });
@@ -116,14 +132,12 @@ export function ClerkAuthBridge({ children }) {
 
       throw new Error("Sign in could not be completed. Check your email/password.");
     },
-    [signInLoaded, clerkSignIn, setActiveSignIn, navigate]
+    [waitForSignIn, setActiveSignIn, navigate]
   );
 
   const signUp = useCallback(
     async (email, password, username) => {
-      if (!signUpLoaded || !clerkSignUp) {
-        throw new Error("Auth is still loading. Please try again.");
-      }
+      const readySignUp = await waitForSignUp();
 
       const payload = {
         emailAddress: email,
@@ -138,7 +152,7 @@ export function ClerkAuthBridge({ children }) {
         payload.username = cleanUsername;
       }
 
-      const result = await clerkSignUp.create(payload);
+      const result = await readySignUp.create(payload);
 
       if (result.status === "complete" && result.createdSessionId) {
         await setActiveSignUp({ session: result.createdSessionId });
@@ -150,7 +164,7 @@ export function ClerkAuthBridge({ children }) {
       if (result.status === "missing_requirements") {
         const needsEmail = result.unverifiedFields?.includes("email_address");
         if (needsEmail) {
-          await clerkSignUp.prepareEmailAddressVerification({ strategy: "email_code" });
+          await readySignUp.prepareEmailAddressVerification({ strategy: "email_code" });
           throw new Error(
             "Check your email for a verification code, then sign in. (Or disable email verification in Clerk for smoother signup.)"
           );
@@ -159,7 +173,7 @@ export function ClerkAuthBridge({ children }) {
 
       throw new Error("Sign up could not be completed. Please try again.");
     },
-    [signUpLoaded, clerkSignUp, setActiveSignUp, navigate]
+    [waitForSignUp, setActiveSignUp, navigate]
   );
 
   const signInWithGoogle = useCallback(async () => {
@@ -180,15 +194,13 @@ export function ClerkAuthBridge({ children }) {
 
   const resetPassword = useCallback(
     async (email) => {
-      if (!signInLoaded || !clerkSignIn) {
-        throw new Error("Auth is still loading. Please try again.");
-      }
-      await clerkSignIn.create({
+      const readySignIn = await waitForSignIn();
+      await readySignIn.create({
         strategy: "reset_password_email_code",
         identifier: email,
       });
     },
-    [signInLoaded, clerkSignIn]
+    [waitForSignIn]
   );
 
   const signOut = useCallback(async () => {
@@ -202,7 +214,8 @@ export function ClerkAuthBridge({ children }) {
   const value = useMemo(
     () => ({
       user,
-      isLoadingAuth: !isLoaded,
+      // Gate the login form until session + sign-in/sign-up clients are ready
+      isLoadingAuth: !isLoaded || !signInLoaded || !signUpLoaded,
       isLoadingPublicSettings: false,
       authError,
       navigateToLogin: () => navigate("/login", { replace: true }),
@@ -232,6 +245,8 @@ export function ClerkAuthBridge({ children }) {
     [
       user,
       isLoaded,
+      signInLoaded,
+      signUpLoaded,
       authError,
       navigate,
       signIn,

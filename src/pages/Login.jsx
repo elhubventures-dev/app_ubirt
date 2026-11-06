@@ -172,7 +172,7 @@ export default function Login() {
             <>
             <button
               type="button"
-              disabled={loading}
+              disabled={loading || isLoadingAuth}
               onClick={onGoogleSignIn}
               className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-xl bg-white text-slate-900 font-semibold hover:bg-slate-100 active:scale-[0.98] transition-all disabled:opacity-60"
             >
@@ -180,6 +180,11 @@ export default function Login() {
                 <>
                   <span className="w-5 h-5 border-2 border-slate-300 border-t-slate-900 rounded-full animate-spin" />
                   Opening Google…
+                </>
+              ) : isLoadingAuth ? (
+                <>
+                  <span className="w-5 h-5 border-2 border-slate-300 border-t-slate-900 rounded-full animate-spin" />
+                  Preparing sign-in…
                 </>
               ) : (
                 <>
@@ -282,10 +287,16 @@ export default function Login() {
              
              <PrimaryButton
                type="submit"
-               disabled={loading}
-               isLoading={loading}
+               disabled={loading || isLoadingAuth}
+               isLoading={loading || isLoadingAuth}
                loadingLabel={
-                 mode === "signin" ? "Signing in…" : mode === "forgot" ? "Sending link…" : "Creating account…"
+                 isLoadingAuth
+                   ? "Preparing sign-in…"
+                   : mode === "signin"
+                     ? "Signing in…"
+                     : mode === "forgot"
+                       ? "Sending link…"
+                       : "Creating account…"
                }
                className="w-full py-4 rounded-xl text-base font-semibold shadow-[0_4px_14px_rgba(59,130,246,0.3)] hover:-translate-y-0.5 transition-transform mt-2"
              >
