@@ -11,6 +11,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import MainLayout from "@/components/layout/MainLayout";
 import { motion } from "framer-motion";
 import Login from "./pages/Login";
+import SsoCallback from "./pages/SsoCallback";
 import ResetPassword from "./pages/ResetPassword";
 import PageTracker from "@/components/PageTracker";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -200,6 +201,7 @@ function App() {
             <QueryClientProvider client={queryClientInstance}>
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/sso-callback" element={<SsoCallback />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/terms" element={<TermsOfService />} />

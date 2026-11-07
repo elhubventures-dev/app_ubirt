@@ -174,23 +174,43 @@ export function ClerkAuthBridge({ children }) {
     [clerk, navigate]
   );
 
+  const startOAuth = useCallback(
+    async (strategy) => {
+      const client = await waitForClerkClient(clerk);
+      const redirectUrl = `${window.location.origin}/sso-callback`;
+      const redirectUrlComplete = `${window.location.origin}/`;
+
+      // Prefer SignIn resource APIs — clerk.authenticateWithRedirect does not exist.
+      if (typeof client.signIn?.authenticateWithRedirect === "function") {
+        await client.signIn.authenticateWithRedirect({
+          strategy,
+          redirectUrl,
+          redirectUrlComplete,
+        });
+        return;
+      }
+
+      if (typeof client.signIn?.sso === "function") {
+        await client.signIn.sso({
+          strategy,
+          redirectCallbackUrl: redirectUrl,
+          redirectUrl: redirectUrlComplete,
+        });
+        return;
+      }
+
+      throw new Error("OAuth sign-in is unavailable in this Clerk SDK build.");
+    },
+    [clerk]
+  );
+
   const signInWithGoogle = useCallback(async () => {
-    await waitForClerkClient(clerk);
-    await clerk.authenticateWithRedirect({
-      strategy: "oauth_google",
-      redirectUrl: `${window.location.origin}/login`,
-      redirectUrlComplete: `${window.location.origin}/`,
-    });
-  }, [clerk]);
+    await startOAuth("oauth_google");
+  }, [startOAuth]);
 
   const signInWithApple = useCallback(async () => {
-    await waitForClerkClient(clerk);
-    await clerk.authenticateWithRedirect({
-      strategy: "oauth_apple",
-      redirectUrl: `${window.location.origin}/login`,
-      redirectUrlComplete: `${window.location.origin}/`,
-    });
-  }, [clerk]);
+    await startOAuth("oauth_apple");
+  }, [startOAuth]);
 
   const resetPassword = useCallback(
     async (email) => {
