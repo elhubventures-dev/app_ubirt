@@ -422,6 +422,12 @@ export function AuthProvider({ children }) {
       retryAuth,
       signIn,
       signUp,
+      verifyEmailCode: async () => {
+        throw new Error("Email verification is only available with Clerk.");
+      },
+      resendEmailCode: async () => {
+        throw new Error("Email verification is only available with Clerk.");
+      },
       signInWithGoogle,
       signInWithApple,
       resetPassword,

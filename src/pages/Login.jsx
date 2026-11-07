@@ -7,6 +7,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/use-toast";
 import { isSupabaseConfigured, getSupabase } from "@/lib/supabaseClient";
 import MfaChallengeModal from "@/components/safety/MfaChallengeModal";
+import EmailVerificationModal from "@/components/auth/EmailVerificationModal";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Login() {
@@ -16,7 +17,18 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [mfaFactorId, setMfaFactorId] = useState(null);
-  const { user, signIn, signUp, signInWithGoogle, resetPassword, isLiveAuth, isLoadingAuth } = useAuth();
+  const [emailVerifyOpen, setEmailVerifyOpen] = useState(false);
+  const {
+    user,
+    signIn,
+    signUp,
+    verifyEmailCode,
+    resendEmailCode,
+    signInWithGoogle,
+    resetPassword,
+    isLiveAuth,
+    isLoadingAuth,
+  } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -74,23 +86,29 @@ export default function Login() {
       }
       if (mode === "signin") {
         const result = await signIn(email.trim(), password);
+        if (result?.needsEmailVerification) {
+          setEmailVerifyOpen(true);
+          return;
+        }
         if (result?.mfaRequired && result.factorId) {
           setMfaFactorId(result.factorId);
           return;
         }
         toast({ title: "Welcome back" });
       } else {
-        await signUp(email.trim(), password, username.trim());
+        const result = await signUp(email.trim(), password, username.trim());
+        if (result?.needsEmailVerification) {
+          setEmailVerifyOpen(true);
+          return;
+        }
         toast({ title: "Account created", description: "You're signed in." });
       }
     } catch (error) {
-      const needsConfirm = error.message?.includes("Check your email");
       toast({
-        title: needsConfirm ? "Confirm your email" : "Auth failed",
+        title: "Auth failed",
         description: error.message,
-        variant: needsConfirm ? "default" : "destructive",
+        variant: "destructive",
       });
-      if (needsConfirm) setMode("signin");
     } finally {
       setLoading(false);
     }
@@ -105,8 +123,29 @@ export default function Login() {
     window.location.assign("/");
   };
 
+  const finishEmailVerify = async (code) => {
+    await verifyEmailCode(code);
+    setEmailVerifyOpen(false);
+    setLoading(false);
+    toast({
+      title: mode === "signup" ? "Account created" : "Welcome back",
+      description: mode === "signup" ? "Your email is verified." : undefined,
+    });
+  };
+
   return (
     <div className="min-h-[100dvh] w-full bg-[#0a0f16] flex items-center justify-center relative overflow-hidden px-4">
+      {emailVerifyOpen ? (
+        <EmailVerificationModal
+          email={email.trim()}
+          onVerify={finishEmailVerify}
+          onResend={resendEmailCode}
+          onCancel={() => {
+            setEmailVerifyOpen(false);
+            setLoading(false);
+          }}
+        />
+      ) : null}
       {mfaFactorId ? (
         <MfaChallengeModal
           factorId={mfaFactorId}

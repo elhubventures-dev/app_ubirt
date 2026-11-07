@@ -1,5 +1,5 @@
 import { useAuth as useClerkAuth, useUser, useClerk } from "@clerk/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "@/lib/AuthContext";
 import { getApiUrl } from "@/lib/apiBase";
@@ -20,6 +20,15 @@ async function waitForClerkClient(clerk) {
   throw new Error("Auth is still loading. Please wait a moment and try again.");
 }
 
+function clerkErrorMessage(err, fallback) {
+  return (
+    err?.errors?.[0]?.longMessage ||
+    err?.errors?.[0]?.message ||
+    err?.message ||
+    fallback
+  );
+}
+
 /**
  * Bridges Clerk session into the same AuthContext shape as AuthProvider.
  * Uses the existing UBIRT login form (email/password) — does not open Clerk's hosted UI.
@@ -34,6 +43,8 @@ export function ClerkAuthBridge({ children }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [authError, setAuthError] = useState(null);
+  /** @type {React.MutableRefObject<'signup' | 'signin' | null>} */
+  const emailVerifyFlowRef = useRef(null);
 
   useEffect(() => {
     window.__ubirtGetClerkToken = async () => {
@@ -105,26 +116,54 @@ export function ClerkAuthBridge({ children }) {
   const signIn = useCallback(
     async (email, password) => {
       const client = await waitForClerkClient(clerk);
+      emailVerifyFlowRef.current = null;
 
-      const result = await client.signIn.create({
-        identifier: email,
-        password,
-      });
+      try {
+        const result = await client.signIn.create({
+          identifier: email,
+          password,
+        });
 
-      if (result.status === "complete" && result.createdSessionId) {
-        await clerk.setActive({ session: result.createdSessionId });
-        navigate("/", { replace: true });
-        return { mfaRequired: false };
-      }
-
-      if (result.status === "needs_second_factor") {
-        const factor = result.supportedSecondFactors?.find((f) => f.strategy === "totp");
-        if (factor) {
-          return { mfaRequired: true, factorId: factor.strategy };
+        if (result.status === "complete" && result.createdSessionId) {
+          await clerk.setActive({ session: result.createdSessionId });
+          navigate("/", { replace: true });
+          return { mfaRequired: false };
         }
-      }
 
-      throw new Error("Sign in could not be completed. Check your email/password.");
+        if (result.status === "needs_first_factor") {
+          const emailFactor = result.supportedFirstFactors?.find(
+            (f) => f.strategy === "email_code"
+          );
+          if (emailFactor?.emailAddressId) {
+            await client.signIn.prepareFirstFactor({
+              strategy: "email_code",
+              emailAddressId: emailFactor.emailAddressId,
+            });
+            emailVerifyFlowRef.current = "signin";
+            return { needsEmailVerification: true, flow: "signin" };
+          }
+        }
+
+        // Password accepted but email code still required as another factor
+        if (result.status === "needs_second_factor") {
+          const emailFactor = result.supportedSecondFactors?.find(
+            (f) => f.strategy === "email_code"
+          );
+          if (emailFactor) {
+            await client.signIn.prepareSecondFactor({ strategy: "email_code" });
+            emailVerifyFlowRef.current = "signin_second";
+            return { needsEmailVerification: true, flow: "signin" };
+          }
+          const totpFactor = result.supportedSecondFactors?.find((f) => f.strategy === "totp");
+          if (totpFactor) {
+            return { mfaRequired: true, factorId: totpFactor.strategy };
+          }
+        }
+
+        throw new Error("Sign in could not be completed. Check your email/password.");
+      } catch (err) {
+        throw new Error(clerkErrorMessage(err, "Sign in could not be completed."));
+      }
     },
     [clerk, navigate]
   );
@@ -132,6 +171,7 @@ export function ClerkAuthBridge({ children }) {
   const signUp = useCallback(
     async (email, password, username) => {
       const client = await waitForClerkClient(clerk);
+      emailVerifyFlowRef.current = null;
 
       // Keep username in unsafeMetadata — Clerk Production may not have
       // the Username attribute enabled (sending `username` returns 422).
@@ -150,29 +190,131 @@ export function ClerkAuthBridge({ children }) {
         payload.unsafeMetadata = { username: cleanUsername, display_name: cleanUsername };
       }
 
-      const result = await client.signUp.create(payload);
+      try {
+        const result = await client.signUp.create(payload);
 
-      if (result.status === "complete" && result.createdSessionId) {
-        await clerk.setActive({ session: result.createdSessionId });
-        navigate("/", { replace: true });
-        return;
-      }
-
-      // Email verification required in Clerk Dashboard settings
-      if (result.status === "missing_requirements") {
-        const needsEmail = result.unverifiedFields?.includes("email_address");
-        if (needsEmail) {
-          await result.prepareEmailAddressVerification({ strategy: "email_code" });
-          throw new Error(
-            "Check your email for a verification code, then sign in. (Or disable email verification in Clerk for smoother signup.)"
-          );
+        if (result.status === "complete" && result.createdSessionId) {
+          await clerk.setActive({ session: result.createdSessionId });
+          navigate("/", { replace: true });
+          return { needsEmailVerification: false };
         }
-      }
 
-      throw new Error("Sign up could not be completed. Please try again.");
+        // Email verification required in Clerk Dashboard settings
+        if (result.status === "missing_requirements") {
+          const needsEmail = result.unverifiedFields?.includes("email_address");
+          if (needsEmail) {
+            await result.prepareEmailAddressVerification({ strategy: "email_code" });
+            emailVerifyFlowRef.current = "signup";
+            return { needsEmailVerification: true, flow: "signup" };
+          }
+        }
+
+        throw new Error("Sign up could not be completed. Please try again.");
+      } catch (err) {
+        throw new Error(clerkErrorMessage(err, "Sign up could not be completed."));
+      }
     },
     [clerk, navigate]
   );
+
+  const verifyEmailCode = useCallback(
+    async (code) => {
+      const client = await waitForClerkClient(clerk);
+      const trimmed = String(code || "").trim();
+      if (!/^\d{6}$/.test(trimmed)) {
+        throw new Error("Enter the 6-digit code from your email.");
+      }
+
+      const flow = emailVerifyFlowRef.current;
+
+      try {
+        if (flow === "signup") {
+          const result = await client.signUp.attemptEmailAddressVerification({
+            strategy: "email_code",
+            code: trimmed,
+          });
+          if (result.status === "complete" && result.createdSessionId) {
+            await clerk.setActive({ session: result.createdSessionId });
+            emailVerifyFlowRef.current = null;
+            navigate("/", { replace: true });
+            return;
+          }
+          throw new Error("Verification incomplete. Try again or request a new code.");
+        }
+
+        if (flow === "signin") {
+          const result = await client.signIn.attemptFirstFactor({
+            strategy: "email_code",
+            code: trimmed,
+          });
+          if (result.status === "complete" && result.createdSessionId) {
+            await clerk.setActive({ session: result.createdSessionId });
+            emailVerifyFlowRef.current = null;
+            navigate("/", { replace: true });
+            return;
+          }
+          if (result.status === "needs_second_factor") {
+            throw new Error("Additional verification required. Contact support if this persists.");
+          }
+          throw new Error("Invalid or expired code. Try again.");
+        }
+
+        if (flow === "signin_second") {
+          const result = await client.signIn.attemptSecondFactor({
+            strategy: "email_code",
+            code: trimmed,
+          });
+          if (result.status === "complete" && result.createdSessionId) {
+            await clerk.setActive({ session: result.createdSessionId });
+            emailVerifyFlowRef.current = null;
+            navigate("/", { replace: true });
+            return;
+          }
+          throw new Error("Invalid or expired code. Try again.");
+        }
+
+        throw new Error("No verification in progress. Sign up or sign in again.");
+      } catch (err) {
+        throw new Error(clerkErrorMessage(err, "Invalid or expired code. Try again."));
+      }
+    },
+    [clerk, navigate]
+  );
+
+  const resendEmailCode = useCallback(async () => {
+    const client = await waitForClerkClient(clerk);
+    const flow = emailVerifyFlowRef.current;
+
+    try {
+      if (flow === "signup") {
+        await client.signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+        return;
+      }
+
+      if (flow === "signin") {
+        const emailFactor = client.signIn.supportedFirstFactors?.find(
+          (f) => f.strategy === "email_code"
+        );
+        if (!emailFactor?.emailAddressId) {
+          throw new Error("Could not resend code. Sign in again.");
+        }
+        await client.signIn.prepareFirstFactor({
+          strategy: "email_code",
+          emailAddressId: emailFactor.emailAddressId,
+        });
+        return;
+      }
+
+      if (flow === "signin_second") {
+        await client.signIn.prepareSecondFactor({ strategy: "email_code" });
+        return;
+      }
+
+      throw new Error("No verification in progress. Sign up or sign in again.");
+    } catch (err) {
+      throw new Error(clerkErrorMessage(err, "Could not resend the code."));
+    }
+  }, [clerk]);
 
   const startOAuth = useCallback(
     async (strategy) => {
@@ -241,6 +383,8 @@ export function ClerkAuthBridge({ children }) {
       retryAuth: async () => {},
       signIn,
       signUp,
+      verifyEmailCode,
+      resendEmailCode,
       signInWithGoogle,
       signInWithApple,
       resetPassword,
@@ -268,6 +412,8 @@ export function ClerkAuthBridge({ children }) {
       navigate,
       signIn,
       signUp,
+      verifyEmailCode,
+      resendEmailCode,
       signInWithGoogle,
       signInWithApple,
       resetPassword,
