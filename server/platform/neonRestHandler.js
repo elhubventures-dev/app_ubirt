@@ -29,7 +29,7 @@ export default async function handler(req, res) {
   try {
     const body = req.body ?? {};
     if (body.rpc) {
-      const result = await runNeonRpc(body.rpc, body.args || {});
+      const result = await runNeonRpc(body.rpc, body.args || {}, { userId: auth.user.id });
       return res.status(200).json(result);
     }
     const result = await runNeonRest(body);

@@ -243,14 +243,34 @@ export const ALLOWED_RPCS = new Set([
   "unlock_achievement",
   "unlock_badge",
   "convert_gift_coins",
+  "confirm_age_gate",
 ]);
 
-export async function runNeonRpc(name, args = {}) {
+/**
+ * @param {string} name
+ * @param {Record<string, unknown>} [args]
+ * @param {{ userId?: string }} [ctx] — authenticated app user id (Clerk→Neon UUID)
+ */
+export async function runNeonRpc(name, args = {}, ctx = {}) {
   const fn = assertIdent(name, "rpc");
   if (!ALLOWED_RPCS.has(fn)) {
     throw new Error(`RPC not allowed: ${fn}`);
   }
   const sql = getNeonSql();
+
+  // Neon has no Supabase auth.uid() — implement identity-bound RPCs with ctx.userId.
+  if (fn === "confirm_age_gate") {
+    if (!ctx.userId) throw new Error("Not authenticated");
+    const rows = await sql`
+      update public.profiles
+      set age_confirmed_at = coalesce(age_confirmed_at, now())
+      where id = ${ctx.userId}::uuid
+      returning age_confirmed_at
+    `;
+    if (!rows?.[0]) throw new Error("Profile not found");
+    return { data: rows[0].age_confirmed_at, error: null };
+  }
+
   const keys = Object.keys(args);
   const values = keys.map((k) => args[k]);
   const argList = keys.map((k, i) => `${assertIdent(k)} := $${i + 1}`).join(", ");
