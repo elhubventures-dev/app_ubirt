@@ -52,13 +52,16 @@ export async function authenticateClerkRequest(req) {
           const primaryEmail =
             clerkUser.emailAddresses?.find((e) => e.id === clerkUser.primaryEmailAddressId)
               ?.emailAddress || clerkUser.emailAddresses?.[0]?.emailAddress;
+          const meta = clerkUser.unsafeMetadata || clerkUser.publicMetadata || {};
           const synced = await syncClerkUserToNeon({
             clerkId,
             email: primaryEmail,
-            username: clerkUser.username || undefined,
+            username: clerkUser.username || meta.username || undefined,
             displayName:
+              meta.display_name ||
               [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
               clerkUser.username ||
+              meta.username ||
               primaryEmail,
             avatarUrl: clerkUser.imageUrl || null,
             emailVerified: Boolean(

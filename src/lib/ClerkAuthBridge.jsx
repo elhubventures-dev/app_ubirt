@@ -133,17 +133,21 @@ export function ClerkAuthBridge({ children }) {
     async (email, password, username) => {
       const client = await waitForClerkClient(clerk);
 
-      const payload = {
-        emailAddress: email,
-        password,
-      };
+      // Keep username in unsafeMetadata — Clerk Production may not have
+      // the Username attribute enabled (sending `username` returns 422).
+      // Neon profiles still get the handle via webhook / first /api/platform/me sync.
       const cleanUsername = String(username || "")
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9_]/g, "_")
         .slice(0, 30);
+
+      const payload = {
+        emailAddress: email,
+        password,
+      };
       if (cleanUsername) {
-        payload.username = cleanUsername;
+        payload.unsafeMetadata = { username: cleanUsername, display_name: cleanUsername };
       }
 
       const result = await client.signUp.create(payload);

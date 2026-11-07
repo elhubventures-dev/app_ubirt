@@ -53,9 +53,14 @@ export default async function handler(req, res) {
       const email =
         data.email_addresses?.find((e) => e.id === data.primary_email_address_id)?.email_address ||
         data.email_addresses?.[0]?.email_address;
-      const username = data.username || data.first_name || undefined;
+      const meta = data.unsafe_metadata || data.public_metadata || {};
+      const username =
+        data.username || meta.username || data.first_name || undefined;
       const displayName =
-        [data.first_name, data.last_name].filter(Boolean).join(" ") || username || email;
+        meta.display_name ||
+        [data.first_name, data.last_name].filter(Boolean).join(" ") ||
+        username ||
+        email;
       const avatarUrl = data.image_url || data.profile_image_url || null;
 
       await syncClerkUserToNeon({
